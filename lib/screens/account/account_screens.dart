@@ -377,6 +377,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final next = TextEditingController();
   final confirm = TextEditingController();
   bool saving = false;
+  bool obscureCurrent = true;
+  bool obscureNext = true;
+  bool obscureConfirm = true;
 
   @override
   void dispose() {
@@ -405,6 +408,17 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     }
   }
 
+  InputDecoration _passDecoration(String label, bool obscure, VoidCallback toggle) {
+    return InputDecoration(
+      labelText: label,
+      suffixIcon: IconButton(
+        tooltip: obscure ? 'Show password' : 'Hide password',
+        icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+        onPressed: toggle,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -412,11 +426,35 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(controller: current, obscureText: true, decoration: const InputDecoration(labelText: 'Current password')),
+          TextField(
+            controller: current,
+            obscureText: obscureCurrent,
+            decoration: _passDecoration(
+              'Current password',
+              obscureCurrent,
+              () => setState(() => obscureCurrent = !obscureCurrent),
+            ),
+          ),
           const SizedBox(height: 10),
-          TextField(controller: next, obscureText: true, decoration: const InputDecoration(labelText: 'New password')),
+          TextField(
+            controller: next,
+            obscureText: obscureNext,
+            decoration: _passDecoration(
+              'New password',
+              obscureNext,
+              () => setState(() => obscureNext = !obscureNext),
+            ),
+          ),
           const SizedBox(height: 10),
-          TextField(controller: confirm, obscureText: true, decoration: const InputDecoration(labelText: 'Confirm password')),
+          TextField(
+            controller: confirm,
+            obscureText: obscureConfirm,
+            decoration: _passDecoration(
+              'Confirm password',
+              obscureConfirm,
+              () => setState(() => obscureConfirm = !obscureConfirm),
+            ),
+          ),
           const SizedBox(height: 20),
           PrimaryButton(label: 'Update password', loading: saving, onPressed: saving ? null : _save),
         ],

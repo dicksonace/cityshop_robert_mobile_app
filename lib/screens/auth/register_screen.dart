@@ -21,6 +21,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _password = TextEditingController();
   final _confirm = TextEditingController();
   bool _loading = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
 
   @override
   void dispose() {
@@ -100,8 +102,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     hint: '0241234567', keyboard: TextInputType.phone),
                 _field('Email Address', _email, Icons.email_outlined,
                     keyboard: TextInputType.emailAddress),
-                _field('Password', _password, Icons.lock_outline, obscure: true),
-                _field('Confirm Password', _confirm, Icons.lock_outline, obscure: true),
+                _field(
+                  'Password',
+                  _password,
+                  Icons.lock_outline,
+                  obscure: _obscurePassword,
+                  onToggleObscure: () => setState(() => _obscurePassword = !_obscurePassword),
+                ),
+                _field(
+                  'Confirm Password',
+                  _confirm,
+                  Icons.lock_outline,
+                  obscure: _obscureConfirm,
+                  onToggleObscure: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                ),
                 const SizedBox(height: 10),
                 PrimaryButton(
                   label: 'Create Account',
@@ -128,6 +142,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     String? hint,
     TextInputType? keyboard,
     bool obscure = false,
+    VoidCallback? onToggleObscure,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -143,6 +158,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
             decoration: InputDecoration(
               hintText: hint,
               prefixIcon: Icon(icon),
+              suffixIcon: onToggleObscure == null
+                  ? null
+                  : IconButton(
+                      tooltip: obscure ? 'Show password' : 'Hide password',
+                      icon: Icon(
+                        obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: onToggleObscure,
+                    ),
             ),
           ),
         ],

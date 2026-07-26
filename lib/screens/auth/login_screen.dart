@@ -128,6 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     hintText: 'Your password',
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
+                      tooltip: _obscure ? 'Show password' : 'Hide password',
                       icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
