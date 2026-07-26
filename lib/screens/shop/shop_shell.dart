@@ -763,6 +763,27 @@ class ProductCard extends StatelessWidget {
                           fontSize: 11,
                         ),
                       ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (product.rating > 0) ...[
+                          const Icon(Icons.star, size: 12, color: Colors.amber),
+                          const SizedBox(width: 2),
+                          Text(
+                            product.rating.toStringAsFixed(1),
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Icon(Icons.visibility_outlined, size: 12, color: Colors.grey.shade500),
+                        const SizedBox(width: 2),
+                        Text('${product.views}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                        if (product.shipsNationwide) ...[
+                          const SizedBox(width: 6),
+                          Text('Nationwide', style: TextStyle(fontSize: 10, color: Colors.indigo.shade600, fontWeight: FontWeight.w600)),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ),

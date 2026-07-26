@@ -141,8 +141,35 @@ class AppStore extends ChangeNotifier {
 
   Future<Product> fetchProduct(String slug) async {
     final res = await _api.get('/products/$slug');
-    final data = res.data is Map ? (res.data['data'] ?? res.data) : res.data;
+    final body = res.data;
+    final data = body is Map ? (body['data'] ?? body) : body;
     return Product.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<({Product product, List<Product> related, List<Map<String, dynamic>> reviews})>
+      fetchProductDetail(String slug) async {
+    final res = await _api.get('/products/$slug');
+    final body = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    final data = body['data'] ?? body;
+    final relatedJson = body['related'];
+    final reviewsJson = body['reviews'] is Map ? body['reviews']['data'] : body['reviews'];
+
+    final related = relatedJson is List
+        ? relatedJson
+            .whereType<Map>()
+            .map((e) => Product.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : <Product>[];
+
+    final reviews = reviewsJson is List
+        ? reviewsJson.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+        : <Map<String, dynamic>>[];
+
+    return (
+      product: Product.fromJson(Map<String, dynamic>.from(data as Map)),
+      related: related,
+      reviews: reviews,
+    );
   }
 
   Future<void> login({required String login, required String password}) async {

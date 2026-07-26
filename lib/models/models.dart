@@ -50,19 +50,32 @@ class Product {
     this.discountPrice,
     this.description,
     this.brand,
+    this.condition,
     this.rating = 0,
     this.reviewCount = 0,
+    this.views = 0,
+    this.wishlistAdds = 0,
     this.inGhana = false,
     this.freeShipping = false,
     this.deliveryFee,
+    this.deliveryDays,
     this.isPreorder = false,
     this.cashOnDelivery = false,
+    this.pickupAvailable = false,
+    this.shipsNationwide = false,
+    this.isNegotiable = false,
+    this.specifications = const {},
+    this.videoUrl,
     this.images = const [],
     this.categoryName,
     this.categoryId,
+    this.categoryIcon,
     this.storeName,
     this.sellerId,
     this.sellerName,
+    this.sellerPhoto,
+    this.sellerRating,
+    this.sellerSales,
     this.quantity = 0,
   });
 
@@ -74,19 +87,32 @@ class Product {
   final double? discountPrice;
   final String? description;
   final String? brand;
+  final String? condition;
   final double rating;
   final int reviewCount;
+  final int views;
+  final int wishlistAdds;
   final bool inGhana;
   final bool freeShipping;
   final double? deliveryFee;
+  final int? deliveryDays;
   final bool isPreorder;
   final bool cashOnDelivery;
+  final bool pickupAvailable;
+  final bool shipsNationwide;
+  final bool isNegotiable;
+  final Map<String, dynamic> specifications;
+  final String? videoUrl;
   final List<ProductImage> images;
   final String? categoryName;
   final int? categoryId;
+  final String? categoryIcon;
   final String? storeName;
   final int? sellerId;
   final String? sellerName;
+  final String? sellerPhoto;
+  final double? sellerRating;
+  final int? sellerSales;
   final int quantity;
 
   String? get primaryImageUrl {
@@ -99,6 +125,22 @@ class Product {
     final imagesJson = json['images'];
     final category = json['category'];
     final seller = json['seller'];
+    final specs = json['specifications'];
+    Map<String, dynamic> specMap = const {};
+    if (specs is Map) {
+      specMap = Map<String, dynamic>.from(specs);
+    } else if (specs is List) {
+      // web sometimes stores list of {key,value} or field map
+      final mapped = <String, dynamic>{};
+      for (final item in specs) {
+        if (item is Map) {
+          final key = item['key'] ?? item['label'] ?? item['name'];
+          final value = item['value'] ?? item['text'];
+          if (key != null) mapped['$key'] = value;
+        }
+      }
+      specMap = mapped;
+    }
 
     return Product(
       id: json['id'] as int,
@@ -111,13 +153,22 @@ class Product {
           0,
       description: json['description'] as String?,
       brand: json['brand'] as String?,
+      condition: json['condition'] as String?,
       rating: (json['rating'] as num?)?.toDouble() ?? 0,
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
+      views: (json['views'] as num?)?.toInt() ?? 0,
+      wishlistAdds: (json['wishlist_adds'] as num?)?.toInt() ?? 0,
       inGhana: json['in_ghana'] as bool? ?? false,
       freeShipping: json['free_shipping'] as bool? ?? false,
       deliveryFee: (json['delivery_fee'] as num?)?.toDouble(),
+      deliveryDays: (json['delivery_days'] as num?)?.toInt(),
       isPreorder: json['is_preorder'] as bool? ?? false,
       cashOnDelivery: json['cash_on_delivery'] as bool? ?? false,
+      pickupAvailable: json['pickup_available'] as bool? ?? false,
+      shipsNationwide: json['ships_nationwide'] as bool? ?? false,
+      isNegotiable: json['is_negotiable'] as bool? ?? false,
+      specifications: specMap,
+      videoUrl: json['video_url'] as String?,
       quantity: (json['quantity'] as num?)?.toInt() ?? 0,
       images: imagesJson is List
           ? imagesJson
@@ -127,11 +178,15 @@ class Product {
           : const [],
       categoryName: category is Map ? category['name'] as String? : null,
       categoryId: category is Map ? category['id'] as int? : null,
+      categoryIcon: category is Map ? category['icon'] as String? : null,
       storeName: seller is Map
           ? (seller['store_name'] as String? ?? seller['name'] as String?)
           : null,
       sellerId: seller is Map ? seller['id'] as int? : null,
       sellerName: seller is Map ? seller['name'] as String? : null,
+      sellerPhoto: seller is Map ? seller['shop_photo'] as String? : null,
+      sellerRating: seller is Map ? (seller['rating'] as num?)?.toDouble() : null,
+      sellerSales: seller is Map ? (seller['total_sales'] as num?)?.toInt() : null,
     );
   }
 }

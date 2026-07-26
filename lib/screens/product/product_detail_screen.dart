@@ -23,6 +23,8 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Product? product;
+  List<Product> related = [];
+  List<Map<String, dynamic>> reviews = [];
   String? error;
   bool loading = true;
   bool adding = false;
@@ -42,10 +44,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       error = null;
     });
     try {
-      final p = await context.read<AppStore>().fetchProduct(widget.slug);
+      final detail = await context.read<AppStore>().fetchProductDetail(widget.slug);
       if (!mounted) return;
       setState(() {
-        product = p;
+        product = detail.product;
+        related = detail.related;
+        reviews = detail.reviews;
         loading = false;
       });
     } catch (e) {
@@ -72,10 +76,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(goCheckout ? 'Added — continue to checkout' : 'Added to cart'),
-          action: SnackBarAction(
-            label: 'Cart',
-            onPressed: () => context.push('/cart'),
-          ),
+          action: SnackBarAction(label: 'Cart', onPressed: () => context.push('/cart')),
         ),
       );
       if (goCheckout) context.push('/cart');
@@ -141,7 +142,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         actions: [
           IconButton(
             onPressed: wishBusy ? null : _toggleWish,
-            icon: Icon(wishlisted ? Icons.favorite : Icons.favorite_border, color: wishlisted ? AppColors.danger : null),
+            icon: Icon(
+              wishlisted ? Icons.favorite : Icons.favorite_border,
+              color: wishlisted ? AppColors.danger : null,
+            ),
           ),
           IconButton(
             onPressed: () => context.push('/cart'),
@@ -167,6 +171,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 )
               : _Body(
                   product: p!,
+                  related: related,
+                  reviews: reviews,
                   imageIndex: imageIndex,
                   qty: qty,
                   onImageChanged: (i) => setState(() => imageIndex = i),
@@ -207,6 +213,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 class _Body extends StatelessWidget {
   const _Body({
     required this.product,
+    required this.related,
+    required this.reviews,
     required this.imageIndex,
     required this.qty,
     required this.onImageChanged,
@@ -215,6 +223,8 @@ class _Body extends StatelessWidget {
   });
 
   final Product product;
+  final List<Product> related;
+  final List<Map<String, dynamic>> reviews;
   final int imageIndex;
   final int qty;
   final ValueChanged<int> onImageChanged;
@@ -229,16 +239,40 @@ class _Body extends StatelessWidget {
         : product.primaryImageUrl;
     final hasDiscount =
         product.discountPrice != null && product.discountPrice! < product.price;
+    final discountPct = hasDiscount
+        ? (((1 - (product.discountPrice! / product.price)) * 100).round())
+        : 0;
 
     return ListView(
       children: [
         AspectRatio(
           aspectRatio: 1,
-          child: Container(
-            color: const Color(0xFFF8FAFC),
-            child: image != null
-                ? CachedNetworkImage(imageUrl: image, fit: BoxFit.contain)
-                : const Icon(Icons.image, size: 64, color: AppColors.textMuted),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(
+                color: const Color(0xFFF8FAFC),
+                child: image != null
+                    ? CachedNetworkImage(imageUrl: image, fit: BoxFit.contain)
+                    : const Icon(Icons.image, size: 64, color: AppColors.textMuted),
+              ),
+              if (hasDiscount)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '-$discountPct%',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         if (images.length > 1)
@@ -257,7 +291,10 @@ class _Body extends StatelessWidget {
                     width: 64,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: selected ? AppColors.accent : AppColors.border, width: selected ? 2 : 1),
+                      border: Border.all(
+                        color: selected ? AppColors.accent : AppColors.border,
+                        width: selected ? 2 : 1,
+                      ),
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
@@ -312,13 +349,29 @@ class _Body extends StatelessWidget {
                   ],
                 ],
               ),
-              if (product.storeName != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Sold by ${product.storeName}',
-                  style: const TextStyle(color: AppColors.textSecondary),
-                ),
-              ],
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.star, size: 16, color: Colors.amber),
+                  const SizedBox(width: 4),
+                  Text(
+                    product.rating > 0
+                        ? '${product.rating.toStringAsFixed(1)} (${product.reviewCount})'
+                        : 'No ratings yet',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 12),
+                  Icon(Icons.visibility_outlined, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 4),
+                  Text('${product.views} views', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  const SizedBox(width: 10),
+                  Icon(Icons.favorite_border, size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 4),
+                  Text('${product.wishlistAdds}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _SellerCard(product: product, onMessage: onMessage),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -337,14 +390,16 @@ class _Body extends StatelessWidget {
                       backgroundColor: AppColors.emerald.withValues(alpha: 0.12),
                       side: BorderSide.none,
                     ),
+                  if (product.shipsNationwide)
+                    const Chip(label: Text('Ships nationwide'), side: BorderSide.none),
+                  if (product.pickupAvailable)
+                    const Chip(label: Text('Pickup available'), side: BorderSide.none),
+                  if (product.isNegotiable)
+                    const Chip(label: Text('Negotiable'), side: BorderSide.none),
                   if (product.isPreorder)
                     const Chip(label: Text('Pre-order'), side: BorderSide.none),
-                  if (product.rating > 0)
-                    Chip(
-                      avatar: const Icon(Icons.star, size: 16, color: Colors.amber),
-                      label: Text('${product.rating.toStringAsFixed(1)} (${product.reviewCount})'),
-                      side: BorderSide.none,
-                    ),
+                  if (product.cashOnDelivery)
+                    const Chip(label: Text('Cash on delivery'), side: BorderSide.none),
                   Chip(
                     label: Text('${product.quantity} in stock'),
                     side: BorderSide.none,
@@ -352,6 +407,16 @@ class _Body extends StatelessWidget {
                   ),
                 ],
               ),
+              if (product.deliveryFee != null || product.deliveryDays != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  [
+                    if (product.deliveryFee != null) 'Delivery: ${_money.format(product.deliveryFee)}',
+                    if (product.deliveryDays != null) '${product.deliveryDays} day(s)',
+                  ].join(' · '),
+                  style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                ),
+              ],
               const SizedBox(height: 16),
               Row(
                 children: [
@@ -370,19 +435,12 @@ class _Body extends StatelessWidget {
                   ),
                 ],
               ),
-              if (product.sellerId != null) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: onMessage,
-                  icon: const Icon(Icons.chat_bubble_outline),
-                  label: const Text('Message seller'),
-                ),
-              ],
               const SizedBox(height: 16),
-              if (product.brand != null && product.brand!.isNotEmpty) ...[
+              if (product.brand != null && product.brand!.isNotEmpty)
                 Text('Brand: ${product.brand}', style: const TextStyle(color: AppColors.textSecondary)),
-                const SizedBox(height: 12),
-              ],
+              if (product.condition != null && product.condition!.isNotEmpty)
+                Text('Condition: ${product.condition}', style: const TextStyle(color: AppColors.textSecondary)),
+              const SizedBox(height: 14),
               const Text('Description', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
               const SizedBox(height: 8),
               Text(
@@ -391,10 +449,176 @@ class _Body extends StatelessWidget {
                     : 'No description provided.',
                 style: const TextStyle(height: 1.45, color: AppColors.textSecondary),
               ),
+              if (product.specifications.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                const Text('Specifications', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                const SizedBox(height: 8),
+                ...product.specifications.entries.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: Text(
+                            '${e.key}',
+                            style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Text('${e.value}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (reviews.isNotEmpty) ...[
+                const SizedBox(height: 22),
+                const Text('Reviews', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                const SizedBox(height: 8),
+                ...reviews.take(5).map((r) {
+                  final user = r['user'];
+                  final name = user is Map ? (user['name'] as String? ?? 'Buyer') : 'Buyer';
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            const Spacer(),
+                            Text('★ ${(r['rating'] as num?)?.toStringAsFixed(1) ?? '-'}'),
+                          ],
+                        ),
+                        if ((r['comment'] as String?)?.isNotEmpty == true) ...[
+                          const SizedBox(height: 4),
+                          Text('${r['comment']}', style: const TextStyle(color: AppColors.textSecondary)),
+                        ],
+                      ],
+                    ),
+                  );
+                }),
+              ],
+              if (related.isNotEmpty) ...[
+                const SizedBox(height: 22),
+                const Text('Related products', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 210,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: related.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (context, index) {
+                      final item = related[index];
+                      final img = item.primaryImageUrl;
+                      return InkWell(
+                        onTap: () => context.push('/products/${item.slug}'),
+                        child: Container(
+                          width: 140,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                                  child: img != null
+                                      ? CachedNetworkImage(imageUrl: img, fit: BoxFit.cover)
+                                      : const ColoredBox(color: Color(0xFFF8FAFC), child: Icon(Icons.image)),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                                    Text(_money.format(item.effectivePrice), style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SellerCard extends StatelessWidget {
+  const _SellerCard({required this.product, required this.onMessage});
+  final Product product;
+  final VoidCallback onMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: AppColors.ringOrange,
+            backgroundImage: product.sellerPhoto != null ? CachedNetworkImageProvider(product.sellerPhoto!) : null,
+            child: product.sellerPhoto == null
+                ? Text(
+                    (product.storeName ?? 'S').substring(0, 1).toUpperCase(),
+                    style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Sold by ${product.storeName ?? 'Seller'}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                if (product.sellerRating != null || product.sellerSales != null)
+                  Text(
+                    [
+                      if (product.sellerRating != null) '★ ${product.sellerRating!.toStringAsFixed(1)}',
+                      if (product.sellerSales != null) '${product.sellerSales} sales',
+                    ].join(' · '),
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          if (product.sellerId != null)
+            OutlinedButton(
+              onPressed: onMessage,
+              child: const Text('Chat'),
+            ),
+        ],
+      ),
     );
   }
 }
