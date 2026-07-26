@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/common_widgets.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
@@ -53,6 +54,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loggedIn = context.watch<AppStore>().isLoggedIn;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(product?.name ?? 'Product'),
@@ -62,7 +65,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ),
       ),
       body: loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const FullPageLoader(label: 'Loading product…')
           : error != null
               ? Center(
                   child: Column(
@@ -79,9 +82,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           : SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: ElevatedButton(
+                child: PrimaryButton(
+                  label: loggedIn ? 'Add to cart' : 'Login to buy',
                   onPressed: () {
-                    final loggedIn = context.read<AppStore>().isLoggedIn;
                     if (!loggedIn) {
                       context.push('/login');
                       return;
@@ -90,9 +93,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       const SnackBar(content: Text('Add to cart coming next')),
                     );
                   },
-                  child: Text(
-                    context.watch<AppStore>().isLoggedIn ? 'Add to cart' : 'Login to buy',
-                  ),
                 ),
               ),
             ),
@@ -113,9 +113,12 @@ class _Body extends StatelessWidget {
       children: [
         AspectRatio(
           aspectRatio: 1,
-          child: image != null
-              ? CachedNetworkImage(imageUrl: image, fit: BoxFit.cover)
-              : Container(color: AppColors.border, child: const Icon(Icons.image, size: 64)),
+          child: Container(
+            color: const Color(0xFFF8FAFC),
+            child: image != null
+                ? CachedNetworkImage(imageUrl: image, fit: BoxFit.contain)
+                : const Icon(Icons.image, size: 64, color: AppColors.textMuted),
+          ),
         ),
         Padding(
           padding: const EdgeInsets.all(20),
@@ -126,8 +129,9 @@ class _Body extends StatelessWidget {
                 Text(
                   product.categoryName!.toUpperCase(),
                   style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
                     color: AppColors.textSecondary,
                   ),
                 ),
@@ -142,12 +146,15 @@ class _Body extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
+                  color: AppColors.accent,
                 ),
               ),
               if (product.storeName != null) ...[
                 const SizedBox(height: 8),
-                Text('Sold by ${product.storeName}', style: const TextStyle(color: AppColors.textSecondary)),
+                Text(
+                  'Sold by ${product.storeName}',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
               ],
               const SizedBox(height: 12),
               Wrap(
@@ -156,13 +163,14 @@ class _Body extends StatelessWidget {
                   if (product.inGhana)
                     Chip(
                       label: const Text('In Ghana'),
-                      backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                      backgroundColor: AppColors.emerald.withValues(alpha: 0.12),
                       side: BorderSide.none,
                     ),
                   if (product.freeShipping)
                     Chip(
+                      avatar: const Icon(Icons.local_shipping, size: 16, color: AppColors.emerald),
                       label: const Text('Free delivery'),
-                      backgroundColor: AppColors.accent.withValues(alpha: 0.12),
+                      backgroundColor: AppColors.emerald.withValues(alpha: 0.12),
                       side: BorderSide.none,
                     ),
                   if (product.rating > 0)

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../api/api_client.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/common_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _password = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
+  bool _remember = true;
 
   @override
   void dispose() {
@@ -27,6 +29,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (_login.text.trim().isEmpty || _password.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter your mobile/email and password')),
+      );
+      return;
+    }
     setState(() => _loading = true);
     try {
       await context.read<AppStore>().login(
@@ -48,56 +56,123 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/shop'),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Welcome back',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Sign in with your email or mobile number',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 28),
-              TextField(
-                controller: _login,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email or mobile',
-                  prefixIcon: Icon(Icons.person_outline),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.ringOrange),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.accent.withValues(alpha: 0.06),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
                 ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: _password,
-                obscureText: _obscure,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                    onPressed: () => setState(() => _obscure = !_obscure),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'SHOPPER',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.4,
+                    color: AppColors.accent,
                   ),
                 ),
-                onSubmitted: (_) => _submit(),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _loading ? null : _submit,
-                child: Text(_loading ? 'Signing in…' : 'Sign In'),
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () => context.push('/register'),
-                child: const Text('New here? Create an account'),
-              ),
-            ],
+                const SizedBox(height: 8),
+                const Text(
+                  'Welcome back',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Login to shop, track orders, and save wishlists.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 28),
+                const Text('Mobile or Email', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _login,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    hintText: '0241234567 or email@example.com',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text('Password', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _password,
+                  obscureText: _obscure,
+                  onSubmitted: (_) => _submit(),
+                  decoration: InputDecoration(
+                    hintText: 'Your password',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _remember,
+                      activeColor: AppColors.accent,
+                      onChanged: (v) => setState(() => _remember = v ?? true),
+                    ),
+                    const Text('Remember me', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                PrimaryButton(
+                  label: 'Login',
+                  loading: _loading,
+                  onPressed: _submit,
+                ),
+                const SizedBox(height: 20),
+                const Divider(),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => context.push('/register'),
+                  child: const Text.rich(
+                    TextSpan(
+                      text: 'New here? ',
+                      style: TextStyle(color: AppColors.textSecondary),
+                      children: [
+                        TextSpan(
+                          text: 'Create shopper account',
+                          style: TextStyle(
+                            color: AppColors.accent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

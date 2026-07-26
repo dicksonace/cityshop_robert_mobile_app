@@ -18,6 +18,10 @@ class AppStore extends ChangeNotifier {
   List<Product> products = [];
   String searchQuery = '';
   int? selectedCategoryId;
+  bool filterInGhana = false;
+  bool filterFreeShip = false;
+  String sort = 'recommended';
+  int totalProducts = 0;
 
   bool get isLoggedIn => user != null;
 
@@ -50,19 +54,36 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadShop({String? search, int? categoryId}) async {
+  Future<void> loadShop({
+    String? search,
+    int? categoryId,
+    bool clearCategory = false,
+    bool? inGhana,
+    bool? freeShip,
+    String? sortBy,
+  }) async {
     loadingShop = true;
     shopError = null;
     if (search != null) searchQuery = search;
-    if (categoryId != null) selectedCategoryId = categoryId;
+    if (clearCategory) {
+      selectedCategoryId = null;
+    } else if (categoryId != null) {
+      selectedCategoryId = categoryId;
+    }
+    if (inGhana != null) filterInGhana = inGhana;
+    if (freeShip != null) filterFreeShip = freeShip;
+    if (sortBy != null) sort = sortBy;
     notifyListeners();
 
     try {
       final catsFuture = categories.isEmpty ? _api.get('/categories') : null;
       final query = <String, dynamic>{
         'per_page': 40,
+        'sort': sort,
         if (searchQuery.trim().isNotEmpty) 'search': searchQuery.trim(),
         if (selectedCategoryId != null) 'category': selectedCategoryId,
+        if (filterInGhana) 'in_ghana': 1,
+        if (filterFreeShip) 'free_ship': 1,
       };
       final productsRes = await _api.get('/products', query: query);
 
@@ -77,12 +98,20 @@ class AppStore extends ChangeNotifier {
         }
       }
 
-      final pdata = productsRes.data is Map ? productsRes.data['data'] : productsRes.data;
-      if (pdata is List) {
-        products = pdata
-            .whereType<Map>()
-            .map((e) => Product.fromJson(Map<String, dynamic>.from(e)))
-            .toList();
+      final body = productsRes.data;
+      if (body is Map) {
+        final meta = body['meta'];
+        totalProducts = (meta is Map ? meta['total'] as num? : null)?.toInt() ??
+            (body['total'] as num?)?.toInt() ??
+            0;
+        final pdata = body['data'];
+        if (pdata is List) {
+          products = pdata
+              .whereType<Map>()
+              .map((e) => Product.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
+          if (totalProducts == 0) totalProducts = products.length;
+        }
       }
     } on ApiException catch (e) {
       shopError = e.message;
@@ -159,8 +188,9 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void clearCategoryFilter() {
-    selectedCategoryId = null;
-    loadShop();
-  }
+  void clearCategoryFilter() => loadShop(clearCategory: true);
+
+  void toggleInGhana() => loadShop(inGhana: !filterInGhana);
+
+  void toggleFreeShip() => loadShop(freeShip: !filterFreeShip);
 }

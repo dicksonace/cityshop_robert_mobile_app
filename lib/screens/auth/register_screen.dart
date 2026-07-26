@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../api/api_client.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/common_widgets.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -56,80 +57,95 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Register')),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Create Account'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.pop(),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Create buyer account',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Shop Ghana’s best deals on CityShop',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: _name,
-                decoration: const InputDecoration(
-                  labelText: 'Full name',
-                  prefixIcon: Icon(Icons.badge_outlined),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  prefixIcon: Icon(Icons.email_outlined),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Join CityShop',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _mobile,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Mobile',
-                  prefixIcon: Icon(Icons.phone_outlined),
-                  hintText: '0551234567',
+                const SizedBox(height: 6),
+                const Text(
+                  'Create a shopper account and start shopping today.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _password,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: Icon(Icons.lock_outline),
+                const SizedBox(height: 22),
+                _field('Full Name', _name, Icons.badge_outlined),
+                _field('Mobile Number', _mobile, Icons.phone_outlined,
+                    hint: '0241234567', keyboard: TextInputType.phone),
+                _field('Email Address', _email, Icons.email_outlined,
+                    keyboard: TextInputType.emailAddress),
+                _field('Password', _password, Icons.lock_outline, obscure: true),
+                _field('Confirm Password', _confirm, Icons.lock_outline, obscure: true),
+                const SizedBox(height: 10),
+                PrimaryButton(
+                  label: 'Create Account',
+                  loading: _loading,
+                  onPressed: _submit,
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _confirm,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Confirm password',
-                  prefixIcon: Icon(Icons.lock_outline),
+                const SizedBox(height: 14),
+                TextButton(
+                  onPressed: () => context.pop(),
+                  child: const Text('Already have an account? Log in'),
                 ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.registerBlue),
-                onPressed: _loading ? null : _submit,
-                child: Text(_loading ? 'Creating…' : 'Create account'),
-              ),
-              TextButton(
-                onPressed: () => context.pop(),
-                child: const Text('Already have an account? Sign in'),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _field(
+    String label,
+    TextEditingController c,
+    IconData icon, {
+    String? hint,
+    TextInputType? keyboard,
+    bool obscure = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: c,
+            obscureText: obscure,
+            keyboardType: keyboard,
+            decoration: InputDecoration(
+              hintText: hint,
+              prefixIcon: Icon(icon),
+            ),
+          ),
+        ],
       ),
     );
   }
