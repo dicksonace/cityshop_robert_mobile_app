@@ -30,7 +30,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   bool adding = false;
   bool wishBusy = false;
   int qty = 1;
-  int imageIndex = 0;
 
   @override
   void initState() {
@@ -173,9 +172,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   product: p!,
                   related: related,
                   reviews: reviews,
-                  imageIndex: imageIndex,
                   qty: qty,
-                  onImageChanged: (i) => setState(() => imageIndex = i),
                   onQtyChanged: (q) => setState(() => qty = q),
                   onMessage: _messageSeller,
                 ),
@@ -215,9 +212,7 @@ class _Body extends StatelessWidget {
     required this.product,
     required this.related,
     required this.reviews,
-    required this.imageIndex,
     required this.qty,
-    required this.onImageChanged,
     required this.onQtyChanged,
     required this.onMessage,
   });
@@ -225,18 +220,12 @@ class _Body extends StatelessWidget {
   final Product product;
   final List<Product> related;
   final List<Map<String, dynamic>> reviews;
-  final int imageIndex;
   final int qty;
-  final ValueChanged<int> onImageChanged;
   final ValueChanged<int> onQtyChanged;
   final VoidCallback onMessage;
 
   @override
   Widget build(BuildContext context) {
-    final images = product.images;
-    final image = images.isNotEmpty
-        ? images[imageIndex.clamp(0, images.length - 1)].url
-        : product.primaryImageUrl;
     final hasDiscount =
         product.discountPrice != null && product.discountPrice! < product.price;
     final discountPct = hasDiscount
@@ -245,66 +234,12 @@ class _Body extends StatelessWidget {
 
     return ListView(
       children: [
-        AspectRatio(
-          aspectRatio: 1,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Container(
-                color: const Color(0xFFF8FAFC),
-                child: image != null
-                    ? CachedNetworkImage(imageUrl: image, fit: BoxFit.contain)
-                    : const Icon(Icons.image, size: 64, color: AppColors.textMuted),
-              ),
-              if (hasDiscount)
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.danger,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '-$discountPct%',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+        _ProductImageGallery(
+          images: product.images,
+          fallbackUrl: product.primaryImageUrl,
+          videoUrl: product.videoUrl,
+          discountPct: hasDiscount ? discountPct : null,
         ),
-        if (images.length > 1)
-          SizedBox(
-            height: 72,
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              scrollDirection: Axis.horizontal,
-              itemCount: images.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, i) {
-                final selected = i == imageIndex;
-                return GestureDetector(
-                  onTap: () => onImageChanged(i),
-                  child: Container(
-                    width: 64,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: selected ? AppColors.accent : AppColors.border,
-                        width: selected ? 2 : 1,
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: CachedNetworkImage(imageUrl: images[i].url, fit: BoxFit.cover),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
         Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -564,6 +499,266 @@ class _Body extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ProductImageGallery extends StatefulWidget {
+  const _ProductImageGallery({
+    required this.images,
+    this.fallbackUrl,
+    this.videoUrl,
+    this.discountPct,
+  });
+
+  final List<ProductImage> images;
+  final String? fallbackUrl;
+  final String? videoUrl;
+  final int? discountPct;
+
+  @override
+  State<_ProductImageGallery> createState() => _ProductImageGalleryState();
+}
+
+class _ProductImageGalleryState extends State<_ProductImageGallery> {
+  late final PageController _pageController;
+  final ScrollController _thumbsController = ScrollController();
+  int _index = 0;
+
+  List<String> get _urls {
+    if (widget.images.isNotEmpty) {
+      return widget.images.map((e) => e.url).where((u) => u.isNotEmpty).toList();
+    }
+    if (widget.fallbackUrl != null && widget.fallbackUrl!.isNotEmpty) {
+      return [widget.fallbackUrl!];
+    }
+    return const [];
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _thumbsController.dispose();
+    super.dispose();
+  }
+
+  void _goTo(int i) {
+    final total = _urls.length;
+    if (total == 0) return;
+    final next = ((i % total) + total) % total;
+    setState(() => _index = next);
+    if (_pageController.hasClients) {
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOut,
+      );
+    }
+    _scrollThumbIntoView(next);
+  }
+
+  void _scrollThumbIntoView(int i) {
+    if (!_thumbsController.hasClients) return;
+    const itemWidth = 72.0;
+    final target = (i * itemWidth) - 40;
+    _thumbsController.animateTo(
+      target.clamp(0.0, _thumbsController.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final urls = _urls;
+    final total = urls.length;
+
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: 1,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(
+                color: const Color(0xFFF8FAFC),
+                child: total == 0
+                    ? const Icon(Icons.image, size: 64, color: AppColors.textMuted)
+                    : PageView.builder(
+                        controller: _pageController,
+                        itemCount: total,
+                        onPageChanged: (i) {
+                          setState(() => _index = i);
+                          _scrollThumbIntoView(i);
+                        },
+                        itemBuilder: (context, i) {
+                          return CachedNetworkImage(
+                            imageUrl: urls[i],
+                            fit: BoxFit.contain,
+                            placeholder: (_, __) => const Center(child: AppLoader()),
+                            errorWidget: (_, __, ___) =>
+                                const Icon(Icons.broken_image_outlined, size: 48, color: AppColors.textMuted),
+                          );
+                        },
+                      ),
+              ),
+              if (widget.discountPct != null)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '-${widget.discountPct}%',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                    ),
+                  ),
+                ),
+              if (total > 1) ...[
+                Positioned(
+                  left: 8,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: _GalleryNavButton(
+                      icon: Icons.chevron_left,
+                      onTap: () => _goTo(_index - 1),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 8,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: _GalleryNavButton(
+                      icon: Icons.chevron_right,
+                      onTap: () => _goTo(_index + 1),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 12,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(total, (i) {
+                      final active = i == _index;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        width: active ? 18 : 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: active ? AppColors.accent : Colors.white.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(999),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.15),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${_index + 1}/$total',
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (total > 1)
+          SizedBox(
+            height: 84,
+            child: ListView.separated(
+              controller: _thumbsController,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              scrollDirection: Axis.horizontal,
+              itemCount: total,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, i) {
+                final selected = i == _index;
+                return GestureDetector(
+                  onTap: () => _goTo(i),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 64,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selected ? AppColors.accent : AppColors.border,
+                        width: selected ? 2.5 : 1,
+                      ),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: AppColors.accent.withValues(alpha: 0.25),
+                                blurRadius: 8,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(imageUrl: urls[i], fit: BoxFit.cover),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _GalleryNavButton extends StatelessWidget {
+  const _GalleryNavButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.92),
+      shape: const CircleBorder(),
+      elevation: 2,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(icon, color: AppColors.textPrimary),
+        ),
+      ),
     );
   }
 }
