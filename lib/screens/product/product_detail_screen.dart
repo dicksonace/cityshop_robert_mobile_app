@@ -614,6 +614,10 @@ class _SellerCard extends StatelessWidget {
           ),
           if (product.sellerId != null)
             OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(72, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+              ),
               onPressed: onMessage,
               child: const Text('Chat'),
             ),
