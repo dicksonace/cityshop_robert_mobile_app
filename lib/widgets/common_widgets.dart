@@ -31,6 +31,7 @@ class AppLoader extends StatelessWidget {
           const SizedBox(height: 14),
           Text(
             label!,
+            textAlign: TextAlign.center,
             style: TextStyle(
               color: color == Colors.white ? Colors.white70 : AppColors.textSecondary,
               fontWeight: FontWeight.w600,
@@ -55,27 +56,50 @@ class FullPageLoader extends StatelessWidget {
 }
 
 class BrandMark extends StatelessWidget {
-  const BrandMark({super.key, this.height = 40, this.light = false});
+  const BrandMark({
+    super.key,
+    this.height = 40,
+    this.light = false,
+    this.rounded = false,
+  });
 
   final double height;
   final bool light;
+  final bool rounded;
 
-  static const logoUrl = 'https://cityunlock.net/images/logo.png';
+  static const assetPath = 'assets/branding/cityshop_logo.png';
 
   @override
   Widget build(BuildContext context) {
-    return Image.network(
-      logoUrl,
+    final image = Image.asset(
+      assetPath,
       height: height,
+      width: height,
       fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => Text(
-        'CityShop',
-        style: TextStyle(
-          fontSize: height * 0.55,
-          fontWeight: FontWeight.w800,
-          color: light ? Colors.white : AppColors.textPrimary,
+      errorBuilder: (_, error, stack) => Container(
+        height: height,
+        width: height,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: light ? Colors.white24 : AppColors.ringOrange,
+          borderRadius: BorderRadius.circular(rounded ? height * 0.22 : 12),
+        ),
+        child: Text(
+          'CS',
+          style: TextStyle(
+            fontSize: height * 0.32,
+            fontWeight: FontWeight.w900,
+            color: light ? Colors.white : AppColors.accent,
+          ),
         ),
       ),
+    );
+
+    if (!rounded) return image;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(height * 0.22),
+      child: image,
     );
   }
 }
