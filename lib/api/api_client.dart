@@ -63,7 +63,7 @@ class ApiClient {
 
   Future<Response<dynamic>> post(
     String path, {
-    Map<String, dynamic>? data,
+    Object? data,
   }) async {
     try {
       return await _dio.post(path, data: data);
@@ -74,7 +74,7 @@ class ApiClient {
 
   Future<Response<dynamic>> patch(
     String path, {
-    Map<String, dynamic>? data,
+    Object? data,
   }) async {
     try {
       return await _dio.patch(path, data: data);
@@ -83,9 +83,42 @@ class ApiClient {
     }
   }
 
+  Future<Response<dynamic>> put(
+    String path, {
+    Object? data,
+  }) async {
+    try {
+      return await _dio.put(path, data: data);
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
   Future<Response<dynamic>> delete(String path) async {
     try {
       return await _dio.delete(path);
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
+  }
+
+  Future<Response<dynamic>> postMultipart(
+    String path, {
+    required Map<String, dynamic> fields,
+    required String fileField,
+    required String filePath,
+    String filename = 'upload.jpg',
+  }) async {
+    try {
+      final form = FormData.fromMap({
+        ...fields,
+        fileField: await MultipartFile.fromFile(filePath, filename: filename),
+      });
+      return await _dio.post(
+        path,
+        data: form,
+        options: Options(contentType: 'multipart/form-data'),
+      );
     } on DioException catch (e) {
       throw _mapError(e);
     }

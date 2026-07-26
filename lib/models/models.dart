@@ -54,10 +54,15 @@ class Product {
     this.reviewCount = 0,
     this.inGhana = false,
     this.freeShipping = false,
+    this.deliveryFee,
+    this.isPreorder = false,
+    this.cashOnDelivery = false,
     this.images = const [],
     this.categoryName,
     this.categoryId,
     this.storeName,
+    this.sellerId,
+    this.sellerName,
     this.quantity = 0,
   });
 
@@ -73,10 +78,15 @@ class Product {
   final int reviewCount;
   final bool inGhana;
   final bool freeShipping;
+  final double? deliveryFee;
+  final bool isPreorder;
+  final bool cashOnDelivery;
   final List<ProductImage> images;
   final String? categoryName;
   final int? categoryId;
   final String? storeName;
+  final int? sellerId;
+  final String? sellerName;
   final int quantity;
 
   String? get primaryImageUrl {
@@ -105,6 +115,9 @@ class Product {
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
       inGhana: json['in_ghana'] as bool? ?? false,
       freeShipping: json['free_shipping'] as bool? ?? false,
+      deliveryFee: (json['delivery_fee'] as num?)?.toDouble(),
+      isPreorder: json['is_preorder'] as bool? ?? false,
+      cashOnDelivery: json['cash_on_delivery'] as bool? ?? false,
       quantity: (json['quantity'] as num?)?.toInt() ?? 0,
       images: imagesJson is List
           ? imagesJson
@@ -117,6 +130,8 @@ class Product {
       storeName: seller is Map
           ? (seller['store_name'] as String? ?? seller['name'] as String?)
           : null,
+      sellerId: seller is Map ? seller['id'] as int? : null,
+      sellerName: seller is Map ? seller['name'] as String? : null,
     );
   }
 }
@@ -128,6 +143,9 @@ class AppUser {
     required this.email,
     this.mobile,
     this.role,
+    this.region,
+    this.city,
+    this.avatar,
   });
 
   final int id;
@@ -135,6 +153,9 @@ class AppUser {
   final String email;
   final String? mobile;
   final String? role;
+  final String? region;
+  final String? city;
+  final String? avatar;
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
     return AppUser(
@@ -143,6 +164,335 @@ class AppUser {
       email: json['email'] as String? ?? '',
       mobile: json['mobile'] as String?,
       role: json['role'] as String?,
+      region: json['region'] as String?,
+      city: json['city'] as String?,
+      avatar: json['avatar'] as String?,
+    );
+  }
+}
+
+class CartItem {
+  const CartItem({
+    required this.id,
+    required this.quantity,
+    required this.subtotal,
+    required this.product,
+  });
+
+  final int id;
+  final int quantity;
+  final double subtotal;
+  final Product product;
+
+  factory CartItem.fromJson(Map<String, dynamic> json) {
+    return CartItem(
+      id: json['id'] as int,
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
+      product: Product.fromJson(Map<String, dynamic>.from(json['product'] as Map)),
+    );
+  }
+}
+
+class BuyerAddress {
+  const BuyerAddress({
+    required this.id,
+    required this.firstName,
+    required this.lastName,
+    required this.phone,
+    required this.addressLine,
+    required this.region,
+    required this.city,
+    this.secondaryPhone,
+    this.additionalDetails,
+    this.digitalAddress,
+    this.isDefault = false,
+  });
+
+  final int id;
+  final String firstName;
+  final String lastName;
+  final String phone;
+  final String? secondaryPhone;
+  final String addressLine;
+  final String? additionalDetails;
+  final String region;
+  final String city;
+  final String? digitalAddress;
+  final bool isDefault;
+
+  String get fullName => '$firstName $lastName'.trim();
+
+  factory BuyerAddress.fromJson(Map<String, dynamic> json) {
+    return BuyerAddress(
+      id: json['id'] as int,
+      firstName: json['first_name'] as String? ?? '',
+      lastName: json['last_name'] as String? ?? '',
+      phone: json['phone'] as String? ?? '',
+      secondaryPhone: json['secondary_phone'] as String?,
+      addressLine: json['address_line'] as String? ?? '',
+      additionalDetails: json['additional_details'] as String?,
+      region: json['region'] as String? ?? '',
+      city: json['city'] as String? ?? '',
+      digitalAddress: json['digital_address'] as String?,
+      isDefault: json['is_default'] as bool? ?? false,
+    );
+  }
+}
+
+class WalletInfo {
+  const WalletInfo({
+    required this.availableBalance,
+    required this.pendingBalance,
+    this.totalEarnings = 0,
+    this.withdrawnAmount = 0,
+  });
+
+  final double availableBalance;
+  final double pendingBalance;
+  final double totalEarnings;
+  final double withdrawnAmount;
+
+  factory WalletInfo.fromJson(Map<String, dynamic> json) {
+    return WalletInfo(
+      availableBalance: (json['available_balance'] as num?)?.toDouble() ?? 0,
+      pendingBalance: (json['pending_balance'] as num?)?.toDouble() ?? 0,
+      totalEarnings: (json['total_earnings'] as num?)?.toDouble() ?? 0,
+      withdrawnAmount: (json['withdrawn_amount'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+class OrderItemModel {
+  const OrderItemModel({
+    required this.id,
+    required this.productName,
+    required this.quantity,
+    required this.unitPrice,
+    required this.lineTotal,
+    this.productId,
+    this.status,
+    this.fundsReleaseStatus,
+  });
+
+  final int id;
+  final int? productId;
+  final String productName;
+  final int quantity;
+  final double unitPrice;
+  final double lineTotal;
+  final String? status;
+  final String? fundsReleaseStatus;
+
+  factory OrderItemModel.fromJson(Map<String, dynamic> json) {
+    return OrderItemModel(
+      id: json['id'] as int,
+      productId: json['product_id'] as int?,
+      productName: json['product_name'] as String? ?? '',
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+      unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0,
+      lineTotal: (json['line_total'] as num?)?.toDouble() ?? 0,
+      status: json['status'] as String?,
+      fundsReleaseStatus: json['funds_release_status'] as String?,
+    );
+  }
+}
+
+class OrderModel {
+  const OrderModel({
+    required this.id,
+    required this.orderNumber,
+    required this.total,
+    this.status,
+    this.paymentStatus,
+    this.paymentChannel,
+    this.paymentMethod,
+    this.receiverName,
+    this.receiverPhone,
+    this.region,
+    this.city,
+    this.subtotal = 0,
+    this.shippingCost = 0,
+    this.createdAt,
+    this.storeName,
+    this.sellerId,
+    this.items = const [],
+  });
+
+  final int id;
+  final String orderNumber;
+  final String? status;
+  final String? paymentStatus;
+  final String? paymentChannel;
+  final String? paymentMethod;
+  final String? receiverName;
+  final String? receiverPhone;
+  final String? region;
+  final String? city;
+  final double subtotal;
+  final double shippingCost;
+  final double total;
+  final String? createdAt;
+  final String? storeName;
+  final int? sellerId;
+  final List<OrderItemModel> items;
+
+  factory OrderModel.fromJson(Map<String, dynamic> json) {
+    final seller = json['seller'];
+    final itemsJson = json['items'];
+    return OrderModel(
+      id: json['id'] as int,
+      orderNumber: json['order_number'] as String? ?? '',
+      status: json['status'] as String?,
+      paymentStatus: json['payment_status'] as String?,
+      paymentChannel: json['payment_channel'] as String?,
+      paymentMethod: json['payment_method'] as String?,
+      receiverName: json['receiver_name'] as String?,
+      receiverPhone: json['receiver_phone'] as String?,
+      region: json['region'] as String?,
+      city: json['city'] as String?,
+      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
+      shippingCost: (json['shipping_cost'] as num?)?.toDouble() ?? 0,
+      total: (json['total'] as num?)?.toDouble() ?? 0,
+      createdAt: json['created_at'] as String?,
+      storeName: seller is Map ? seller['store_name'] as String? : null,
+      sellerId: seller is Map ? seller['id'] as int? : null,
+      items: itemsJson is List
+          ? itemsJson
+              .whereType<Map>()
+              .map((e) => OrderItemModel.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+    );
+  }
+}
+
+class ConversationModel {
+  const ConversationModel({
+    required this.id,
+    required this.otherName,
+    this.otherId,
+    this.storeName,
+    this.productName,
+    this.latestBody,
+    this.unreadCount = 0,
+    this.lastMessageAt,
+  });
+
+  final int id;
+  final int? otherId;
+  final String otherName;
+  final String? storeName;
+  final String? productName;
+  final String? latestBody;
+  final int unreadCount;
+  final String? lastMessageAt;
+
+  factory ConversationModel.fromJson(Map<String, dynamic> json) {
+    final other = json['other'];
+    final product = json['product'];
+    final latest = json['latest_message'];
+    return ConversationModel(
+      id: json['id'] as int,
+      otherId: other is Map ? other['id'] as int? : null,
+      otherName: other is Map
+          ? (other['store_name'] as String? ?? other['name'] as String? ?? 'Seller')
+          : 'Seller',
+      storeName: other is Map ? other['store_name'] as String? : null,
+      productName: product is Map ? product['name'] as String? : null,
+      latestBody: latest is Map ? latest['body'] as String? : null,
+      unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
+      lastMessageAt: json['last_message_at'] as String?,
+    );
+  }
+}
+
+class ChatMessage {
+  const ChatMessage({
+    required this.id,
+    required this.body,
+    required this.mine,
+    this.type = 'text',
+    this.createdAt,
+    this.imageUrl,
+  });
+
+  final int id;
+  final String body;
+  final bool mine;
+  final String type;
+  final String? createdAt;
+  final String? imageUrl;
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json, {required int myUserId}) {
+    final meta = json['metadata'];
+    return ChatMessage(
+      id: json['id'] as int,
+      body: json['body'] as String? ?? '',
+      mine: (json['sender_id'] as int?) == myUserId || json['is_mine'] == true,
+      type: json['type'] as String? ?? 'text',
+      createdAt: json['created_at'] as String?,
+      imageUrl: meta is Map ? meta['image_url'] as String? : json['image_url'] as String?,
+    );
+  }
+}
+
+class WishlistItem {
+  const WishlistItem({required this.id, required this.productId, required this.product});
+
+  final int id;
+  final int productId;
+  final Product product;
+
+  factory WishlistItem.fromJson(Map<String, dynamic> json) {
+    return WishlistItem(
+      id: json['id'] as int,
+      productId: json['product_id'] as int? ?? (json['product'] is Map ? json['product']['id'] as int : 0),
+      product: Product.fromJson(Map<String, dynamic>.from(json['product'] as Map)),
+    );
+  }
+}
+
+class CheckoutPreview {
+  const CheckoutPreview({
+    required this.subtotal,
+    required this.shippingTotal,
+    required this.grandTotal,
+    required this.addresses,
+    required this.walletAvailable,
+    required this.paystackConfigured,
+    this.sellerGroups = const [],
+  });
+
+  final double subtotal;
+  final double shippingTotal;
+  final double grandTotal;
+  final List<BuyerAddress> addresses;
+  final double walletAvailable;
+  final bool paystackConfigured;
+  final List<Map<String, dynamic>> sellerGroups;
+
+  factory CheckoutPreview.fromJson(Map<String, dynamic> json) {
+    final addresses = json['addresses'];
+    final wallet = json['wallet'];
+    final groups = json['seller_groups'];
+    return CheckoutPreview(
+      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
+      shippingTotal: (json['shipping_total'] as num?)?.toDouble() ?? 0,
+      grandTotal: (json['grand_total'] as num?)?.toDouble() ?? 0,
+      walletAvailable: wallet is Map
+          ? (wallet['available_balance'] as num?)?.toDouble() ?? 0
+          : 0,
+      paystackConfigured: json['paystack_configured'] as bool? ?? false,
+      addresses: addresses is List
+          ? addresses
+              .whereType<Map>()
+              .map((e) => BuyerAddress.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      sellerGroups: groups is List
+          ? groups.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+          : const [],
     );
   }
 }

@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/api_client.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../account/wallet_orders_screens.dart';
+import '../chat/messages_screens.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
@@ -38,27 +41,9 @@ class _ShopShellState extends State<ShopShell> {
           index: _tab,
           children: [
             _ShopHome(searchController: _search),
-            _ComingSoon(
-              icon: Icons.account_balance_wallet_outlined,
-              title: 'Wallet',
-              subtitle: 'Top up and pay with your CityShop wallet — next.',
-              actionLabel: store.isLoggedIn ? null : 'Login',
-              onAction: store.isLoggedIn ? null : () => context.push('/login'),
-            ),
-            _ComingSoon(
-              icon: Icons.inventory_2_outlined,
-              title: 'My Orders',
-              subtitle: 'Track purchases and confirm delivery — next.',
-              actionLabel: store.isLoggedIn ? null : 'Login',
-              onAction: store.isLoggedIn ? null : () => context.push('/login'),
-            ),
-            _ComingSoon(
-              icon: Icons.chat_bubble_outline,
-              title: 'Messages',
-              subtitle: 'Chat with sellers — next.',
-              actionLabel: store.isLoggedIn ? null : 'Login',
-              onAction: store.isLoggedIn ? null : () => context.push('/login'),
-            ),
+            const WalletTab(),
+            const OrdersTab(),
+            const MessagesTab(),
             AccountSettingsTab(user: store.user),
           ],
         ),
@@ -177,6 +162,7 @@ class _ShopHome extends StatelessWidget {
                               const SizedBox(width: 8),
                               SizedBox(
                                 height: 48,
+                                width: 96,
                                 child: ElevatedButton(
                                   onPressed: () => store.loadShop(search: searchController.text),
                                   child: const Text('Search'),
@@ -297,11 +283,13 @@ class _TopBar extends StatelessWidget {
                 context.push('/login');
                 return;
               }
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Cart coming next')),
-              );
+              context.push('/cart');
             },
-            icon: const Icon(Icons.shopping_cart_outlined),
+            icon: Badge(
+              isLabelVisible: context.watch<AppStore>().cartCount > 0,
+              label: Text('${context.watch<AppStore>().cartCount}'),
+              child: const Icon(Icons.shopping_cart_outlined),
+            ),
           ),
           if (user == null)
             Padding(
@@ -470,9 +458,7 @@ class _CategoryShortcuts extends StatelessWidget {
             context.push('/login');
             return;
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Wishlist coming next')),
-          );
+          context.push('/wishlist');
         },
       ),
       _Shortcut(
@@ -703,18 +689,36 @@ class ProductCard extends StatelessWidget {
                         elevation: 1,
                         child: InkWell(
                           customBorder: const CircleBorder(),
-                          onTap: () {
-                            if (!context.read<AppStore>().isLoggedIn) {
+                          onTap: () async {
+                            final store = context.read<AppStore>();
+                            if (!store.isLoggedIn) {
                               context.push('/login');
                               return;
                             }
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Wishlist coming next')),
-                            );
+                            try {
+                              final on = await store.toggleWishlist(product.id);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(on ? 'Saved to wishlist' : 'Removed from wishlist')),
+                                );
+                              }
+                            } on ApiException catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+                              }
+                            }
                           },
-                          child: const Padding(
-                            padding: EdgeInsets.all(6),
-                            child: Icon(Icons.favorite_border, size: 16, color: AppColors.textSecondary),
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Icon(
+                              context.watch<AppStore>().wishlistProductIds.contains(product.id)
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              size: 16,
+                              color: context.watch<AppStore>().wishlistProductIds.contains(product.id)
+                                  ? AppColors.danger
+                                  : AppColors.textSecondary,
+                            ),
                           ),
                         ),
                       ),
@@ -770,52 +774,6 @@ class ProductCard extends StatelessWidget {
   }
 }
 
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppColors.ringOrange,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 36, color: AppColors.accent),
-            ),
-            const SizedBox(height: 16),
-            Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
-            if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 16),
-              ElevatedButton(onPressed: onAction, child: Text(actionLabel!)),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class AccountSettingsTab extends StatelessWidget {
   const AccountSettingsTab({super.key, this.user});
   final AppUser? user;
@@ -857,11 +815,12 @@ class AccountSettingsTab extends StatelessWidget {
       );
     }
 
-    final links = [
-      (Icons.person_outline, 'Profile settings', 'Name & email'),
-      (Icons.location_on_outlined, 'Addresses', 'Saved delivery addresses'),
-      (Icons.favorite_border, 'Wishlist', 'Saved products'),
-      (Icons.lock_outline, 'Change password', 'Account security'),
+    final links = <(IconData, String, String, String)>[
+      (Icons.person_outline, 'Profile settings', 'Name & email', '/profile/edit'),
+      (Icons.location_on_outlined, 'Addresses', 'Saved delivery addresses', '/addresses'),
+      (Icons.favorite_border, 'Wishlist', 'Saved products', '/wishlist'),
+      (Icons.lock_outline, 'Change password', 'Account security', '/profile/password'),
+      (Icons.shopping_cart_outlined, 'My cart', 'Review items before checkout', '/cart'),
     ];
 
     return ListView(
@@ -934,11 +893,7 @@ class AccountSettingsTab extends StatelessWidget {
                   title: Text(item.$2, style: const TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Text(item.$3, style: const TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${item.$2} — wiring next')),
-                    );
-                  },
+                  onTap: () => context.push(item.$4),
                 ),
             ],
           ),

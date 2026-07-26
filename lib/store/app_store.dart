@@ -23,6 +23,18 @@ class AppStore extends ChangeNotifier {
   String sort = 'recommended';
   int totalProducts = 0;
 
+  List<CartItem> cartItems = [];
+  double cartSubtotal = 0;
+  int cartCount = 0;
+  Set<int> wishlistProductIds = {};
+  List<WishlistItem> wishlist = [];
+  List<OrderModel> orders = [];
+  WalletInfo? wallet;
+  List<ConversationModel> conversations = [];
+  List<BuyerAddress> addresses = [];
+  List<String> regions = [];
+  Map<String, List<String>> citiesByRegion = {};
+
   bool get isLoggedIn => user != null;
 
   Future<void> init() async {
@@ -32,6 +44,10 @@ class AppStore extends ChangeNotifier {
       final token = await _api.getToken();
       if (token != null && token.isNotEmpty) {
         await refreshMe();
+        await Future.wait([
+          loadCart(),
+          loadWishlist(),
+        ]);
       }
       await loadShop();
     } catch (_) {
@@ -147,6 +163,7 @@ class AppStore extends ChangeNotifier {
     } else {
       await refreshMe();
     }
+    await Future.wait([loadCart(), loadWishlist()]);
     notifyListeners();
   }
 
@@ -185,7 +202,332 @@ class AppStore extends ChangeNotifier {
     } catch (_) {}
     await _api.clearToken();
     user = null;
+    cartItems = [];
+    cartSubtotal = 0;
+    cartCount = 0;
+    wishlist = [];
+    wishlistProductIds = {};
+    orders = [];
+    wallet = null;
+    conversations = [];
+    addresses = [];
     notifyListeners();
+  }
+
+  Future<void> updateProfile({
+    required String name,
+    required String email,
+    String? mobile,
+    String? region,
+    String? city,
+  }) async {
+    final res = await _api.patch('/profile', data: {
+      'name': name,
+      'email': email,
+      if (mobile != null) 'mobile': mobile,
+      if (region != null) 'region': region,
+      if (city != null) 'city': city,
+    });
+    final userJson = res.data is Map ? res.data['user'] : null;
+    if (userJson is Map) {
+      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+    } else {
+      await refreshMe();
+    }
+    notifyListeners();
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    await _api.put('/profile/password', data: {
+      'current_password': currentPassword,
+      'password': password,
+      'password_confirmation': passwordConfirmation,
+    });
+  }
+
+  void _applyCart(dynamic body) {
+    if (body is! Map) return;
+    final data = body['data'];
+    if (data is List) {
+      cartItems = data
+          .whereType<Map>()
+          .map((e) => CartItem.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    cartSubtotal = (body['subtotal'] as num?)?.toDouble() ?? 0;
+    cartCount = cartItems.fold(0, (sum, i) => sum + i.quantity);
+  }
+
+  Future<void> loadCart() async {
+    if (!isLoggedIn) return;
+    try {
+      final res = await _api.get('/cart');
+      _applyCart(res.data);
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> addToCart(int productId, {int quantity = 1}) async {
+    final res = await _api.post('/cart', data: {
+      'product_id': productId,
+      'quantity': quantity,
+    });
+    _applyCart(res.data);
+    notifyListeners();
+  }
+
+  Future<void> updateCartItem(int cartItemId, int quantity) async {
+    final res = await _api.patch('/cart/$cartItemId', data: {'quantity': quantity});
+    _applyCart(res.data);
+    notifyListeners();
+  }
+
+  Future<void> removeCartItem(int cartItemId) async {
+    final res = await _api.delete('/cart/$cartItemId');
+    _applyCart(res.data);
+    notifyListeners();
+  }
+
+  Future<void> loadWishlist() async {
+    if (!isLoggedIn) return;
+    try {
+      final res = await _api.get('/wishlist');
+      final data = res.data is Map ? res.data['data'] : null;
+      if (data is List) {
+        wishlist = data
+            .whereType<Map>()
+            .map((e) => WishlistItem.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+        wishlistProductIds = wishlist.map((e) => e.productId).toSet();
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<bool> toggleWishlist(int productId) async {
+    final res = await _api.post('/wishlist/toggle', data: {'product_id': productId});
+    final wishlisted = res.data is Map ? res.data['wishlisted'] as bool? ?? false : false;
+    if (wishlisted) {
+      wishlistProductIds = {...wishlistProductIds, productId};
+    } else {
+      wishlistProductIds = {...wishlistProductIds}..remove(productId);
+      wishlist = wishlist.where((w) => w.productId != productId).toList();
+    }
+    notifyListeners();
+    if (wishlisted || wishlist.isEmpty) {
+      await loadWishlist();
+    }
+    return wishlisted;
+  }
+
+  Future<void> loadOrders() async {
+    final res = await _api.get('/orders', query: {'per_page': 50});
+    final data = res.data is Map ? res.data['data'] : null;
+    if (data is List) {
+      orders = data
+          .whereType<Map>()
+          .map((e) => OrderModel.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    notifyListeners();
+  }
+
+  Future<OrderModel> fetchOrder(int id) async {
+    final res = await _api.get('/orders/$id');
+    final data = res.data is Map ? (res.data['data'] ?? res.data) : res.data;
+    return OrderModel.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<void> confirmDelivery(int orderId, int itemId) async {
+    await _api.post('/orders/$orderId/items/$itemId/confirm-delivery');
+    await loadOrders();
+  }
+
+  Future<void> loadWallet() async {
+    final res = await _api.get('/wallet');
+    final data = res.data is Map ? res.data['data'] : null;
+    if (data is Map) {
+      wallet = WalletInfo.fromJson(Map<String, dynamic>.from(data));
+    }
+    notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> loadManualFunding() async {
+    final res = await _api.get('/wallet/manual-funding');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> submitWalletTopUp({
+    required double amount,
+    required String network,
+    required String proofPath,
+    String? paymentReference,
+    String? userNote,
+  }) async {
+    await _api.postMultipart(
+      '/wallet/manual-top-up',
+      fields: {
+        'amount': amount,
+        'network': network,
+        if (paymentReference != null && paymentReference.isNotEmpty)
+          'payment_reference': paymentReference,
+        if (userNote != null && userNote.isNotEmpty) 'user_note': userNote,
+      },
+      fileField: 'proof',
+      filePath: proofPath,
+    );
+  }
+
+  Future<void> loadConversations() async {
+    final res = await _api.get('/messages');
+    final data = res.data is Map ? (res.data['data'] ?? res.data['conversations']) : null;
+    if (data is List) {
+      conversations = data
+          .whereType<Map>()
+          .map((e) => ConversationModel.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    notifyListeners();
+  }
+
+  Future<({ConversationModel conversation, List<ChatMessage> messages})> openConversation({
+    required int sellerId,
+    int? productId,
+  }) async {
+    final res = await _api.post('/messages', data: {
+      'seller_id': sellerId,
+      if (productId != null) 'product_id': productId,
+    });
+    final convJson = res.data['conversation'];
+    final msgs = res.data['messages'];
+    final conversation = ConversationModel.fromJson(Map<String, dynamic>.from(convJson as Map));
+    final messages = msgs is List
+        ? msgs
+            .whereType<Map>()
+            .map((e) => ChatMessage.fromJson(
+                  Map<String, dynamic>.from(e),
+                  myUserId: user?.id ?? 0,
+                ))
+            .toList()
+        : <ChatMessage>[];
+    return (conversation: conversation, messages: messages);
+  }
+
+  Future<({ConversationModel conversation, List<ChatMessage> messages})> loadConversation(
+    int id,
+  ) async {
+    final res = await _api.get('/messages/$id');
+    final convJson = res.data['conversation'];
+    final msgs = res.data['messages'];
+    final conversation = ConversationModel.fromJson(Map<String, dynamic>.from(convJson as Map));
+    final messages = msgs is List
+        ? msgs
+            .whereType<Map>()
+            .map((e) => ChatMessage.fromJson(
+                  Map<String, dynamic>.from(e),
+                  myUserId: user?.id ?? 0,
+                ))
+            .toList()
+        : <ChatMessage>[];
+    return (conversation: conversation, messages: messages);
+  }
+
+  Future<ChatMessage> sendMessage(int conversationId, String body) async {
+    final res = await _api.post('/messages/$conversationId/send', data: {'body': body});
+    final msg = res.data['message'];
+    return ChatMessage.fromJson(
+      Map<String, dynamic>.from(msg as Map),
+      myUserId: user?.id ?? 0,
+    );
+  }
+
+  Future<List<ChatMessage>> pollMessages(int conversationId, int afterId) async {
+    final res = await _api.get('/messages/$conversationId/poll', query: {'after': afterId});
+    final msgs = res.data is Map ? res.data['messages'] : null;
+    if (msgs is! List) return [];
+    return msgs
+        .whereType<Map>()
+        .map((e) => ChatMessage.fromJson(
+              Map<String, dynamic>.from(e),
+              myUserId: user?.id ?? 0,
+            ))
+        .toList();
+  }
+
+  Future<void> loadAddresses() async {
+    final res = await _api.get('/addresses');
+    final data = res.data is Map ? res.data['data'] : null;
+    if (data is List) {
+      addresses = data
+          .whereType<Map>()
+          .map((e) => BuyerAddress.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    final regs = res.data is Map ? res.data['regions'] : null;
+    if (regs is List) {
+      regions = regs.map((e) => e.toString()).toList();
+    }
+    final cities = res.data is Map ? res.data['cities_by_region'] : null;
+    if (cities is Map) {
+      citiesByRegion = cities.map(
+        (k, v) => MapEntry(
+          k.toString(),
+          v is List ? v.map((e) => e.toString()).toList() : <String>[],
+        ),
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> saveAddress(Map<String, dynamic> payload, {int? id}) async {
+    if (id == null) {
+      await _api.post('/addresses', data: payload);
+    } else {
+      await _api.patch('/addresses/$id', data: payload);
+    }
+    await loadAddresses();
+  }
+
+  Future<void> deleteAddress(int id) async {
+    await _api.delete('/addresses/$id');
+    await loadAddresses();
+  }
+
+  Future<void> setDefaultAddress(int id) async {
+    await _api.post('/addresses/$id/default');
+    await loadAddresses();
+  }
+
+  Future<CheckoutPreview> loadCheckoutPreview() async {
+    final res = await _api.get('/checkout');
+    return CheckoutPreview.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<Map<String, dynamic>> placeCheckout({
+    required int addressId,
+    required String paymentMethod,
+  }) async {
+    final res = await _api.post('/checkout', data: {
+      'address_id': addressId,
+      'payment_method': paymentMethod,
+    });
+    await loadCart();
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> initializePaystack(int checkoutId) async {
+    final res = await _api.post('/checkouts/$checkoutId/pay/initialize');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> payCheckoutWithWallet(int checkoutId) async {
+    await _api.post('/checkouts/$checkoutId/pay/wallet');
+    await loadCart();
+    await loadWallet();
   }
 
   void clearCategoryFilter() => loadShop(clearCategory: true);
