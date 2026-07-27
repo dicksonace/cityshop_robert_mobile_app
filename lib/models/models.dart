@@ -339,18 +339,42 @@ class OrderItemModel {
   final String? status;
   final String? fundsReleaseStatus;
 
+  double get displayTotal {
+    if (lineTotal > 0) return lineTotal;
+    if (unitPrice > 0) return unitPrice * quantity;
+    return 0;
+  }
+
   factory OrderItemModel.fromJson(Map<String, dynamic> json) {
+    final qty = _asInt(json['quantity']) ?? 1;
+    final unit = _asDouble(json['unit_price']) ?? 0;
+    var line = _asDouble(json['line_total']) ?? 0;
+    if (line <= 0 && unit > 0) line = unit * qty;
+
     return OrderItemModel(
-      id: json['id'] as int,
-      productId: json['product_id'] as int?,
+      id: _asInt(json['id']) ?? 0,
+      productId: _asInt(json['product_id']),
       productName: json['product_name'] as String? ?? '',
-      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
-      unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0,
-      lineTotal: (json['line_total'] as num?)?.toDouble() ?? 0,
+      quantity: qty,
+      unitPrice: unit,
+      lineTotal: line,
       status: json['status'] as String?,
       fundsReleaseStatus: json['funds_release_status'] as String?,
     );
   }
+}
+
+double? _asDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString().replaceAll(',', ''));
+}
+
+int? _asInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value.toString());
 }
 
 class OrderModel {
@@ -428,6 +452,8 @@ class ConversationModel {
     required this.otherName,
     this.otherId,
     this.storeName,
+    this.otherMobile,
+    this.productId,
     this.productName,
     this.latestBody,
     this.unreadCount = 0,
@@ -438,6 +464,8 @@ class ConversationModel {
   final int? otherId;
   final String otherName;
   final String? storeName;
+  final String? otherMobile;
+  final int? productId;
   final String? productName;
   final String? latestBody;
   final int unreadCount;
@@ -454,6 +482,8 @@ class ConversationModel {
           ? (other['store_name'] as String? ?? other['name'] as String? ?? 'Seller')
           : 'Seller',
       storeName: other is Map ? other['store_name'] as String? : null,
+      otherMobile: other is Map ? (other['mobile'] as String? ?? other['phone'] as String?) : null,
+      productId: product is Map ? product['id'] as int? : null,
       productName: product is Map ? product['name'] as String? : null,
       latestBody: latest is Map ? latest['body'] as String? : null,
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
