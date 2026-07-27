@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../api/api_client.dart';
+import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -238,6 +240,7 @@ class _Body extends StatelessWidget {
           images: product.images,
           fallbackUrl: product.primaryImageUrl,
           videoUrl: product.videoUrl,
+          videoDuration: product.videoDuration,
           discountPct: hasDiscount ? discountPct : null,
         ),
         Padding(
@@ -503,17 +506,27 @@ class _Body extends StatelessWidget {
   }
 }
 
+class _GalleryItem {
+  const _GalleryItem.image(this.url) : isVideo = false;
+  const _GalleryItem.video(this.url) : isVideo = true;
+
+  final String url;
+  final bool isVideo;
+}
+
 class _ProductImageGallery extends StatefulWidget {
   const _ProductImageGallery({
     required this.images,
     this.fallbackUrl,
     this.videoUrl,
+    this.videoDuration,
     this.discountPct,
   });
 
   final List<ProductImage> images;
   final String? fallbackUrl;
   final String? videoUrl;
+  final int? videoDuration;
   final int? discountPct;
 
   @override
@@ -524,32 +537,99 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
   late final PageController _pageController;
   final ScrollController _thumbsController = ScrollController();
   int _index = 0;
+  VideoPlayerController? _videoController;
+  bool _videoReady = false;
+  bool _videoFailed = false;
+  bool _muted = true;
 
-  List<String> get _urls {
-    if (widget.images.isNotEmpty) {
-      return widget.images.map((e) => e.url).where((u) => u.isNotEmpty).toList();
+  List<_GalleryItem> get _items {
+    final items = <_GalleryItem>[];
+    final video = ApiConfig.resolveMediaUrl(widget.videoUrl);
+    if (video.isNotEmpty) {
+      items.add(_GalleryItem.video(video));
     }
-    if (widget.fallbackUrl != null && widget.fallbackUrl!.isNotEmpty) {
-      return [widget.fallbackUrl!];
+    for (final image in widget.images) {
+      final url = ApiConfig.resolveMediaUrl(image.url);
+      if (url.isNotEmpty) items.add(_GalleryItem.image(url));
     }
-    return const [];
+    if (items.isEmpty) {
+      final fallback = ApiConfig.resolveMediaUrl(widget.fallbackUrl);
+      if (fallback.isNotEmpty) items.add(_GalleryItem.image(fallback));
+    }
+    return items;
+  }
+
+  String? get _posterUrl {
+    for (final image in widget.images) {
+      final url = ApiConfig.resolveMediaUrl(image.url);
+      if (url.isNotEmpty) return url;
+    }
+    return ApiConfig.resolveMediaUrl(widget.fallbackUrl).isEmpty
+        ? null
+        : ApiConfig.resolveMediaUrl(widget.fallbackUrl);
   }
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_items.isNotEmpty && _items.first.isVideo) {
+        _ensureVideo();
+      }
+    });
   }
 
   @override
   void dispose() {
     _pageController.dispose();
     _thumbsController.dispose();
+    _disposeVideo();
     super.dispose();
   }
 
+  void _disposeVideo() {
+    _videoController?.removeListener(_onVideoTick);
+    _videoController?.dispose();
+    _videoController = null;
+    _videoReady = false;
+    _videoFailed = false;
+  }
+
+  void _onVideoTick() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _ensureVideo() async {
+    final items = _items;
+    if (_index >= items.length || !items[_index].isVideo) return;
+    final url = items[_index].url;
+    if (_videoController != null && _videoController!.dataSource == url && _videoReady) {
+      return;
+    }
+    _disposeVideo();
+    setState(() {
+      _videoFailed = false;
+      _videoReady = false;
+    });
+    try {
+      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      _videoController = controller;
+      controller.addListener(_onVideoTick);
+      await controller.initialize();
+      await controller.setLooping(true);
+      await controller.setVolume(_muted ? 0 : 1);
+      if (!mounted) return;
+      setState(() => _videoReady = true);
+      await controller.play();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _videoFailed = true);
+    }
+  }
+
   void _goTo(int i) {
-    final total = _urls.length;
+    final total = _items.length;
     if (total == 0) return;
     final next = ((i % total) + total) % total;
     setState(() => _index = next);
@@ -561,6 +641,11 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
       );
     }
     _scrollThumbIntoView(next);
+    if (_items[next].isVideo) {
+      _ensureVideo();
+    } else {
+      _videoController?.pause();
+    }
   }
 
   void _scrollThumbIntoView(int i) {
@@ -574,10 +659,38 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
     );
   }
 
+  String _durationLabel() {
+    final seconds = widget.videoDuration;
+    if (seconds == null || seconds <= 0) return 'Video';
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return 'Video · $m:${s.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _togglePlay() async {
+    final c = _videoController;
+    if (c == null || !_videoReady) {
+      await _ensureVideo();
+      return;
+    }
+    if (c.value.isPlaying) {
+      await c.pause();
+    } else {
+      await c.play();
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleMute() async {
+    setState(() => _muted = !_muted);
+    await _videoController?.setVolume(_muted ? 0 : 1);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final urls = _urls;
-    final total = urls.length;
+    final items = _items;
+    final total = items.length;
+    final currentIsVideo = total > 0 && items[_index].isVideo;
 
     return Column(
       children: [
@@ -596,10 +709,19 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                         onPageChanged: (i) {
                           setState(() => _index = i);
                           _scrollThumbIntoView(i);
+                          if (items[i].isVideo) {
+                            _ensureVideo();
+                          } else {
+                            _videoController?.pause();
+                          }
                         },
                         itemBuilder: (context, i) {
+                          final item = items[i];
+                          if (item.isVideo) {
+                            return _buildVideoPane();
+                          }
                           return CachedNetworkImage(
-                            imageUrl: urls[i],
+                            imageUrl: item.url,
                             fit: BoxFit.contain,
                             placeholder: (_, __) => const Center(child: AppLoader()),
                             errorWidget: (_, __, ___) =>
@@ -621,6 +743,22 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                     child: Text(
                       '-${widget.discountPct}%',
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                    ),
+                  ),
+                ),
+              if (currentIsVideo)
+                Positioned(
+                  top: 12,
+                  left: widget.discountPct != null ? 72 : 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _durationLabel(),
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -704,6 +842,7 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, i) {
                 final selected = i == _index;
+                final item = items[i];
                 return GestureDetector(
                   onTap: () => _goTo(i),
                   child: AnimatedContainer(
@@ -726,13 +865,109 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: CachedNetworkImage(imageUrl: urls[i], fit: BoxFit.cover),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (item.isVideo)
+                            (_posterUrl != null
+                                ? CachedNetworkImage(imageUrl: _posterUrl!, fit: BoxFit.cover)
+                                : Container(color: Colors.black87))
+                          else
+                            CachedNetworkImage(imageUrl: item.url, fit: BoxFit.cover),
+                          if (item.isVideo)
+                            Container(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 28),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 );
               },
             ),
           ),
+      ],
+    );
+  }
+
+  Widget _buildVideoPane() {
+    if (_videoFailed) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.videocam_off_outlined, size: 48, color: AppColors.textMuted),
+          const SizedBox(height: 8),
+          const Text('Could not load video', style: TextStyle(color: AppColors.textSecondary)),
+          TextButton(onPressed: _ensureVideo, child: const Text('Retry')),
+        ],
+      );
+    }
+
+    if (!_videoReady || _videoController == null) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          if (_posterUrl != null)
+            CachedNetworkImage(imageUrl: _posterUrl!, fit: BoxFit.contain)
+          else
+            Container(color: Colors.black),
+          const Center(child: AppLoader()),
+        ],
+      );
+    }
+
+    final playing = _videoController!.value.isPlaying;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(
+          color: Colors.black,
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: _videoController!.value.aspectRatio == 0
+                  ? 1
+                  : _videoController!.value.aspectRatio,
+              child: VideoPlayer(_videoController!),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: _togglePlay,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: playing ? 0 : 1,
+                child: Center(
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          right: 12,
+          bottom: 14,
+          child: Material(
+            color: Colors.black.withValues(alpha: 0.55),
+            shape: const CircleBorder(),
+            child: IconButton(
+              tooltip: _muted ? 'Unmute' : 'Mute',
+              onPressed: _toggleMute,
+              icon: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: Colors.white, size: 20),
+            ),
+          ),
+        ),
       ],
     );
   }

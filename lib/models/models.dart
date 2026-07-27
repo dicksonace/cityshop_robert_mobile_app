@@ -66,6 +66,7 @@ class Product {
     this.isNegotiable = false,
     this.specifications = const {},
     this.videoUrl,
+    this.videoDuration,
     this.images = const [],
     this.categoryName,
     this.categoryId,
@@ -104,6 +105,7 @@ class Product {
   final bool isNegotiable;
   final Map<String, dynamic> specifications;
   final String? videoUrl;
+  final int? videoDuration;
   final List<ProductImage> images;
   final String? categoryName;
   final int? categoryId;
@@ -171,6 +173,7 @@ class Product {
       isNegotiable: json['is_negotiable'] as bool? ?? false,
       specifications: specMap,
       videoUrl: json['video_url'] as String?,
+      videoDuration: (json['video_duration'] as num?)?.toInt(),
       quantity: (json['quantity'] as num?)?.toInt() ?? 0,
       images: imagesJson is List
           ? imagesJson
