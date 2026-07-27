@@ -1026,17 +1026,22 @@ class _SellerCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: AppColors.ringOrange,
-                backgroundImage:
-                    product.sellerPhoto != null ? CachedNetworkImageProvider(product.sellerPhoto!) : null,
-                child: product.sellerPhoto == null
-                    ? Text(
-                        (product.storeName ?? 'S').substring(0, 1).toUpperCase(),
-                        style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800),
-                      )
-                    : null,
+              Builder(
+                builder: (context) {
+                  final photo = ApiConfig.resolveMediaUrl(product.sellerPhoto);
+                  final hasPhoto = photo.isNotEmpty;
+                  return CircleAvatar(
+                    radius: 22,
+                    backgroundColor: AppColors.ringOrange,
+                    backgroundImage: hasPhoto ? CachedNetworkImageProvider(photo) : null,
+                    child: hasPhoto
+                        ? null
+                        : Text(
+                            (product.storeName ?? 'S').substring(0, 1).toUpperCase(),
+                            style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800),
+                          ),
+                  );
+                },
               ),
               const SizedBox(width: 10),
               Expanded(

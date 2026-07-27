@@ -1,10 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
+import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -104,9 +106,38 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
     }
   }
 
+  void _openSellerProfile() {
+    final s = store;
+    if (s == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _SellerProfileSheet(
+        store: s,
+        onChat: () {
+          Navigator.pop(ctx);
+          _chatSeller();
+        },
+        onCall: () {
+          Navigator.pop(ctx);
+          _callSeller();
+        },
+      ),
+    );
+  }
+
+  String? get _photoUrl {
+    final raw = store?.shopPhoto;
+    if (raw == null || raw.trim().isEmpty) return null;
+    final resolved = ApiConfig.resolveMediaUrl(raw);
+    return resolved.isEmpty ? null : resolved;
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = store;
+    final photoUrl = _photoUrl;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: loading && s == null
@@ -131,7 +162,7 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                     slivers: [
                       SliverAppBar(
                         pinned: true,
-                        expandedHeight: 168,
+                        expandedHeight: 176,
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         title: Text(s?.storeName ?? 'Store'),
@@ -148,70 +179,83 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                               bottom: false,
                               child: Padding(
                                 padding: const EdgeInsets.fromLTRB(16, 56, 16, 16),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 34,
-                                      backgroundColor: Colors.white,
-                                      backgroundImage: s?.shopPhoto != null
-                                          ? CachedNetworkImageProvider(s!.shopPhoto!)
-                                          : null,
-                                      child: s?.shopPhoto == null
-                                          ? Text(
-                                              (s?.storeName ?? 'S').substring(0, 1).toUpperCase(),
+                                child: InkWell(
+                                  onTap: _openSellerProfile,
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 34,
+                                        backgroundColor: Colors.white,
+                                        backgroundImage: photoUrl != null
+                                            ? CachedNetworkImageProvider(photoUrl)
+                                            : null,
+                                        child: photoUrl == null
+                                            ? Text(
+                                                (s?.storeName ?? 'S').substring(0, 1).toUpperCase(),
+                                                style: const TextStyle(
+                                                  color: AppColors.primary,
+                                                  fontWeight: FontWeight.w900,
+                                                  fontSize: 28,
+                                                ),
+                                              )
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              s?.storeName ?? 'Store',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
-                                                color: AppColors.primary,
+                                                color: Colors.white,
                                                 fontWeight: FontWeight.w900,
-                                                fontSize: 28,
+                                                fontSize: 22,
+                                                height: 1.15,
                                               ),
-                                            )
-                                          : null,
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.end,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            s?.storeName ?? 'Store',
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w900,
-                                              fontSize: 22,
-                                              height: 1.15,
                                             ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            [
-                                              if (s?.rating != null) '★ ${s!.rating!.toStringAsFixed(1)}',
-                                              if (s?.totalSales != null) '${s!.totalSales} sales',
-                                              '${s?.productCount ?? 0} products',
-                                            ].join(' · '),
-                                            style: TextStyle(
-                                              color: Colors.white.withValues(alpha: 0.92),
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 13,
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              [
+                                                if (s?.rating != null) '★ ${s!.rating!.toStringAsFixed(1)}',
+                                                if (s?.totalSales != null) '${s!.totalSales} sales',
+                                                '${s?.productCount ?? 0} products',
+                                              ].join(' · '),
+                                              style: TextStyle(
+                                                color: Colors.white.withValues(alpha: 0.92),
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
                                             ),
-                                          ),
-                                          if (s?.location != null) ...[
+                                            if (s?.location != null) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                s!.location!,
+                                                style: TextStyle(
+                                                  color: Colors.white.withValues(alpha: 0.85),
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
                                             const SizedBox(height: 4),
                                             Text(
-                                              s!.location!,
+                                              'Tap for seller profile',
                                               style: TextStyle(
-                                                color: Colors.white.withValues(alpha: 0.85),
+                                                color: Colors.white.withValues(alpha: 0.9),
                                                 fontSize: 12,
+                                                fontWeight: FontWeight.w700,
                                               ),
                                             ),
                                           ],
-                                        ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -228,12 +272,20 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                                 children: [
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      onPressed: _chatSeller,
-                                      icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                                      label: const Text('Chat seller'),
+                                      onPressed: _openSellerProfile,
+                                      icon: const Icon(Icons.person_outline, size: 18),
+                                      label: const Text('Profile'),
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: _chatSeller,
+                                      icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                                      label: const Text('Chat'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
                                   Expanded(
                                     child: ElevatedButton.icon(
                                       onPressed: _callSeller,
@@ -331,5 +383,296 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                   ),
                 ),
     );
+  }
+}
+
+class _SellerProfileSheet extends StatelessWidget {
+  const _SellerProfileSheet({
+    required this.store,
+    required this.onChat,
+    required this.onCall,
+  });
+
+  final SellerStore store;
+  final VoidCallback onChat;
+  final VoidCallback onCall;
+
+  String? get _photoUrl {
+    final raw = store.shopPhoto;
+    if (raw == null || raw.trim().isEmpty) return null;
+    final resolved = ApiConfig.resolveMediaUrl(raw);
+    return resolved.isEmpty ? null : resolved;
+  }
+
+  Future<void> _launch(Uri uri) async {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final photoUrl = _photoUrl;
+    final memberSince = store.approvedAt == null
+        ? null
+        : DateFormat.yMMMM().format(store.approvedAt!.toLocal());
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.88,
+      minChildSize: 0.45,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          child: ListView(
+            controller: scrollController,
+            padding: EdgeInsets.zero,
+            children: [
+              const SizedBox(height: 10),
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              if (photoUrl != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 7,
+                      child: CachedNetworkImage(
+                        imageUrl: photoUrl,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Container(color: Colors.grey.shade200),
+                      ),
+                    ),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: AppColors.ringOrange,
+                          backgroundImage:
+                              photoUrl != null ? CachedNetworkImageProvider(photoUrl) : null,
+                          child: photoUrl == null
+                              ? Text(
+                                  store.storeName.substring(0, 1).toUpperCase(),
+                                  style: const TextStyle(
+                                    color: AppColors.accent,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 22,
+                                  ),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      store.storeName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 20,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Icon(Icons.verified, size: 18, color: Color(0xFF3B82F6)),
+                                ],
+                              ),
+                              if ((store.sellerName ?? '').trim().isNotEmpty)
+                                Text(
+                                  'Run by ${store.sellerName}',
+                                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _chip(
+                          icon: Icons.star,
+                          iconColor: Colors.amber,
+                          label: store.reviewCount > 0 && store.rating != null
+                              ? '${store.rating!.toStringAsFixed(1)} rating · ${store.reviewCount} review${store.reviewCount == 1 ? '' : 's'}'
+                              : 'No reviews yet',
+                          bg: const Color(0xFFFFFBEB),
+                          fg: const Color(0xFFB45309),
+                        ),
+                        if (store.isBusinessRegistered)
+                          _chip(
+                            icon: Icons.business,
+                            label: 'Registered business',
+                            bg: const Color(0xFFEFF6FF),
+                            fg: const Color(0xFF1D4ED8),
+                          ),
+                        _chip(
+                          icon: Icons.verified_user_outlined,
+                          label: 'Verified seller',
+                          bg: const Color(0xFFECFDF5),
+                          fg: const Color(0xFF047857),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    const Divider(height: 1),
+                    const SizedBox(height: 14),
+                    _detail(
+                      Icons.inventory_2_outlined,
+                      '${store.totalSales ?? 0} sales',
+                      '${store.productCount} products listed',
+                    ),
+                    if (store.location != null)
+                      _detail(Icons.place_outlined, 'Location', store.location!),
+                    if ((store.businessAddress ?? '').trim().isNotEmpty)
+                      _detail(Icons.storefront_outlined, 'Shop address', store.businessAddress!.trim()),
+                    if ((store.digitalAddress ?? '').trim().isNotEmpty)
+                      _detail(Icons.pin_drop_outlined, 'Digital address', store.digitalAddress!.trim()),
+                    if ((store.residentialAddress ?? '').trim().isNotEmpty &&
+                        (store.businessAddress ?? '').trim().isEmpty)
+                      _detail(Icons.home_outlined, 'Address', store.residentialAddress!.trim()),
+                    if ((store.mobile ?? '').trim().isNotEmpty)
+                      _detail(
+                        Icons.phone_outlined,
+                        'Phone',
+                        store.mobile!.trim(),
+                        onTap: () => _launch(Uri(scheme: 'tel', path: store.mobile!.replaceAll(' ', ''))),
+                      ),
+                    if ((store.whatsapp ?? '').trim().isNotEmpty)
+                      _detail(
+                        Icons.chat,
+                        'WhatsApp',
+                        store.whatsapp!.trim(),
+                        onTap: () {
+                          final digits = store.whatsapp!.replaceAll(RegExp(r'\D'), '');
+                          _launch(Uri.parse('https://wa.me/$digits'));
+                        },
+                      ),
+                    if ((store.email ?? '').trim().isNotEmpty)
+                      _detail(
+                        Icons.mail_outline,
+                        'Email',
+                        store.email!.trim(),
+                        onTap: () => _launch(Uri(scheme: 'mailto', path: store.email!.trim())),
+                      ),
+                    if (memberSince != null) _detail(Icons.calendar_month_outlined, 'Member since', memberSince),
+                    if ((store.description ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      const Divider(height: 1),
+                      const SizedBox(height: 14),
+                      const Text('About this store', style: TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      Text(
+                        store.description!.trim(),
+                        style: const TextStyle(height: 1.45, color: AppColors.textSecondary),
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: onCall,
+                            icon: const Icon(Icons.phone_outlined, size: 18),
+                            label: const Text('Call'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: onChat,
+                            icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                            label: const Text('Message'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _chip({
+    required IconData icon,
+    required String label,
+    required Color bg,
+    required Color fg,
+    Color? iconColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: iconColor ?? fg),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _detail(IconData icon, String title, String subtitle, {VoidCallback? onTap}) {
+    final child = Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: AppColors.textMuted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: onTap != null ? AppColors.primary : AppColors.textSecondary,
+                    fontWeight: onTap != null ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return child;
+    return InkWell(onTap: onTap, child: child);
   }
 }

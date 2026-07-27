@@ -195,7 +195,15 @@ class Product {
           : null,
       sellerId: seller is Map ? seller['id'] as int? : null,
       sellerName: seller is Map ? seller['name'] as String? : null,
-      sellerPhoto: seller is Map ? seller['shop_photo'] as String? : null,
+      sellerPhoto: seller is Map
+          ? () {
+              final nested = seller['seller_profile'];
+              final raw = seller['shop_photo'] as String? ??
+                  (nested is Map ? nested['shop_photo'] as String? : null);
+              if (raw == null || raw.trim().isEmpty) return null;
+              return raw.trim();
+            }()
+          : null,
       sellerRating: seller is Map ? (seller['rating'] as num?)?.toDouble() : null,
       sellerSales: seller is Map ? (seller['total_sales'] as num?)?.toInt() : null,
     );
@@ -207,33 +215,45 @@ class SellerStore {
     required this.sellerId,
     required this.storeName,
     required this.slug,
+    this.sellerName,
     this.shopPhoto,
     this.description,
     this.businessAddress,
+    this.isBusinessRegistered = false,
+    this.approvedAt,
     this.rating,
     this.totalSales,
     this.productCount = 0,
     this.reviewCount = 0,
     this.city,
     this.region,
+    this.email,
     this.mobile,
     this.whatsapp,
+    this.digitalAddress,
+    this.residentialAddress,
   });
 
   final int sellerId;
   final String storeName;
   final String slug;
+  final String? sellerName;
   final String? shopPhoto;
   final String? description;
   final String? businessAddress;
+  final bool isBusinessRegistered;
+  final DateTime? approvedAt;
   final double? rating;
   final int? totalSales;
   final int productCount;
   final int reviewCount;
   final String? city;
   final String? region;
+  final String? email;
   final String? mobile;
   final String? whatsapp;
+  final String? digitalAddress;
+  final String? residentialAddress;
 
   String? get location {
     final parts = [city, region].whereType<String>().where((s) => s.trim().isNotEmpty);
@@ -242,21 +262,34 @@ class SellerStore {
   }
 
   factory SellerStore.fromJson(Map<String, dynamic> json) {
+    DateTime? approvedAt;
+    final rawApproved = json['approved_at'];
+    if (rawApproved is String && rawApproved.trim().isNotEmpty) {
+      approvedAt = DateTime.tryParse(rawApproved);
+    }
+
+    final photo = json['shop_photo'] as String?;
     return SellerStore(
       sellerId: (json['seller_id'] as num?)?.toInt() ?? 0,
       storeName: json['store_name'] as String? ?? 'Store',
+      sellerName: json['seller_name'] as String?,
       slug: json['slug'] as String? ?? '',
-      shopPhoto: json['shop_photo'] as String?,
+      shopPhoto: photo == null || photo.trim().isEmpty ? null : photo.trim(),
       description: json['store_description'] as String?,
       businessAddress: json['business_address'] as String?,
+      isBusinessRegistered: json['is_business_registered'] == true,
+      approvedAt: approvedAt,
       rating: (json['rating'] as num?)?.toDouble(),
       totalSales: (json['total_sales'] as num?)?.toInt(),
       productCount: (json['product_count'] as num?)?.toInt() ?? 0,
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
       city: json['city'] as String?,
       region: json['region'] as String?,
+      email: json['email'] as String?,
       mobile: json['mobile'] as String?,
       whatsapp: json['whatsapp'] as String?,
+      digitalAddress: json['digital_address'] as String?,
+      residentialAddress: json['residential_address'] as String?,
     );
   }
 }
