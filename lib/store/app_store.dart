@@ -17,6 +17,9 @@ class AppStore extends ChangeNotifier {
   List<ShopCategory> categories = [];
   List<Product> products = [];
   String searchQuery = '';
+  bool imageSearchActive = false;
+  String? imageSearchPreview;
+  List<String> imageSearchKeywords = [];
   int? selectedCategoryId;
   bool filterInGhana = false;
   bool filterFreeShip = false;
@@ -80,7 +83,12 @@ class AppStore extends ChangeNotifier {
   }) async {
     loadingShop = true;
     shopError = null;
-    if (search != null) searchQuery = search;
+    if (search != null) {
+      searchQuery = search;
+      imageSearchActive = false;
+      imageSearchPreview = null;
+      imageSearchKeywords = [];
+    }
     if (clearCategory) {
       selectedCategoryId = null;
     } else if (categoryId != null) {
@@ -137,6 +145,61 @@ class AppStore extends ChangeNotifier {
       loadingShop = false;
       notifyListeners();
     }
+  }
+
+  Future<void> searchByImage(String filePath) async {
+    loadingShop = true;
+    shopError = null;
+    notifyListeners();
+
+    try {
+      final res = await _api.postMultipart(
+        '/search/image',
+        fields: const {},
+        fileField: 'image',
+        filePath: filePath,
+        filename: 'search.jpg',
+      );
+      final body = res.data;
+      if (body is Map) {
+        final meta = body['meta'];
+        final pdata = body['data'];
+        imageSearchActive = true;
+        searchQuery = '';
+        selectedCategoryId = null;
+        if (meta is Map) {
+          imageSearchPreview = meta['preview'] as String?;
+          final keywords = meta['keywords'];
+          imageSearchKeywords = keywords is List
+              ? keywords.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+              : [];
+        }
+        if (pdata is List) {
+          products = pdata
+              .whereType<Map>()
+              .map((e) => Product.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
+          totalProducts = products.length;
+        } else {
+          products = [];
+          totalProducts = 0;
+        }
+      }
+    } on ApiException catch (e) {
+      shopError = e.message;
+    } catch (e) {
+      shopError = e.toString();
+    } finally {
+      loadingShop = false;
+      notifyListeners();
+    }
+  }
+
+  void clearImageSearch() {
+    imageSearchActive = false;
+    imageSearchPreview = null;
+    imageSearchKeywords = [];
+    loadShop(search: '');
   }
 
   Future<Product> fetchProduct(String slug) async {

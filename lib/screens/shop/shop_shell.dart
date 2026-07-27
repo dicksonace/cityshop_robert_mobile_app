@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -86,6 +87,88 @@ class _ShopHome extends StatelessWidget {
 
   final TextEditingController searchController;
 
+  Future<void> _pickImageSearch(BuildContext context) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Search by photo', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+              const SizedBox(height: 6),
+              const Text(
+                'Take a photo or upload one to find similar products on CityShop.',
+                style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.ringOrange,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.photo_camera_outlined, color: AppColors.accent),
+                ),
+                title: const Text('Take photo', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Use your camera'),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.ringOrange,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.photo_library_outlined, color: AppColors.accent),
+                ),
+                title: const Text('Choose from gallery', style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Upload an existing picture'),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (source == null || !context.mounted) return;
+    final file = await ImagePicker().pickImage(source: source, imageQuality: 85, maxWidth: 1600);
+    if (file == null || !context.mounted) return;
+
+    final store = context.read<AppStore>();
+    await store.searchByImage(file.path);
+    if (!context.mounted) return;
+    if (store.shopError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(store.shopError!)));
+    } else if (store.products.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No similar products found. Try another photo.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
@@ -146,30 +229,113 @@ class _ShopHome extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: searchController,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Search products, stores, brands...',
-                                    prefixIcon: Icon(Icons.search),
-                                    isDense: true,
+                          Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.background,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFFFFEDD5), width: 1.5),
+                            ),
+                            child: Row(
+                              children: [
+                                const SizedBox(width: 12),
+                                const Icon(Icons.search, color: AppColors.textMuted),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: searchController,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Search products, stores, brands…',
+                                      border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      filled: false,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(vertical: 14),
+                                    ),
+                                    textInputAction: TextInputAction.search,
+                                    onSubmitted: (q) => store.loadShop(search: q),
                                   ),
-                                  onSubmitted: (q) => store.loadShop(search: q),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                height: 48,
-                                width: 96,
-                                child: ElevatedButton(
-                                  onPressed: () => store.loadShop(search: searchController.text),
-                                  child: const Text('Search'),
+                                Tooltip(
+                                  message: 'Search by photo',
+                                  child: IconButton(
+                                    onPressed: store.loadingShop ? null : () => _pickImageSearch(context),
+                                    icon: const Icon(Icons.photo_camera_outlined, color: AppColors.accent),
+                                  ),
                                 ),
-                              ),
-                            ],
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: Material(
+                                    color: AppColors.accent,
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: InkWell(
+                                      onTap: store.loadingShop
+                                          ? null
+                                          : () => store.loadShop(search: searchController.text),
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: const SizedBox(
+                                        width: 44,
+                                        height: 40,
+                                        child: Icon(Icons.arrow_forward_rounded, color: Colors.white),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                          if (store.imageSearchActive) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.ringOrange.withValues(alpha: 0.45),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: store.imageSearchPreview != null &&
+                                            store.imageSearchPreview!.startsWith('data:')
+                                        ? Image.memory(
+                                            Uri.parse(store.imageSearchPreview!).data!.contentAsBytes(),
+                                            width: 44,
+                                            height: 44,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Container(
+                                            width: 44,
+                                            height: 44,
+                                            color: Colors.white,
+                                            child: const Icon(Icons.image_search, color: AppColors.accent),
+                                          ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Image search', style: TextStyle(fontWeight: FontWeight.w800)),
+                                        Text(
+                                          store.imageSearchKeywords.isNotEmpty
+                                              ? store.imageSearchKeywords.take(4).join(' · ')
+                                              : '${store.products.length} similar product(s)',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: store.clearImageSearch,
+                                    child: const Text('Clear'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -208,8 +374,10 @@ class _ShopHome extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                     child: Text(
-                      '${store.products.length} results'
-                      '${store.searchQuery.isNotEmpty ? ' · “${store.searchQuery}”' : ''}',
+                      store.imageSearchActive
+                          ? '${store.products.length} image matches'
+                          : '${store.products.length} results'
+                              '${store.searchQuery.isNotEmpty ? ' · “${store.searchQuery}”' : ''}',
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w600,

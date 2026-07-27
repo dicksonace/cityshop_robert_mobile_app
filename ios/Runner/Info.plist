@@ -51,6 +51,10 @@
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CityShop needs camera access so you can search for products by taking a photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CityShop needs photo library access so you can search for products from your gallery.</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UISupportedInterfaceOrientations</key>
