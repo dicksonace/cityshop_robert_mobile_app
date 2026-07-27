@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import 'paystack_payment_screen.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
@@ -85,12 +85,31 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (paymentMethod == 'momo' || paymentMethod == 'card') {
         if (checkoutId != null && (preview?.paystackConfigured ?? false)) {
           final pay = await store.initializePaystack(checkoutId);
+          if (!mounted) return;
           final url = pay['authorization_url'] as String?;
+          final reference = pay['reference'] as String? ?? '';
           if (url != null && url.isNotEmpty) {
-            await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+            final paid = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (_) => PaystackPaymentScreen(
+                  authorizationUrl: url,
+                  checkoutId: checkoutId,
+                  reference: reference,
+                ),
+              ),
+            );
             if (!mounted) return;
+            if (paid == true) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Payment successful')),
+              );
+              context.go('/shop');
+              return;
+            }
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Complete payment in the browser, then check Orders.')),
+              const SnackBar(
+                content: Text('Payment not confirmed yet. Check My Order or tap I paid after paying.'),
+              ),
             );
             context.go('/shop');
             return;

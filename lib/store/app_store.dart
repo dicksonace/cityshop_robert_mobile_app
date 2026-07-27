@@ -614,6 +614,17 @@ class AppStore extends ChangeNotifier {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> verifyPaystack({
+    required int checkoutId,
+    required String reference,
+  }) async {
+    final res = await _api.post('/checkouts/$checkoutId/pay/verify', data: {
+      'reference': reference,
+    });
+    await loadCart();
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<void> payCheckoutWithWallet(int checkoutId) async {
     await _api.post('/checkouts/$checkoutId/pay/wallet');
     await loadCart();
