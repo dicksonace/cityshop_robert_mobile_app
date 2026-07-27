@@ -209,6 +209,29 @@ class AppStore extends ChangeNotifier {
     return Product.fromJson(Map<String, dynamic>.from(data as Map));
   }
 
+  Future<({SellerStore store, List<Product> products})> fetchSellerStore(
+    String slug, {
+    String? search,
+  }) async {
+    final query = <String, dynamic>{
+      'per_page': 40,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+    };
+    final res = await _api.get('/stores/$slug', query: query);
+    final body = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    final data = body['data'];
+    final productsBody = body['products'];
+    final list = productsBody is Map ? productsBody['data'] : productsBody;
+    final store = SellerStore.fromJson(Map<String, dynamic>.from(data as Map));
+    final products = list is List
+        ? list
+            .whereType<Map>()
+            .map((e) => Product.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : <Product>[];
+    return (store: store, products: products);
+  }
+
   Future<({Product product, List<Product> related, List<Map<String, dynamic>> reviews})>
       fetchProductDetail(String slug) async {
     final res = await _api.get('/products/$slug');

@@ -12,6 +12,7 @@ import '../screens/cart/checkout_screen.dart';
 import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
 import '../screens/shop/shop_shell.dart';
+import '../screens/store/seller_store_screen.dart';
 import '../store/app_store.dart';
 
 GoRouter createRouter(AppStore store) {
@@ -32,6 +33,10 @@ GoRouter createRouter(AppStore store) {
       GoRoute(
         path: '/products/:slug',
         builder: (_, state) => ProductDetailScreen(slug: state.pathParameters['slug']!),
+      ),
+      GoRoute(
+        path: '/stores/:slug',
+        builder: (_, state) => SellerStoreScreen(slug: state.pathParameters['slug']!),
       ),
       GoRoute(
         path: '/orders/:id',

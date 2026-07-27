@@ -71,6 +71,7 @@ class Product {
     this.categoryId,
     this.categoryIcon,
     this.storeName,
+    this.storeSlug,
     this.sellerId,
     this.sellerName,
     this.sellerPhoto,
@@ -108,6 +109,7 @@ class Product {
   final int? categoryId;
   final String? categoryIcon;
   final String? storeName;
+  final String? storeSlug;
   final int? sellerId;
   final String? sellerName;
   final String? sellerPhoto;
@@ -182,11 +184,76 @@ class Product {
       storeName: seller is Map
           ? (seller['store_name'] as String? ?? seller['name'] as String?)
           : null,
+      storeSlug: seller is Map
+          ? (seller['store_slug'] as String? ??
+              (seller['seller_profile'] is Map
+                  ? (seller['seller_profile'] as Map)['slug'] as String?
+                  : null))
+          : null,
       sellerId: seller is Map ? seller['id'] as int? : null,
       sellerName: seller is Map ? seller['name'] as String? : null,
       sellerPhoto: seller is Map ? seller['shop_photo'] as String? : null,
       sellerRating: seller is Map ? (seller['rating'] as num?)?.toDouble() : null,
       sellerSales: seller is Map ? (seller['total_sales'] as num?)?.toInt() : null,
+    );
+  }
+}
+
+class SellerStore {
+  const SellerStore({
+    required this.sellerId,
+    required this.storeName,
+    required this.slug,
+    this.shopPhoto,
+    this.description,
+    this.businessAddress,
+    this.rating,
+    this.totalSales,
+    this.productCount = 0,
+    this.reviewCount = 0,
+    this.city,
+    this.region,
+    this.mobile,
+    this.whatsapp,
+  });
+
+  final int sellerId;
+  final String storeName;
+  final String slug;
+  final String? shopPhoto;
+  final String? description;
+  final String? businessAddress;
+  final double? rating;
+  final int? totalSales;
+  final int productCount;
+  final int reviewCount;
+  final String? city;
+  final String? region;
+  final String? mobile;
+  final String? whatsapp;
+
+  String? get location {
+    final parts = [city, region].whereType<String>().where((s) => s.trim().isNotEmpty);
+    if (parts.isEmpty) return null;
+    return parts.join(', ');
+  }
+
+  factory SellerStore.fromJson(Map<String, dynamic> json) {
+    return SellerStore(
+      sellerId: (json['seller_id'] as num?)?.toInt() ?? 0,
+      storeName: json['store_name'] as String? ?? 'Store',
+      slug: json['slug'] as String? ?? '',
+      shopPhoto: json['shop_photo'] as String?,
+      description: json['store_description'] as String?,
+      businessAddress: json['business_address'] as String?,
+      rating: (json['rating'] as num?)?.toDouble(),
+      totalSales: (json['total_sales'] as num?)?.toInt(),
+      productCount: (json['product_count'] as num?)?.toInt() ?? 0,
+      reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
+      city: json['city'] as String?,
+      region: json['region'] as String?,
+      mobile: json['mobile'] as String?,
+      whatsapp: json['whatsapp'] as String?,
     );
   }
 }

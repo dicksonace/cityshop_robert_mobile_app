@@ -768,55 +768,88 @@ class _SellerCard extends StatelessWidget {
   final Product product;
   final VoidCallback onMessage;
 
+  void _openStore(BuildContext context) {
+    final slug = product.storeSlug?.trim();
+    if (slug == null || slug.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Seller store is not available')),
+      );
+      return;
+    }
+    context.push('/stores/$slug');
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: () => _openStore(context),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: AppColors.ringOrange,
-            backgroundImage: product.sellerPhoto != null ? CachedNetworkImageProvider(product.sellerPhoto!) : null,
-            child: product.sellerPhoto == null
-                ? Text(
-                    (product.storeName ?? 'S').substring(0, 1).toUpperCase(),
-                    style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800),
-                  )
-                : null,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Sold by ${product.storeName ?? 'Seller'}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                if (product.sellerRating != null || product.sellerSales != null)
-                  Text(
-                    [
-                      if (product.sellerRating != null) '★ ${product.sellerRating!.toStringAsFixed(1)}',
-                      if (product.sellerSales != null) '${product.sellerSales} sales',
-                    ].join(' · '),
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                  ),
-              ],
-            ),
-          ),
-          if (product.sellerId != null)
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(72, 40),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: AppColors.ringOrange,
+                backgroundImage:
+                    product.sellerPhoto != null ? CachedNetworkImageProvider(product.sellerPhoto!) : null,
+                child: product.sellerPhoto == null
+                    ? Text(
+                        (product.storeName ?? 'S').substring(0, 1).toUpperCase(),
+                        style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800),
+                      )
+                    : null,
               ),
-              onPressed: onMessage,
-              child: const Text('Chat'),
-            ),
-        ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sold by ${product.storeName ?? 'Seller'}',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    if (product.sellerRating != null || product.sellerSales != null)
+                      Text(
+                        [
+                          if (product.sellerRating != null) '★ ${product.sellerRating!.toStringAsFixed(1)}',
+                          if (product.sellerSales != null) '${product.sellerSales} sales',
+                        ].join(' · '),
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Tap to view store',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (product.sellerId != null)
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(72, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                  onPressed: onMessage,
+                  child: const Text('Chat'),
+                ),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, color: AppColors.textMuted),
+            ],
+          ),
+        ),
       ),
     );
   }
