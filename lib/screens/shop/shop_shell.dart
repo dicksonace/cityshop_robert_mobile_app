@@ -43,7 +43,10 @@ class _ShopShellState extends State<ShopShell> {
           children: [
             _ShopHome(searchController: _search),
             const WalletTab(),
-            const OrdersTab(),
+            OrdersTab(
+              onOpenWallet: () => setState(() => _tab = 1),
+              onOpenMessages: () => setState(() => _tab = 3),
+            ),
             const MessagesTab(),
             AccountSettingsTab(user: store.user),
           ],

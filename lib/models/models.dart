@@ -398,6 +398,7 @@ class OrderItemModel {
     this.productId,
     this.status,
     this.fundsReleaseStatus,
+    this.imageUrl,
   });
 
   final int id;
@@ -408,6 +409,7 @@ class OrderItemModel {
   final double lineTotal;
   final String? status;
   final String? fundsReleaseStatus;
+  final String? imageUrl;
 
   double get displayTotal {
     if (lineTotal > 0) return lineTotal;
@@ -430,6 +432,7 @@ class OrderItemModel {
       lineTotal: line,
       status: json['status'] as String?,
       fundsReleaseStatus: json['funds_release_status'] as String?,
+      imageUrl: json['image_url'] as String?,
     );
   }
 }
@@ -466,6 +469,7 @@ class OrderModel {
     this.shippingCost = 0,
     this.createdAt,
     this.storeName,
+    this.storeSlug,
     this.sellerId,
     this.items = const [],
   });
@@ -487,6 +491,7 @@ class OrderModel {
   final double total;
   final String? createdAt;
   final String? storeName;
+  final String? storeSlug;
   final int? sellerId;
   final List<OrderItemModel> items;
 
@@ -519,6 +524,7 @@ class OrderModel {
       total: (json['total'] as num?)?.toDouble() ?? 0,
       createdAt: json['created_at'] as String?,
       storeName: seller is Map ? seller['store_name'] as String? : null,
+      storeSlug: seller is Map ? seller['store_slug'] as String? : null,
       sellerId: seller is Map ? seller['id'] as int? : null,
       items: itemsJson is List
           ? itemsJson
