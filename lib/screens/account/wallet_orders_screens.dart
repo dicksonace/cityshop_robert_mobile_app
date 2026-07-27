@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
 import '../../models/models.dart';
@@ -579,6 +580,26 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     return 'Status: ${item.status}';
   }
 
+  String _prettyStatus(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return 'Pending';
+    return raw
+        .replaceAll('_', ' ')
+        .split(' ')
+        .where((w) => w.isNotEmpty)
+        .map((w) => '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
+        .join(' ');
+  }
+
+  String _formatPlaced(String? iso) {
+    if (iso == null || iso.isEmpty) return '—';
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      return DateFormat('EEE, d MMM yyyy · h:mm a').format(dt);
+    } catch (_) {
+      return iso;
+    }
+  }
+
   Color _chipColor(String? status) {
     switch ((status ?? '').toLowerCase()) {
       case 'delivered':
@@ -613,18 +634,37 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  Future<void> _copy(String label, String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
+  }
+
+  Future<void> _callPhone(String phone) async {
+    final uri = Uri(scheme: 'tel', path: phone.replaceAll(' ', ''));
+    if (!await launchUrl(uri)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open phone dialer')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final o = order;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(o?.orderNumber ?? 'Order'),
+        title: const Text('Order details'),
         actions: [
           if (o?.sellerId != null)
-            TextButton(
+            TextButton.icon(
               onPressed: _messageSeller,
-              child: const Text('Chat seller'),
+              icon: const Icon(Icons.chat_bubble_outline, size: 18),
+              label: const Text('Chat'),
             ),
         ],
       ),
@@ -635,59 +675,48 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               : o == null
                   ? const Center(child: Text('Order not found'))
                   : ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                       children: [
+                        _OrderHero(
+                          orderNumber: o.orderNumber,
+                          statusLabel: _prettyStatus(o.status),
+                          statusColor: _chipColor(o.status),
+                          paymentLabel:
+                              '${_prettyStatus(o.paymentStatus)} · ${(o.paymentMethod ?? o.paymentChannel ?? '—').toUpperCase()}',
+                          placedLabel: _formatPlaced(o.createdAt),
+                          storeName: o.storeName,
+                          onCopyOrder: () => _copy('Order number', o.orderNumber),
+                        ),
+                        const SizedBox(height: 14),
+                        _ShippingCard(
+                          order: o,
+                          onCopyPhone: o.receiverPhone == null
+                              ? null
+                              : () => _copy('Phone', o.receiverPhone!),
+                          onCallPhone: o.receiverPhone == null
+                              ? null
+                              : () => _callPhone(o.receiverPhone!),
+                          onCopyAddress: () {
+                            final parts = [
+                              o.receiverName,
+                              o.deliveryNotes,
+                              o.digitalAddress,
+                              [o.city, o.region].whereType<String>().where((s) => s.trim().isNotEmpty).join(', '),
+                              o.receiverPhone,
+                            ].whereType<String>().where((s) => s.trim().isNotEmpty);
+                            _copy('Shipping details', parts.join('\n'));
+                          },
+                        ),
+                        const SizedBox(height: 14),
                         _InfoCard(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      o.orderNumber,
-                                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                                    ),
-                                  ),
-                                  _StatusChip(label: o.status ?? 'pending', color: _chipColor(o.status)),
-                                ],
-                              ),
+                              const Text('Payment summary', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                               const SizedBox(height: 12),
-                              _kv('Payment', '${(o.paymentStatus ?? '—').toUpperCase()} · ${(o.paymentMethod ?? o.paymentChannel ?? '—')}'),
-                              if (o.storeName != null) _kv('Seller', o.storeName!),
-                              if (o.createdAt != null) _kv('Placed', o.createdAt!),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _InfoCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Shipping', style: TextStyle(fontWeight: FontWeight.w800)),
-                              const SizedBox(height: 8),
-                              Text(
-                                [
-                                  if (o.receiverName != null) o.receiverName!,
-                                  if (o.city != null) o.city!,
-                                  if (o.region != null) o.region!,
-                                ].whereType<String>().join(', '),
-                                style: const TextStyle(height: 1.35),
-                              ),
-                              if (o.receiverPhone != null) ...[
-                                const SizedBox(height: 6),
-                                Text(o.receiverPhone!, style: const TextStyle(color: AppColors.textSecondary)),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _InfoCard(
-                          child: Column(
-                            children: [
                               _moneyRow('Subtotal', o.subtotal),
                               _moneyRow('Shipping', o.shippingCost),
-                              const Divider(height: 20),
+                              const Divider(height: 22),
                               Row(
                                 children: [
                                   const Text('Total', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
@@ -705,8 +734,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 18),
-                        const Text('Items', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Items (${o.items.length})',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                        ),
                         const SizedBox(height: 10),
                         for (final item in o.items)
                           Container(
@@ -740,10 +772,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                   'Qty ${item.quantity} · ${_money.format(item.unitPrice)} each',
                                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                                 ),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 10),
                                 Row(
                                   children: [
-                                    _StatusChip(label: item.status ?? 'pending', color: _chipColor(item.status)),
+                                    _StatusChip(
+                                      label: _prettyStatus(item.status ?? 'pending'),
+                                      color: _chipColor(item.status),
+                                    ),
                                     const Spacer(),
                                     if (_canConfirm(item))
                                       ElevatedButton(
@@ -781,19 +816,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     );
   }
 
-  Widget _kv(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 78, child: Text(k, style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600))),
-          Expanded(child: Text(v, style: const TextStyle(fontWeight: FontWeight.w600))),
-        ],
-      ),
-    );
-  }
-
   Widget _moneyRow(String label, double value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -802,6 +824,236 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           Text(label, style: const TextStyle(color: AppColors.textSecondary)),
           const Spacer(),
           Text(_money.format(value), style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _OrderHero extends StatelessWidget {
+  const _OrderHero({
+    required this.orderNumber,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.paymentLabel,
+    required this.placedLabel,
+    required this.onCopyOrder,
+    this.storeName,
+  });
+
+  final String orderNumber;
+  final String statusLabel;
+  final Color statusColor;
+  final String paymentLabel;
+  final String placedLabel;
+  final String? storeName;
+  final VoidCallback onCopyOrder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFF7ED), Color(0xFFFFEDD5)],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFDBA74)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  orderNumber,
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17, letterSpacing: -0.2),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Copy order number',
+                onPressed: onCopyOrder,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.copy_rounded, size: 18, color: AppColors.textSecondary),
+              ),
+              _StatusChip(label: statusLabel, color: statusColor),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _HeroMeta(icon: Icons.payments_outlined, label: 'Payment', value: paymentLabel),
+          if (storeName != null && storeName!.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _HeroMeta(icon: Icons.storefront_outlined, label: 'Seller', value: storeName!),
+          ],
+          const SizedBox(height: 8),
+          _HeroMeta(icon: Icons.schedule, label: 'Placed', value: placedLabel),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroMeta extends StatelessWidget {
+  const _HeroMeta({required this.icon, required this.label, required this.value});
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.primaryDark),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 64,
+          child: Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+        ),
+        Expanded(
+          child: Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, height: 1.25)),
+        ),
+      ],
+    );
+  }
+}
+
+class _ShippingCard extends StatelessWidget {
+  const _ShippingCard({
+    required this.order,
+    required this.onCopyAddress,
+    this.onCopyPhone,
+    this.onCallPhone,
+  });
+
+  final OrderModel order;
+  final VoidCallback onCopyAddress;
+  final VoidCallback? onCopyPhone;
+  final VoidCallback? onCallPhone;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDetails = order.hasShippingDetails;
+
+    return _InfoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.ringOrange,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.local_shipping_outlined, color: AppColors.primary, size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text('Ship to', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+              ),
+              if (hasDetails)
+                TextButton.icon(
+                  onPressed: onCopyAddress,
+                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  label: const Text('Copy'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (!hasDetails)
+            const Text(
+              'No shipping details were saved on this order.',
+              style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+            )
+          else ...[
+            if (order.receiverName != null && order.receiverName!.trim().isNotEmpty)
+              _ShipRow(label: 'Recipient', value: order.receiverName!),
+            if (order.receiverPhone != null && order.receiverPhone!.trim().isNotEmpty)
+              _ShipRow(
+                label: 'Phone',
+                value: order.receiverPhone!,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (onCopyPhone != null)
+                      IconButton(
+                        tooltip: 'Copy phone',
+                        onPressed: onCopyPhone,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.copy_rounded, size: 18),
+                      ),
+                    if (onCallPhone != null)
+                      IconButton(
+                        tooltip: 'Call',
+                        onPressed: onCallPhone,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.phone_outlined, size: 18, color: AppColors.emerald),
+                      ),
+                  ],
+                ),
+              ),
+            if (order.deliveryNotes != null && order.deliveryNotes!.trim().isNotEmpty)
+              _ShipRow(label: 'Address', value: order.deliveryNotes!),
+            if (order.digitalAddress != null && order.digitalAddress!.trim().isNotEmpty)
+              _ShipRow(label: 'Digital address', value: order.digitalAddress!),
+            if (order.city != null && order.city!.trim().isNotEmpty)
+              _ShipRow(label: 'City / town', value: order.city!),
+            if (order.region != null && order.region!.trim().isNotEmpty)
+              _ShipRow(label: 'Region', value: order.region!),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ShipRow extends StatelessWidget {
+  const _ShipRow({required this.label, required this.value, this.trailing});
+
+  final String label;
+  final String value;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+              color: AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  value,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, height: 1.35),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
         ],
       ),
     );

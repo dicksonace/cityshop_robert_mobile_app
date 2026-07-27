@@ -390,6 +390,8 @@ class OrderModel {
     this.receiverPhone,
     this.region,
     this.city,
+    this.digitalAddress,
+    this.deliveryNotes,
     this.subtotal = 0,
     this.shippingCost = 0,
     this.createdAt,
@@ -408,6 +410,8 @@ class OrderModel {
   final String? receiverPhone;
   final String? region;
   final String? city;
+  final String? digitalAddress;
+  final String? deliveryNotes;
   final double subtotal;
   final double shippingCost;
   final double total;
@@ -415,6 +419,14 @@ class OrderModel {
   final String? storeName;
   final int? sellerId;
   final List<OrderItemModel> items;
+
+  bool get hasShippingDetails =>
+      (receiverName?.trim().isNotEmpty ?? false) ||
+      (receiverPhone?.trim().isNotEmpty ?? false) ||
+      (city?.trim().isNotEmpty ?? false) ||
+      (region?.trim().isNotEmpty ?? false) ||
+      (digitalAddress?.trim().isNotEmpty ?? false) ||
+      (deliveryNotes?.trim().isNotEmpty ?? false);
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     final seller = json['seller'];
@@ -430,6 +442,8 @@ class OrderModel {
       receiverPhone: json['receiver_phone'] as String?,
       region: json['region'] as String?,
       city: json['city'] as String?,
+      digitalAddress: json['digital_address'] as String?,
+      deliveryNotes: json['delivery_notes'] as String?,
       subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
       shippingCost: (json['shipping_cost'] as num?)?.toDouble() ?? 0,
       total: (json['total'] as num?)?.toDouble() ?? 0,
