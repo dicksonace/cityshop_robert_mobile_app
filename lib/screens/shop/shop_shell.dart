@@ -163,8 +163,11 @@ class _ShopHome extends StatelessWidget {
     if (store.shopError != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(store.shopError!)));
     } else if (store.products.isEmpty) {
+      final hint = store.imageSearchKeywords.isNotEmpty
+          ? 'No catalog match for “${store.imageSearchKeywords.take(3).join(', ')}”. Try a clearer close-up.'
+          : 'No similar products found. Use a clear close-up of the product.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No similar products found. Try another photo.')),
+        SnackBar(content: Text(hint)),
       );
     }
   }
