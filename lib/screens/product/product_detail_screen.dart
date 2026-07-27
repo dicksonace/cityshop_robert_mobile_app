@@ -544,10 +544,6 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
 
   List<_GalleryItem> get _items {
     final items = <_GalleryItem>[];
-    final video = ApiConfig.resolveMediaUrl(widget.videoUrl);
-    if (video.isNotEmpty) {
-      items.add(_GalleryItem.video(video));
-    }
     for (final image in widget.images) {
       final url = ApiConfig.resolveMediaUrl(image.url);
       if (url.isNotEmpty) items.add(_GalleryItem.image(url));
@@ -555,6 +551,11 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
     if (items.isEmpty) {
       final fallback = ApiConfig.resolveMediaUrl(widget.fallbackUrl);
       if (fallback.isNotEmpty) items.add(_GalleryItem.image(fallback));
+    }
+    // Product video last (same as web gallery).
+    final video = ApiConfig.resolveMediaUrl(widget.videoUrl);
+    if (video.isNotEmpty) {
+      items.add(_GalleryItem.video(video));
     }
     return items;
   }
@@ -573,11 +574,6 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
   void initState() {
     super.initState();
     _pageController = PageController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_items.isNotEmpty && _items.first.isVideo) {
-        _ensureVideo();
-      }
-    });
   }
 
   @override
