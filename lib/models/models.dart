@@ -527,6 +527,11 @@ class OrderModel {
     this.storeName,
     this.storeSlug,
     this.sellerId,
+    this.sellerName,
+    this.sellerMobile,
+    this.sellerWhatsapp,
+    this.sellerEmail,
+    this.sellerAddress,
     this.sellerPaymentMethod,
     this.directPaymentReference,
     this.directPaymentProofPath,
@@ -555,6 +560,11 @@ class OrderModel {
   final String? storeName;
   final String? storeSlug;
   final int? sellerId;
+  final String? sellerName;
+  final String? sellerMobile;
+  final String? sellerWhatsapp;
+  final String? sellerEmail;
+  final String? sellerAddress;
   final Map<String, dynamic>? sellerPaymentMethod;
   final String? directPaymentReference;
   final String? directPaymentProofPath;
@@ -604,6 +614,21 @@ class OrderModel {
       storeName: seller is Map ? seller['store_name'] as String? : null,
       storeSlug: seller is Map ? seller['store_slug'] as String? : null,
       sellerId: seller is Map ? seller['id'] as int? : null,
+      sellerName: seller is Map ? seller['seller_name'] as String? : null,
+      sellerMobile: seller is Map ? seller['mobile'] as String? : null,
+      sellerWhatsapp: seller is Map ? seller['whatsapp'] as String? : null,
+      sellerEmail: seller is Map ? seller['email'] as String? : null,
+      sellerAddress: seller is Map
+          ? [
+              seller['business_address'],
+              seller['city'],
+              seller['region'],
+            ]
+              .whereType<String>()
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .join(', ')
+          : null,
       sellerPaymentMethod: method is Map ? Map<String, dynamic>.from(method) : null,
       directPaymentReference: json['direct_payment_reference'] as String?,
       directPaymentProofPath: json['direct_payment_proof_path'] as String?,
