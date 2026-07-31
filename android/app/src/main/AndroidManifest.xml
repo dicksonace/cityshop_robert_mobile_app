@@ -29,12 +29,35 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- App Links: open product/store pages from cityunlock.net -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="cityunlock.net" android:pathPrefix="/products"/>
+                <data android:scheme="https" android:host="cityunlock.net" android:pathPrefix="/stores"/>
+                <data android:scheme="https" android:host="www.cityunlock.net" android:pathPrefix="/products"/>
+                <data android:scheme="https" android:host="www.cityunlock.net" android:pathPrefix="/stores"/>
+            </intent-filter>
+            <!-- Custom scheme fallback: cityshop://products/{slug} -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="cityshop" android:host="products" android:pathPrefix="/"/>
+                <data android:scheme="cityshop" android:host="stores" android:pathPrefix="/"/>
+                <data android:scheme="cityshop" android:pathPrefix="/products"/>
+                <data android:scheme="cityshop" android:pathPrefix="/stores"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <meta-data
+            android:name="flutter_deeplinking_enabled"
+            android:value="true" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

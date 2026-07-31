@@ -5,6 +5,7 @@ import 'dart:io' show Platform;
 class ApiConfig {
   static const productionBaseUrl = 'https://cityunlock.net/api/v1';
   static const productionMediaBaseUrl = 'https://cityunlock.net';
+  static const productionWebBaseUrl = 'https://cityunlock.net';
 
   /// Flip to `false` to hit production (live cityunlock.net data + login).
   static const useLocalBackend = false;
@@ -15,11 +16,30 @@ class ApiConfig {
 
   static String get localBaseUrl => 'http://$_localHost:8000/api/v1';
   static String get localMediaBaseUrl => 'http://$_localHost:8000';
+  static String get localWebBaseUrl => 'http://$_localHost:8000';
 
   static String get baseUrl =>
       useLocalBackend ? localBaseUrl : productionBaseUrl;
   static String get mediaBaseUrl =>
       useLocalBackend ? localMediaBaseUrl : productionMediaBaseUrl;
+  static String get webBaseUrl =>
+      useLocalBackend ? localWebBaseUrl : productionWebBaseUrl;
+
+  /// Public product page URL (web + app deep link).
+  static String productShareUrl(String slug) {
+    final base = webBaseUrl.endsWith('/')
+        ? webBaseUrl.substring(0, webBaseUrl.length - 1)
+        : webBaseUrl;
+    return '$base/products/$slug';
+  }
+
+  /// Public storefront URL (web + app deep link).
+  static String storeShareUrl(String slug) {
+    final base = webBaseUrl.endsWith('/')
+        ? webBaseUrl.substring(0, webBaseUrl.length - 1)
+        : webBaseUrl;
+    return '$base/stores/$slug';
+  }
 
   /// Turn relative storage paths into absolute URLs for images/videos.
   static String resolveMediaUrl(String? pathOrUrl) {

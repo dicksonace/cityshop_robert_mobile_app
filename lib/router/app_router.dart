@@ -16,7 +16,22 @@ import '../screens/shop/shop_shell.dart';
 import '../screens/store/seller_store_screen.dart';
 import '../store/app_store.dart';
 
+bool _isDeepLinkPath(String path) {
+  return path.startsWith('/products/') ||
+      path.startsWith('/stores/') ||
+      path.startsWith('/orders/') ||
+      path.startsWith('/messages/');
+}
+
+String _locationWithQuery(GoRouterState state) {
+  final path = state.uri.path;
+  if (!state.uri.hasQuery) return path;
+  return '$path?${state.uri.query}';
+}
+
 GoRouter createRouter(AppStore store) {
+  String? pendingAfterBoot;
+
   return GoRouter(
     initialLocation: '/splash',
     refreshListenable: store,
@@ -60,11 +75,34 @@ GoRouter createRouter(AppStore store) {
       ),
     ],
     redirect: (context, state) {
+      final uri = state.uri;
+
+      // cityshop://products/{slug} → /products/{slug}
+      if (uri.scheme == 'cityshop' &&
+          (uri.host == 'products' || uri.host == 'stores') &&
+          uri.path.isNotEmpty) {
+        final target = '/${uri.host}${uri.path}';
+        if (uri.hasQuery) return '$target?${uri.query}';
+        return target;
+      }
+
       final loc = state.matchedLocation;
+      final path = uri.path;
+
+      // Keep product/store deep links alive while splash boots.
       if (store.booting) {
+        if (_isDeepLinkPath(path)) {
+          pendingAfterBoot = _locationWithQuery(state);
+        }
         return loc == '/splash' ? null : '/splash';
       }
-      if (loc == '/splash') return '/shop';
+
+      if (loc == '/splash') {
+        final pending = pendingAfterBoot;
+        pendingAfterBoot = null;
+        return pending ?? '/shop';
+      }
+
       return null;
     },
   );

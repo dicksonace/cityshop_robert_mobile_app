@@ -47,6 +47,7 @@ dependencies:
   video_player: ^2.13.0
   pdf: ^3.11.3
   printing: ^5.14.2
+  share_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:

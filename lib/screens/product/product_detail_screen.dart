@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../api/api_client.dart';
@@ -130,6 +131,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
+  Future<void> _shareProduct() async {
+    final p = product;
+    final slug = p?.slug.isNotEmpty == true ? p!.slug : widget.slug;
+    final url = ApiConfig.productShareUrl(slug);
+    final name = p?.name.trim().isNotEmpty == true ? p!.name.trim() : 'this product';
+    final price = p != null ? _money.format(p.price) : null;
+    final buffer = StringBuffer('Check out $name on CityShop');
+    if (price != null) buffer.write(' — $price');
+    buffer.write('\n$url');
+    await SharePlus.instance.share(
+      ShareParams(text: buffer.toString(), subject: name),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
@@ -141,6 +156,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       appBar: AppBar(
         title: Text(p?.name ?? 'Product'),
         actions: [
+          IconButton(
+            tooltip: 'Share',
+            onPressed: _shareProduct,
+            icon: const Icon(Icons.share_outlined),
+          ),
           IconButton(
             onPressed: wishBusy ? null : _toggleWish,
             icon: Icon(
