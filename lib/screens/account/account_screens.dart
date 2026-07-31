@@ -164,8 +164,11 @@ class _AddressesScreenState extends State<AddressesScreen> {
           builder: (ctx, setModal) {
             final cities = store.citiesByRegion[region] ?? <String>[];
             if (city.isEmpty && cities.isNotEmpty) city = cities.first;
+            final keyboard = MediaQuery.viewInsetsOf(ctx).bottom;
+            // Keep Save clear of the keyboard, or of the system nav bar.
+            final freeBottom = keyboard > 0 ? keyboard : MediaQuery.viewPaddingOf(ctx).bottom;
             return Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 16),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, freeBottom + 20),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

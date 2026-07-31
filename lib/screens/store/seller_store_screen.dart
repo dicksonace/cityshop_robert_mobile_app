@@ -551,7 +551,12 @@ class _SellerProfileSheet extends StatelessWidget {
                   ),
                 ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  16,
+                  20,
+                  28 + MediaQuery.viewPaddingOf(context).bottom,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

@@ -17,6 +17,13 @@ import '../cart/paystack_payment_screen.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
+/// Space a bottom sheet must leave free: the keyboard when open, otherwise the
+/// system navigation bar (showModalBottomSheet's useSafeArea skips the bottom).
+double _sheetBottomInset(BuildContext ctx) {
+  final keyboard = MediaQuery.viewInsetsOf(ctx).bottom;
+  return keyboard > 0 ? keyboard : MediaQuery.viewPaddingOf(ctx).bottom;
+}
+
 class WalletTab extends StatefulWidget {
   const WalletTab({super.key});
 
@@ -79,11 +86,12 @@ class _WalletTabState extends State<WalletTab> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (ctx) {
-        final bottomInset = MediaQuery.viewInsetsOf(ctx).bottom;
+        // useSafeArea only guards the top, so lift content above the nav bar.
+        final bottomInset = _sheetBottomInset(ctx);
         return StatefulBuilder(
           builder: (ctx, setModal) {
             return Padding(
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + bottomInset),
+              padding: EdgeInsets.fromLTRB(20, 14, 20, 24 + bottomInset),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1550,11 +1558,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (ctx) {
-        final bottom = MediaQuery.viewInsetsOf(ctx).bottom;
+        final bottom = _sheetBottomInset(ctx);
         return StatefulBuilder(
           builder: (ctx, setModal) {
             return Padding(
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + bottom),
+              padding: EdgeInsets.fromLTRB(20, 14, 20, 24 + bottom),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1666,11 +1674,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (ctx) {
-        final bottom = MediaQuery.viewInsetsOf(ctx).bottom;
+        final bottom = _sheetBottomInset(ctx);
         return StatefulBuilder(
           builder: (ctx, setModal) {
             return Padding(
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + bottom),
+              padding: EdgeInsets.fromLTRB(20, 14, 20, 24 + bottom),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
