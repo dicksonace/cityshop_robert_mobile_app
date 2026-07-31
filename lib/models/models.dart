@@ -438,6 +438,8 @@ class OrderItemModel {
     this.status,
     this.fundsReleaseStatus,
     this.imageUrl,
+    this.canRequestRefund = false,
+    this.dispute,
   });
 
   final int id;
@@ -449,6 +451,8 @@ class OrderItemModel {
   final String? status;
   final String? fundsReleaseStatus;
   final String? imageUrl;
+  final bool canRequestRefund;
+  final Map<String, dynamic>? dispute;
 
   double get displayTotal {
     if (lineTotal > 0) return lineTotal;
@@ -461,6 +465,7 @@ class OrderItemModel {
     final unit = _asDouble(json['unit_price']) ?? 0;
     var line = _asDouble(json['line_total']) ?? 0;
     if (line <= 0 && unit > 0) line = unit * qty;
+    final dispute = json['dispute'];
 
     return OrderItemModel(
       id: _asInt(json['id']) ?? 0,
@@ -472,6 +477,8 @@ class OrderItemModel {
       status: json['status'] as String?,
       fundsReleaseStatus: json['funds_release_status'] as String?,
       imageUrl: json['image_url'] as String?,
+      canRequestRefund: json['can_request_refund'] == true,
+      dispute: dispute is Map ? Map<String, dynamic>.from(dispute) : null,
     );
   }
 }
@@ -515,6 +522,7 @@ class OrderModel {
     this.directPaymentProofPath,
     this.directPaymentSubmittedAt,
     this.directPaymentRejectionReason,
+    this.canRequestRefund = false,
     this.items = const [],
   });
 
@@ -542,6 +550,7 @@ class OrderModel {
   final String? directPaymentProofPath;
   final String? directPaymentSubmittedAt;
   final String? directPaymentRejectionReason;
+  final bool canRequestRefund;
   final List<OrderItemModel> items;
 
   bool get hasShippingDetails =>
@@ -590,6 +599,7 @@ class OrderModel {
       directPaymentProofPath: json['direct_payment_proof_path'] as String?,
       directPaymentSubmittedAt: json['direct_payment_submitted_at'] as String?,
       directPaymentRejectionReason: json['direct_payment_rejection_reason'] as String?,
+      canRequestRefund: json['can_request_refund'] == true,
       items: itemsJson is List
           ? itemsJson
               .whereType<Map>()

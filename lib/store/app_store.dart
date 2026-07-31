@@ -460,6 +460,25 @@ class AppStore extends ChangeNotifier {
     await loadOrders();
   }
 
+  Future<void> requestRefund({
+    required int orderId,
+    required int orderItemId,
+    required String reason,
+    required String description,
+  }) async {
+    await _api.post('/orders/$orderId/disputes', data: {
+      'order_item_id': orderItemId,
+      'reason': reason,
+      'description': description,
+    });
+    await loadOrders();
+  }
+
+  Future<void> cancelRefund(int disputeId) async {
+    await _api.post('/disputes/$disputeId/cancel');
+    await loadOrders();
+  }
+
   Future<void> loadWallet() async {
     final res = await _api.get('/wallet');
     final data = res.data is Map ? res.data['data'] : null;

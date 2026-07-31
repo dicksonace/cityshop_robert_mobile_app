@@ -1300,9 +1300,23 @@ class _ManageOrderCard extends StatelessWidget {
               const Divider(height: 1),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
+                    if (order.canRequestRefund ||
+                        order.items.any((i) => i.canRequestRefund))
+                      OutlinedButton(
+                        onPressed: onOpen,
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          foregroundColor: AppColors.danger,
+                          side: const BorderSide(color: AppColors.danger),
+                          shape: const StadiumBorder(),
+                        ),
+                        child: const Text('Request refund'),
+                      ),
                     OutlinedButton(
                       onPressed: onOpen,
                       style: OutlinedButton.styleFrom(
@@ -1311,7 +1325,6 @@ class _ManageOrderCard extends StatelessWidget {
                       ),
                       child: const Text('Buy again'),
                     ),
-                    const SizedBox(width: 8),
                     OutlinedButton(
                       onPressed: onOpen,
                       style: OutlinedButton.styleFrom(
@@ -1457,6 +1470,122 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open phone dialer')),
       );
+    }
+  }
+
+  Future<void> _requestRefund(OrderItemModel item) async {
+    String reason = 'wrong_item';
+    final descCtrl = TextEditingController();
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        final bottom = MediaQuery.viewInsetsOf(ctx).bottom;
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + bottom),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Request a refund', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                  const SizedBox(height: 6),
+                  Text(
+                    item.productName,
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Admin will review before any refund is approved.',
+                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    value: reason,
+                    decoration: const InputDecoration(
+                      labelText: 'Reason',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'wrong_item', child: Text('Wrong item received')),
+                      DropdownMenuItem(value: 'damaged_item', child: Text('Damaged item')),
+                      DropdownMenuItem(value: 'not_delivered', child: Text('Not delivered')),
+                      DropdownMenuItem(value: 'other', child: Text('Other')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setModal(() => reason = v);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descCtrl,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Explain why you need a refund',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+                    onPressed: () {
+                      if (descCtrl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('Please describe the issue')),
+                        );
+                        return;
+                      }
+                      Navigator.pop(ctx, true);
+                    },
+                    child: const Text('Submit request'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    final description = descCtrl.text.trim();
+    descCtrl.dispose();
+    if (ok != true || !mounted) return;
+    try {
+      await context.read<AppStore>().requestRefund(
+            orderId: order!.id,
+            orderItemId: item.id,
+            reason: reason,
+            description: description,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Refund request submitted')),
+      );
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  Future<void> _cancelRefund(int disputeId) async {
+    try {
+      await context.read<AppStore>().cancelRefund(disputeId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Refund request cancelled')),
+      );
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     }
   }
 
@@ -1718,6 +1847,61 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                                   }
                                                 },
                                                 child: const Text('Confirm delivery'),
+                                              ),
+                                            ),
+                                          ],
+                                          if (item.dispute != null) ...[
+                                            const SizedBox(height: 10),
+                                            Container(
+                                              width: double.infinity,
+                                              padding: const EdgeInsets.all(12),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFFFBEB),
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(color: const Color(0xFFFDE68A)),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    'Refund: ${(item.dispute!['status'] ?? '').toString().replaceAll('_', ' ')}',
+                                                    style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF92400E)),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    (item.dispute!['reason'] ?? '').toString().replaceAll('_', ' '),
+                                                    style: const TextStyle(color: Color(0xFFB45309)),
+                                                  ),
+                                                  if ((item.dispute!['description'] ?? '').toString().trim().isNotEmpty) ...[
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      '${item.dispute!['description']}',
+                                                      style: const TextStyle(color: Color(0xFF92400E), fontSize: 13),
+                                                    ),
+                                                  ],
+                                                  if (['open', 'under_review']
+                                                      .contains((item.dispute!['status'] ?? '').toString())) ...[
+                                                    const SizedBox(height: 8),
+                                                    TextButton(
+                                                      onPressed: () => _cancelRefund((item.dispute!['id'] as num).toInt()),
+                                                      child: const Text('Cancel refund request'),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ] else if (item.canRequestRefund) ...[
+                                            const SizedBox(height: 10),
+                                            SizedBox(
+                                              width: double.infinity,
+                                              child: OutlinedButton.icon(
+                                                onPressed: () => _requestRefund(item),
+                                                style: OutlinedButton.styleFrom(
+                                                  foregroundColor: AppColors.danger,
+                                                  side: const BorderSide(color: AppColors.danger),
+                                                ),
+                                                icon: const Icon(Icons.report_gmailerrorred_outlined, size: 18),
+                                                label: const Text('Request refund'),
                                               ),
                                             ),
                                           ],
