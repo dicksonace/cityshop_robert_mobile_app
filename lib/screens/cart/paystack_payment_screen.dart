@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../api/api_client.dart';
-import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 
 /// In-app Paystack checkout — stays inside CityShop (no external browser).
@@ -11,13 +9,13 @@ class PaystackPaymentScreen extends StatefulWidget {
   const PaystackPaymentScreen({
     super.key,
     required this.authorizationUrl,
-    required this.checkoutId,
     required this.reference,
+    required this.onVerify,
   });
 
   final String authorizationUrl;
-  final int checkoutId;
   final String reference;
+  final Future<void> Function(String reference) onVerify;
 
   @override
   State<PaystackPaymentScreen> createState() => _PaystackPaymentScreenState();
@@ -61,7 +59,7 @@ class _PaystackPaymentScreenState extends State<PaystackPaymentScreen> {
     final path = uri.path.toLowerCase();
     if (path.contains('paystack/mobile-return')) return true;
     if (path.contains('checkout/callback')) return true;
-    // Paystack sometimes lands on close / success pages with reference query.
+    if (path.contains('wallet/callback')) return true;
     if ((uri.queryParameters.containsKey('reference') ||
             uri.queryParameters.containsKey('trxref')) &&
         (path.contains('callback') ||
@@ -97,10 +95,7 @@ class _PaystackPaymentScreenState extends State<PaystackPaymentScreen> {
     });
 
     try {
-      await context.read<AppStore>().verifyPaystack(
-            checkoutId: widget.checkoutId,
-            reference: reference,
-          );
+      await widget.onVerify(reference);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } on ApiException catch (e) {

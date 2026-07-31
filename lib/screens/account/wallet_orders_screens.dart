@@ -12,6 +12,7 @@ import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../cart/paystack_payment_screen.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
@@ -61,6 +62,161 @@ class _WalletTabState extends State<WalletTab> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$label copied')),
     );
+  }
+
+  Future<void> _paystackTopUp() async {
+    final amountCtrl = TextEditingController();
+    String method = 'momo';
+    var submitting = false;
+
+    final started = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        final bottomInset = MediaQuery.viewInsetsOf(ctx).bottom;
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + bottomInset),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Add Funds',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Top up via Paystack (MoMo or card).',
+                    style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: amountCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Amount (GHS)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: method,
+                    decoration: const InputDecoration(
+                      labelText: 'Payment method',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'momo', child: Text('Mobile Money')),
+                      DropdownMenuItem(value: 'card', child: Text('Card')),
+                    ],
+                    onChanged: submitting
+                        ? null
+                        : (v) {
+                            if (v != null) setModal(() => method = v);
+                          },
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF16A34A),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: submitting
+                          ? null
+                          : () async {
+                              final amount = double.tryParse(amountCtrl.text.trim());
+                              if (amount == null || amount < 5) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  const SnackBar(content: Text('Enter at least GHS 5')),
+                                );
+                                return;
+                              }
+                              setModal(() => submitting = true);
+                              try {
+                                final pay = await context.read<AppStore>().initializeWalletPaystack(
+                                      amount: amount,
+                                      method: method,
+                                    );
+                                if (ctx.mounted) Navigator.pop(ctx, pay);
+                              } on ApiException catch (e) {
+                                setModal(() => submitting = false);
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    SnackBar(content: Text(e.message)),
+                                  );
+                                }
+                              } catch (e) {
+                                setModal(() => submitting = false);
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    SnackBar(content: Text('$e')),
+                                  );
+                                }
+                              }
+                            },
+                      child: Text(submitting ? 'Starting…' : 'Pay to Add Funds'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    amountCtrl.dispose();
+    if (started == null || !mounted) return;
+
+    final url = started['authorization_url'] as String?;
+    final reference = started['reference'] as String? ?? '';
+    if (url == null || url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not start Paystack payment')),
+      );
+      return;
+    }
+
+    final store = context.read<AppStore>();
+    final paid = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PaystackPaymentScreen(
+          authorizationUrl: url,
+          reference: reference,
+          onVerify: (ref) async {
+            await store.verifyWalletPaystack(ref);
+          },
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    if (paid == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Funds added to your wallet')),
+      );
+      await _load();
+    }
   }
 
   Future<void> _topUp() async {
@@ -318,7 +474,9 @@ class _WalletTabState extends State<WalletTab> {
     }
 
     final wallet = store.wallet;
-    final enabled = funding?['enabled'] == true;
+    final enabled = funding?['enabled'] == true || wallet?.manualTopUpEnabled == true;
+    final paystackConfigured =
+        wallet?.paystackConfigured == true || funding?['paystack_configured'] == true;
     final accounts = (funding?['accounts'] is List)
         ? (funding!['accounts'] as List).whereType<Map>().toList()
         : <Map>[];
@@ -370,8 +528,81 @@ class _WalletTabState extends State<WalletTab> {
             ),
           ),
           const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Add Funds', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                const SizedBox(height: 4),
+                const Text(
+                  'Top up via Paystack (MoMo or card).',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: paystackConfigured ? const Color(0xFF16A34A) : Colors.grey,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: paystackConfigured ? _paystackTopUp : null,
+                    child: Text(paystackConfigured ? 'Pay to Add Funds' : 'Top-up unavailable'),
+                  ),
+                ),
+                if (!paystackConfigured) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Online top-up requires Paystack to be configured on the server.',
+                    style: TextStyle(color: Color(0xFFB45309), fontSize: 12),
+                  ),
+                ],
+                if (enabled) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'MANUAL TOP-UP',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            color: Color(0xFF1D4ED8),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Paying a large amount? Send money to CityShop MoMo or bank, then submit proof — admin credits your wallet.',
+                          style: TextStyle(fontSize: 12, height: 1.35, color: AppColors.textSecondary),
+                        ),
+                        TextButton(
+                          onPressed: _topUp,
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            foregroundColor: AppColors.primary,
+                          ),
+                          child: const Text('Use manual payment ›'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
           if (enabled) ...[
-            PrimaryButton(label: 'Top up wallet', onPressed: _topUp),
             const SizedBox(height: 18),
             const Text('Pay into these accounts', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             const SizedBox(height: 6),
@@ -391,19 +622,7 @@ class _WalletTabState extends State<WalletTab> {
                   if (number.isNotEmpty) _copy('Number', number);
                 },
               ),
-          ] else
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Text(
-                'Manual top-up is currently unavailable. Contact support.',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-            ),
+          ],
         ],
       ),
     );

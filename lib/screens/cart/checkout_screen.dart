@@ -93,8 +93,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               MaterialPageRoute(
                 builder: (_) => PaystackPaymentScreen(
                   authorizationUrl: url,
-                  checkoutId: checkoutId,
                   reference: reference,
+                  onVerify: (ref) => store.verifyPaystack(
+                    checkoutId: checkoutId,
+                    reference: ref,
+                  ),
                 ),
               ),
             );

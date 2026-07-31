@@ -404,12 +404,16 @@ class WalletInfo {
     required this.pendingBalance,
     this.totalEarnings = 0,
     this.withdrawnAmount = 0,
+    this.paystackConfigured = false,
+    this.manualTopUpEnabled = false,
   });
 
   final double availableBalance;
   final double pendingBalance;
   final double totalEarnings;
   final double withdrawnAmount;
+  final bool paystackConfigured;
+  final bool manualTopUpEnabled;
 
   factory WalletInfo.fromJson(Map<String, dynamic> json) {
     return WalletInfo(
@@ -417,6 +421,8 @@ class WalletInfo {
       pendingBalance: (json['pending_balance'] as num?)?.toDouble() ?? 0,
       totalEarnings: (json['total_earnings'] as num?)?.toDouble() ?? 0,
       withdrawnAmount: (json['withdrawn_amount'] as num?)?.toDouble() ?? 0,
+      paystackConfigured: json['paystack_configured'] as bool? ?? false,
+      manualTopUpEnabled: json['manual_top_up_enabled'] as bool? ?? false,
     );
   }
 }
