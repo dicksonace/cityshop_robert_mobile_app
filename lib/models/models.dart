@@ -657,6 +657,8 @@ class ChatMessage {
     this.type = 'text',
     this.createdAt,
     this.imageUrl,
+    this.isDeleted = false,
+    this.canDelete = false,
   });
 
   final int id;
@@ -665,16 +667,42 @@ class ChatMessage {
   final String type;
   final String? createdAt;
   final String? imageUrl;
+  final bool isDeleted;
+  final bool canDelete;
 
   factory ChatMessage.fromJson(Map<String, dynamic> json, {required int myUserId}) {
     final meta = json['metadata'];
+    final deleted = json['is_deleted'] == true ||
+        (meta is Map && meta['deleted_at'] != null);
     return ChatMessage(
       id: json['id'] as int,
-      body: json['body'] as String? ?? '',
+      body: deleted ? '' : (json['body'] as String? ?? ''),
       mine: (json['sender_id'] as int?) == myUserId || json['is_mine'] == true,
       type: json['type'] as String? ?? 'text',
       createdAt: json['created_at'] as String?,
-      imageUrl: meta is Map ? meta['image_url'] as String? : json['image_url'] as String?,
+      imageUrl: deleted
+          ? null
+          : (meta is Map ? meta['image_url'] as String? : json['image_url'] as String?),
+      isDeleted: deleted,
+      canDelete: json['can_delete'] == true,
+    );
+  }
+
+  ChatMessage copyWith({
+    String? body,
+    bool? isDeleted,
+    bool? canDelete,
+    String? imageUrl,
+  }) {
+    return ChatMessage(
+      id: id,
+      body: body ?? this.body,
+      mine: mine,
+      type: type,
+      createdAt: createdAt,
+      imageUrl: imageUrl ?? this.imageUrl,
+      isDeleted: isDeleted ?? this.isDeleted,
+      canDelete: canDelete ?? this.canDelete,
     );
   }
 }

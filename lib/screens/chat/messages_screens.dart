@@ -270,6 +270,45 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _deleteMessage(ChatMessage message) async {
+    if (!message.canDelete && !(message.mine && !message.isDeleted && message.type == 'text')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This message can no longer be deleted')),
+      );
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete message?'),
+        content: const Text('This removes the wrong message for both of you.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final updated = await context.read<AppStore>().deleteMessage(widget.conversationId, message.id);
+      if (!mounted) return;
+      setState(() {
+        messages = [
+          for (final m in messages)
+            if (m.id == updated.id) updated else m,
+        ];
+      });
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _controller.text).trim();
     if (text.isEmpty || sending) return;
@@ -449,11 +488,19 @@ class _ChatScreenState extends State<ChatScreen> {
                                     constraints: BoxConstraints(
                                       maxWidth: MediaQuery.of(context).size.width * 0.78,
                                     ),
-                                    child: Container(
+                                    child: GestureDetector(
+                                      onLongPress: m.isDeleted
+                                          ? null
+                                          : (m.canDelete || (m.mine && m.type == 'text'))
+                                              ? () => _deleteMessage(m)
+                                              : null,
+                                      child: Container(
                                       margin: const EdgeInsets.only(bottom: 8),
                                       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
                                       decoration: BoxDecoration(
-                                        color: m.mine ? AppColors.accent : Colors.white,
+                                        color: m.isDeleted
+                                            ? Colors.grey.shade200
+                                            : (m.mine ? AppColors.accent : Colors.white),
                                         borderRadius: BorderRadius.only(
                                           topLeft: const Radius.circular(16),
                                           topRight: const Radius.circular(16),
@@ -474,9 +521,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                           Align(
                                             alignment: Alignment.centerLeft,
                                             child: Text(
-                                              m.body,
+                                              m.isDeleted ? 'Message deleted' : m.body,
                                               style: TextStyle(
-                                                color: m.mine ? Colors.white : AppColors.textPrimary,
+                                                color: m.isDeleted
+                                                    ? AppColors.textMuted
+                                                    : (m.mine ? Colors.white : AppColors.textPrimary),
+                                                fontStyle: m.isDeleted ? FontStyle.italic : FontStyle.normal,
                                                 height: 1.35,
                                               ),
                                             ),
@@ -487,12 +537,15 @@ class _ChatScreenState extends State<ChatScreen> {
                                               _timeLabel(m.createdAt!),
                                               style: TextStyle(
                                                 fontSize: 10,
-                                                color: m.mine ? Colors.white70 : AppColors.textMuted,
+                                                color: m.isDeleted
+                                                    ? AppColors.textMuted
+                                                    : (m.mine ? Colors.white70 : AppColors.textMuted),
                                               ),
                                             ),
                                           ],
                                         ],
                                       ),
+                                    ),
                                     ),
                                   ),
                                 ),

@@ -558,6 +558,15 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  Future<ChatMessage> deleteMessage(int conversationId, int messageId) async {
+    final res = await _api.delete('/messages/$conversationId/messages/$messageId');
+    final msg = res.data['message'];
+    return ChatMessage.fromJson(
+      Map<String, dynamic>.from(msg as Map),
+      myUserId: user?.id ?? 0,
+    );
+  }
+
   Future<List<ChatMessage>> pollMessages(int conversationId, int afterId) async {
     final res = await _api.get('/messages/$conversationId/poll', query: {'after': afterId});
     final msgs = res.data is Map ? res.data['messages'] : null;
