@@ -37,6 +37,9 @@ class AppStore extends ChangeNotifier {
   List<BuyerAddress> addresses = [];
   List<String> regions = [];
   Map<String, List<String>> citiesByRegion = {};
+  List<AppNotificationItem> notifications = [];
+  int unreadNotifications = 0;
+  int unreadMessages = 0;
 
   bool get isLoggedIn => user != null;
 
@@ -50,6 +53,7 @@ class AppStore extends ChangeNotifier {
         await Future.wait([
           loadCart(),
           loadWishlist(),
+          refreshNotificationCounts(),
         ]);
       }
       await loadShop();
@@ -276,7 +280,7 @@ class AppStore extends ChangeNotifier {
     } else {
       await refreshMe();
     }
-    await Future.wait([loadCart(), loadWishlist()]);
+    await Future.wait([loadCart(), loadWishlist(), refreshNotificationCounts()]);
     notifyListeners();
   }
 
@@ -306,6 +310,7 @@ class AppStore extends ChangeNotifier {
     } else {
       await refreshMe();
     }
+    await refreshNotificationCounts();
     notifyListeners();
   }
 
@@ -324,7 +329,9 @@ class AppStore extends ChangeNotifier {
     wallet = null;
     conversations = [];
     addresses = [];
-    notifyListeners();
+    notifications = [];
+    unreadNotifications = 0;
+    unreadMessages = 0;    notifyListeners();
   }
 
   Future<void> updateProfile({
@@ -537,6 +544,82 @@ class AppStore extends ChangeNotifier {
           .map((e) => ConversationModel.fromJson(Map<String, dynamic>.from(e)))
           .toList();
     }
+    notifyListeners();
+  }
+
+  Future<void> refreshNotificationCounts() async {
+    if (!isLoggedIn) {
+      unreadNotifications = 0;
+      unreadMessages = 0;
+      notifyListeners();
+      return;
+    }
+    try {
+      final res = await _api.get('/notifications/counts');
+      final data = res.data is Map ? res.data : null;
+      if (data is Map) {
+        unreadNotifications = (data['unread_notifications'] as num?)?.toInt() ?? 0;
+        unreadMessages = (data['unread_messages'] as num?)?.toInt() ?? 0;
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> loadNotifications() async {
+    final res = await _api.get('/notifications');
+    final data = res.data is Map ? res.data['notifications'] : null;
+    if (data is List) {
+      notifications = data
+          .whereType<Map>()
+          .map((e) => AppNotificationItem.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    if (res.data is Map && res.data['unread_count'] != null) {
+      unreadNotifications = (res.data['unread_count'] as num?)?.toInt() ?? unreadNotifications;
+    } else {
+      unreadNotifications = notifications.where((n) => n.isUnread).length;
+    }
+    notifyListeners();
+  }
+
+  Future<void> markNotificationRead(int id) async {
+    final res = await _api.post('/notifications/$id/read');
+    notifications = notifications
+        .map((n) => n.id == id
+            ? AppNotificationItem(
+                id: n.id,
+                type: n.type,
+                title: n.title,
+                body: n.body,
+                data: n.data,
+                readAt: n.readAt ?? DateTime.now().toIso8601String(),
+                createdAt: n.createdAt,
+              )
+            : n)
+        .toList();
+    if (res.data is Map && res.data['unread_count'] != null) {
+      unreadNotifications = (res.data['unread_count'] as num?)?.toInt() ?? unreadNotifications;
+    } else {
+      unreadNotifications = notifications.where((n) => n.isUnread).length;
+    }
+    notifyListeners();
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    await _api.post('/notifications/read-all');
+    final now = DateTime.now().toIso8601String();
+    notifications = notifications
+        .map((n) => AppNotificationItem(
+              id: n.id,
+              type: n.type,
+              title: n.title,
+              body: n.body,
+              data: n.data,
+              readAt: n.readAt ?? now,
+              createdAt: n.createdAt,
+            ))
+        .toList();
+    unreadNotifications = 0;
     notifyListeners();
   }
 

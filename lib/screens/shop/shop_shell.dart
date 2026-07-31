@@ -27,6 +27,17 @@ class _ShopShellState extends State<ShopShell> {
   int _tab = 0;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final store = context.read<AppStore>();
+      if (store.isLoggedIn) {
+        store.refreshNotificationCounts();
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _search.dispose();
     super.dispose();
@@ -54,7 +65,12 @@ class _ShopShellState extends State<ShopShell> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: (i) {
+          setState(() => _tab = i);
+          if (store.isLoggedIn && (i == 0 || i == 3 || i == 4)) {
+            store.refreshNotificationCounts();
+          }
+        },
         height: 68,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         indicatorColor: AppColors.accent,
@@ -72,11 +88,19 @@ class _ShopShellState extends State<ShopShell> {
             label: 'My Order',
           ),
           NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline, color: _tab == 3 ? Colors.white : AppColors.textSecondary),
+            icon: Badge(
+              isLabelVisible: store.unreadMessages > 0,
+              label: Text('${store.unreadMessages > 9 ? '9+' : store.unreadMessages}'),
+              child: Icon(Icons.chat_bubble_outline, color: _tab == 3 ? Colors.white : AppColors.textSecondary),
+            ),
             label: 'Message',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline, color: _tab == 4 ? Colors.white : AppColors.textSecondary),
+            icon: Badge(
+              isLabelVisible: store.unreadNotifications > 0,
+              label: Text('${store.unreadNotifications > 9 ? '9+' : store.unreadNotifications}'),
+              child: Icon(Icons.person_outline, color: _tab == 4 ? Colors.white : AppColors.textSecondary),
+            ),
             label: 'Profile',
           ),
         ],
@@ -450,6 +474,18 @@ class _TopBar extends StatelessWidget {
         children: [
           const BrandMark(height: 32),
           const Spacer(),
+          if (user != null)
+            IconButton(
+              tooltip: 'Notifications',
+              onPressed: () => context.push('/notifications'),
+              icon: Badge(
+                isLabelVisible: context.watch<AppStore>().unreadNotifications > 0,
+                label: Text(
+                  '${context.watch<AppStore>().unreadNotifications > 9 ? '9+' : context.watch<AppStore>().unreadNotifications}',
+                ),
+                child: const Icon(Icons.notifications_outlined),
+              ),
+            ),
           IconButton(
             tooltip: 'Cart',
             onPressed: () {
@@ -1011,6 +1047,7 @@ class AccountSettingsTab extends StatelessWidget {
     }
 
     final links = <(IconData, String, String, String)>[
+      (Icons.notifications_outlined, 'Notifications', 'Orders, messages & updates', '/notifications'),
       (Icons.person_outline, 'Profile settings', 'Name & email', '/profile/edit'),
       (Icons.location_on_outlined, 'Addresses', 'Saved delivery addresses', '/addresses'),
       (Icons.favorite_border, 'Wishlist', 'Saved products', '/wishlist'),
@@ -1087,7 +1124,26 @@ class AccountSettingsTab extends StatelessWidget {
                   ),
                   title: Text(item.$2, style: const TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: Text(item.$3, style: const TextStyle(fontSize: 12)),
-                  trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (item.$4 == '/notifications' &&
+                          context.watch<AppStore>().unreadNotifications > 0)
+                        Container(
+                          margin: const EdgeInsets.only(right: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.danger,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '${context.watch<AppStore>().unreadNotifications > 9 ? '9+' : context.watch<AppStore>().unreadNotifications}',
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      const Icon(Icons.chevron_right, color: AppColors.textMuted),
+                    ],
+                  ),
                   onTap: () => context.push(item.$4),
                 ),
             ],

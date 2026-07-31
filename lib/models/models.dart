@@ -786,3 +786,52 @@ class CheckoutPreview {
     );
   }
 }
+
+class AppNotificationItem {
+  const AppNotificationItem({
+    required this.id,
+    required this.type,
+    required this.title,
+    this.body,
+    this.data,
+    this.readAt,
+    this.createdAt,
+  });
+
+  final int id;
+  final String type;
+  final String title;
+  final String? body;
+  final Map<String, dynamic>? data;
+  final String? readAt;
+  final String? createdAt;
+
+  bool get isUnread => readAt == null || readAt!.isEmpty;
+
+  int? get conversationId {
+    final v = data?['conversation_id'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse('$v');
+  }
+
+  int? get orderId {
+    final v = data?['order_id'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse('$v');
+  }
+
+  factory AppNotificationItem.fromJson(Map<String, dynamic> json) {
+    final data = json['data'];
+    return AppNotificationItem(
+      id: _asInt(json['id']) ?? 0,
+      type: json['type'] as String? ?? 'notification',
+      title: json['title'] as String? ?? 'Notification',
+      body: json['body'] as String?,
+      data: data is Map ? Map<String, dynamic>.from(data) : null,
+      readAt: json['read_at'] as String?,
+      createdAt: json['created_at'] as String?,
+    );
+  }
+}
