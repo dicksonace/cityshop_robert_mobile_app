@@ -510,6 +510,11 @@ class OrderModel {
     this.storeName,
     this.storeSlug,
     this.sellerId,
+    this.sellerPaymentMethod,
+    this.directPaymentReference,
+    this.directPaymentProofPath,
+    this.directPaymentSubmittedAt,
+    this.directPaymentRejectionReason,
     this.items = const [],
   });
 
@@ -532,6 +537,11 @@ class OrderModel {
   final String? storeName;
   final String? storeSlug;
   final int? sellerId;
+  final Map<String, dynamic>? sellerPaymentMethod;
+  final String? directPaymentReference;
+  final String? directPaymentProofPath;
+  final String? directPaymentSubmittedAt;
+  final String? directPaymentRejectionReason;
   final List<OrderItemModel> items;
 
   bool get hasShippingDetails =>
@@ -542,9 +552,19 @@ class OrderModel {
       (digitalAddress?.trim().isNotEmpty ?? false) ||
       (deliveryNotes?.trim().isNotEmpty ?? false);
 
+  bool get isDirectPayment => (paymentChannel ?? '').toLowerCase() == 'direct';
+
+  bool get needsDirectPaymentProof {
+    if (!isDirectPayment) return false;
+    final pay = (paymentStatus ?? '').toLowerCase();
+    if (pay == 'paid') return false;
+    return true;
+  }
+
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     final seller = json['seller'];
     final itemsJson = json['items'];
+    final method = json['seller_payment_method'];
     return OrderModel(
       id: json['id'] as int,
       orderNumber: json['order_number'] as String? ?? '',
@@ -565,6 +585,11 @@ class OrderModel {
       storeName: seller is Map ? seller['store_name'] as String? : null,
       storeSlug: seller is Map ? seller['store_slug'] as String? : null,
       sellerId: seller is Map ? seller['id'] as int? : null,
+      sellerPaymentMethod: method is Map ? Map<String, dynamic>.from(method) : null,
+      directPaymentReference: json['direct_payment_reference'] as String?,
+      directPaymentProofPath: json['direct_payment_proof_path'] as String?,
+      directPaymentSubmittedAt: json['direct_payment_submitted_at'] as String?,
+      directPaymentRejectionReason: json['direct_payment_rejection_reason'] as String?,
       items: itemsJson is List
           ? itemsJson
               .whereType<Map>()
@@ -580,6 +605,7 @@ class ConversationModel {
     required this.id,
     required this.otherName,
     this.otherId,
+    this.otherAvatar,
     this.storeName,
     this.otherMobile,
     this.productId,
@@ -592,6 +618,7 @@ class ConversationModel {
   final int id;
   final int? otherId;
   final String otherName;
+  final String? otherAvatar;
   final String? storeName;
   final String? otherMobile;
   final int? productId;
@@ -610,6 +637,7 @@ class ConversationModel {
       otherName: other is Map
           ? (other['store_name'] as String? ?? other['name'] as String? ?? 'Seller')
           : 'Seller',
+      otherAvatar: other is Map ? other['avatar'] as String? : null,
       storeName: other is Map ? other['store_name'] as String? : null,
       otherMobile: other is Map ? (other['mobile'] as String? ?? other['phone'] as String?) : null,
       productId: product is Map ? product['id'] as int? : null,

@@ -9,6 +9,7 @@ import '../screens/auth/register_screen.dart';
 import '../screens/auth/splash_screen.dart';
 import '../screens/cart/cart_screen.dart';
 import '../screens/cart/checkout_screen.dart';
+import '../screens/cart/direct_payment_screen.dart';
 import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
 import '../screens/shop/shop_shell.dart';
@@ -41,6 +42,12 @@ GoRouter createRouter(AppStore store) {
       GoRoute(
         path: '/orders/:id',
         builder: (_, state) => OrderDetailScreen(
+          orderId: int.parse(state.pathParameters['id']!),
+        ),
+      ),
+      GoRoute(
+        path: '/orders/:id/direct-pay',
+        builder: (_, state) => DirectPaymentScreen(
           orderId: int.parse(state.pathParameters['id']!),
         ),
       ),

@@ -1748,6 +1748,23 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                   ),
                                 ],
                               ),
+                              if (o.needsDirectPaymentProof) ...[
+                                const SizedBox(height: 14),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 46,
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => context.push('/orders/${o.id}/direct-pay'),
+                                    icon: const Icon(Icons.payments_outlined, size: 18),
+                                    label: Text(
+                                      (o.directPaymentProofPath ?? '').isNotEmpty ||
+                                              (o.directPaymentReference ?? '').isNotEmpty
+                                          ? 'Update direct payment proof'
+                                          : 'Pay seller directly',
+                                    ),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 14),
                               SizedBox(
                                 width: double.infinity,

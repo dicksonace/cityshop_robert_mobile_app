@@ -623,12 +623,36 @@ class AppStore extends ChangeNotifier {
   Future<Map<String, dynamic>> placeCheckout({
     required int addressId,
     required String paymentMethod,
+    Map<String, dynamic>? sellerPayments,
   }) async {
     final res = await _api.post('/checkout', data: {
       'address_id': addressId,
       'payment_method': paymentMethod,
+      if (sellerPayments != null && sellerPayments.isNotEmpty) 'seller_payments': sellerPayments,
     });
     await loadCart();
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> submitDirectPayment({
+    required int orderId,
+    String? reference,
+    String? proofPath,
+  }) async {
+    if (proofPath != null && proofPath.isNotEmpty) {
+      final res = await _api.postMultipart(
+        '/orders/$orderId/direct-payment',
+        fields: {
+          if (reference != null && reference.trim().isNotEmpty) 'reference': reference.trim(),
+        },
+        fileField: 'proof',
+        filePath: proofPath,
+      );
+      return Map<String, dynamic>.from(res.data as Map);
+    }
+    final res = await _api.post('/orders/$orderId/direct-payment', data: {
+      if (reference != null && reference.trim().isNotEmpty) 'reference': reference.trim(),
+    });
     return Map<String, dynamic>.from(res.data as Map);
   }
 

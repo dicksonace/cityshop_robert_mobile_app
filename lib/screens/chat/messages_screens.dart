@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
+import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -133,14 +135,7 @@ class _MessagesTabState extends State<MessagesTab> {
           final c = store.conversations[index];
           return ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            leading: CircleAvatar(
-              radius: 24,
-              backgroundColor: AppColors.ringOrange,
-              child: Text(
-                c.otherName.isNotEmpty ? c.otherName[0].toUpperCase() : 'S',
-                style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800, fontSize: 18),
-              ),
-            ),
+            leading: _ConversationAvatar(name: c.otherName, avatar: c.otherAvatar, radius: 24),
             title: Text(c.otherName, style: const TextStyle(fontWeight: FontWeight.w800)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,17 +314,29 @@ class _ChatScreenState extends State<ChatScreen> {
       backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
         titleSpacing: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-            if (conversation?.productName != null)
-              Text(
-                conversation!.productName!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+            _ConversationAvatar(
+              name: title,
+              avatar: conversation?.otherAvatar,
+              radius: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+                  if (conversation?.productName != null)
+                    Text(
+                      conversation!.productName!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                    ),
+                ],
               ),
+            ),
           ],
         ),
         actions: [
@@ -579,5 +586,38 @@ class _ChatScreenState extends State<ChatScreen> {
     final dt = DateTime.tryParse(iso)?.toLocal();
     if (dt == null) return '';
     return _timeFmt.format(dt);
+  }
+}
+
+class _ConversationAvatar extends StatelessWidget {
+  const _ConversationAvatar({
+    required this.name,
+    required this.avatar,
+    required this.radius,
+  });
+
+  final String name;
+  final String? avatar;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = ApiConfig.resolveMediaUrl(avatar);
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'S';
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppColors.ringOrange,
+      backgroundImage: url.isNotEmpty ? CachedNetworkImageProvider(url) : null,
+      child: url.isEmpty
+          ? Text(
+              initial,
+              style: TextStyle(
+                color: AppColors.accent,
+                fontWeight: FontWeight.w800,
+                fontSize: radius * 0.75,
+              ),
+            )
+          : null,
+    );
   }
 }
