@@ -353,7 +353,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Profile settings')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        // Keep Save changes clear of the system navigation bar.
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
         children: [
           TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
           const SizedBox(height: 10),
@@ -427,7 +428,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Change password')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        // Keep Update password clear of the system navigation bar.
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
         children: [
           TextField(
             controller: current,

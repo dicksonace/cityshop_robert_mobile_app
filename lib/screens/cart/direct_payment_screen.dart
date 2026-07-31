@@ -126,7 +126,8 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.all(16),
+                  // Keep the submit button clear of the system navigation bar.
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
                   children: [
                     Text(
                       o?.orderNumber ?? 'Order',

@@ -236,7 +236,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.all(16),
+                  // Keep Place order clear of the system navigation bar.
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
                   children: [
                     const Text('Delivery address', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                     const SizedBox(height: 8),
