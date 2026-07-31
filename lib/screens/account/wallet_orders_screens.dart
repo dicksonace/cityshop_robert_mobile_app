@@ -11,6 +11,7 @@ import '../../api/api_client.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/order_receipt_printer.dart';
 import '../../widgets/common_widgets.dart';
 import '../cart/paystack_payment_screen.dart';
 
@@ -1459,6 +1460,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  Future<void> _printOrder() async {
+    final o = order;
+    if (o == null) return;
+    try {
+      await printOrderReceipt(o);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not print: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final o = order;
@@ -1479,6 +1493,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
         actions: [
+          if (o != null)
+            TextButton.icon(
+              onPressed: _printOrder,
+              icon: const Icon(Icons.print_outlined, size: 18),
+              label: const Text('Print'),
+            ),
           if (o?.sellerId != null)
             IconButton(
               tooltip: 'Chat seller',
@@ -1727,6 +1747,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                     style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppColors.accent),
                                   ),
                                 ],
+                              ),
+                              const SizedBox(height: 14),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 46,
+                                child: OutlinedButton.icon(
+                                  onPressed: _printOrder,
+                                  icon: const Icon(Icons.print_outlined, size: 18),
+                                  label: const Text('Print receipt'),
+                                ),
                               ),
                             ],
                           ),
