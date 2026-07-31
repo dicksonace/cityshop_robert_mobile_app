@@ -1030,6 +1030,19 @@ class _OrdersTabState extends State<OrdersTab> {
                             headline: _headline(order),
                             statusLine: _statusLine(order),
                             onOpen: () => context.push('/orders/${order.id}'),
+                            onRefund: () => context.push('/orders/${order.id}?action=refund'),
+                            onReview: () => context.push('/orders/${order.id}?action=review'),
+                            onBuyAgain: () {
+                              final match = order.items.where(
+                                (i) => (i.productSlug ?? '').isNotEmpty,
+                              );
+                              final slug = match.isEmpty ? null : match.first.productSlug;
+                              if (slug != null) {
+                                context.push('/products/$slug');
+                              } else {
+                                context.push('/orders/${order.id}');
+                              }
+                            },
                             onVisitStore: order.storeSlug == null || order.storeSlug!.isEmpty
                                 ? null
                                 : () => context.push('/stores/${order.storeSlug}'),
@@ -1146,6 +1159,9 @@ class _ManageOrderCard extends StatelessWidget {
     required this.headline,
     required this.statusLine,
     required this.onOpen,
+    this.onRefund,
+    this.onReview,
+    this.onBuyAgain,
     this.onVisitStore,
   });
 
@@ -1153,6 +1169,9 @@ class _ManageOrderCard extends StatelessWidget {
   final String headline;
   final String statusLine;
   final VoidCallback onOpen;
+  final VoidCallback? onRefund;
+  final VoidCallback? onReview;
+  final VoidCallback? onBuyAgain;
   final VoidCallback? onVisitStore;
 
   @override
@@ -1308,31 +1327,43 @@ class _ManageOrderCard extends StatelessWidget {
                     if (order.canRequestRefund ||
                         order.items.any((i) => i.canRequestRefund))
                       OutlinedButton(
-                        onPressed: onOpen,
+                        onPressed: onRefund ?? onOpen,
                         style: OutlinedButton.styleFrom(
                           visualDensity: VisualDensity.compact,
                           foregroundColor: AppColors.danger,
                           side: const BorderSide(color: AppColors.danger),
                           shape: const StadiumBorder(),
                         ),
-                        child: const Text('Request refund'),
+                        child: const Text('Apply for refund'),
                       ),
                     OutlinedButton(
-                      onPressed: onOpen,
+                      onPressed: onBuyAgain ?? onOpen,
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
                         shape: const StadiumBorder(),
                       ),
                       child: const Text('Buy again'),
                     ),
-                    OutlinedButton(
-                      onPressed: onOpen,
-                      style: OutlinedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        shape: const StadiumBorder(),
+                    if (order.items.any((i) => i.canReview))
+                      FilledButton(
+                        onPressed: onReview ?? onOpen,
+                        style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: Colors.white,
+                          shape: const StadiumBorder(),
+                        ),
+                        child: const Text('Write review'),
+                      )
+                    else
+                      OutlinedButton(
+                        onPressed: onOpen,
+                        style: OutlinedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          shape: const StadiumBorder(),
+                        ),
+                        child: const Text('View details'),
                       ),
-                      child: const Text('View details'),
-                    ),
                   ],
                 ),
               ),
@@ -1345,8 +1376,9 @@ class _ManageOrderCard extends StatelessWidget {
 }
 
 class OrderDetailScreen extends StatefulWidget {
-  const OrderDetailScreen({super.key, required this.orderId});
+  const OrderDetailScreen({super.key, required this.orderId, this.initialAction});
   final int orderId;
+  final String? initialAction;
 
   @override
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
@@ -1356,6 +1388,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   bool loading = true;
   String? error;
   OrderModel? order;
+  bool _handledInitialAction = false;
 
   static const _paidSteps = <String>[
     'Processing',
@@ -1378,10 +1411,42 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     });
     try {
       order = await context.read<AppStore>().fetchOrder(widget.orderId);
+      if (!_handledInitialAction) {
+        _handledInitialAction = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _runInitialAction();
+        });
+      }
     } catch (e) {
       error = e.toString();
     } finally {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  void _runInitialAction() {
+    final o = order;
+    if (o == null) return;
+    final action = (widget.initialAction ?? '').toLowerCase();
+    if (action == 'refund') {
+      final refundable = o.items.where((i) => i.canRequestRefund);
+      if (refundable.isNotEmpty) {
+        _requestRefund(refundable.first);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No items are eligible for a refund')),
+        );
+      }
+    } else if (action == 'review') {
+      final reviewable = o.items.where((i) => i.canReview);
+      if (reviewable.isNotEmpty) {
+        _writeReview(reviewable.first);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No items left to review on this order')),
+        );
+      }
     }
   }
 
@@ -1580,6 +1645,96 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Refund request cancelled')),
+      );
+      _load();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  Future<void> _writeReview(OrderItemModel item) async {
+    int rating = 5;
+    final commentCtrl = TextEditingController();
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        final bottom = MediaQuery.viewInsetsOf(ctx).bottom;
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(20, 14, 20, 20 + bottom),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text('Write a review', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                  const SizedBox(height: 6),
+                  Text(
+                    item.productName,
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var i = 1; i <= 5; i++)
+                        IconButton(
+                          onPressed: () => setModal(() => rating = i),
+                          icon: Icon(
+                            i <= rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                            color: const Color(0xFFF59E0B),
+                            size: 36,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: commentCtrl,
+                    maxLines: 3,
+                    maxLength: 1000,
+                    decoration: const InputDecoration(
+                      labelText: 'Comment (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Submit review'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    final comment = commentCtrl.text.trim();
+    commentCtrl.dispose();
+    if (ok != true || !mounted) return;
+    try {
+      await context.read<AppStore>().submitReview(
+            orderId: order!.id,
+            orderItemId: item.id,
+            rating: rating,
+            comment: comment.isEmpty ? null : comment,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thanks for your review!')),
       );
       _load();
     } on ApiException catch (e) {
@@ -1901,7 +2056,37 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                                   side: const BorderSide(color: AppColors.danger),
                                                 ),
                                                 icon: const Icon(Icons.report_gmailerrorred_outlined, size: 18),
-                                                label: const Text('Request refund'),
+                                                label: const Text('Apply for refund'),
+                                              ),
+                                            ),
+                                          ],
+                                          if (item.buyerReview != null) ...[
+                                            const SizedBox(height: 10),
+                                            Row(
+                                              children: [
+                                                const Icon(Icons.star_rounded, size: 18, color: Color(0xFFF59E0B)),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  'You rated ${item.buyerReview!['rating']}/5',
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppColors.textSecondary,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ] else if (item.canReview) ...[
+                                            const SizedBox(height: 10),
+                                            SizedBox(
+                                              width: double.infinity,
+                                              child: ElevatedButton.icon(
+                                                onPressed: () => _writeReview(item),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: AppColors.accent,
+                                                  foregroundColor: Colors.white,
+                                                ),
+                                                icon: const Icon(Icons.rate_review_outlined, size: 18),
+                                                label: const Text('Write review'),
                                               ),
                                             ),
                                           ],

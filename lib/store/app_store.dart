@@ -479,6 +479,20 @@ class AppStore extends ChangeNotifier {
     await loadOrders();
   }
 
+  Future<void> submitReview({
+    required int orderId,
+    required int orderItemId,
+    required int rating,
+    String? comment,
+  }) async {
+    await _api.post('/orders/$orderId/reviews', data: {
+      'order_item_id': orderItemId,
+      'rating': rating,
+      'comment': comment,
+    });
+    await loadOrders();
+  }
+
   Future<void> loadWallet() async {
     final res = await _api.get('/wallet');
     final data = res.data is Map ? res.data['data'] : null;

@@ -43,6 +43,7 @@ GoRouter createRouter(AppStore store) {
         path: '/orders/:id',
         builder: (_, state) => OrderDetailScreen(
           orderId: int.parse(state.pathParameters['id']!),
+          initialAction: state.uri.queryParameters['action'],
         ),
       ),
       GoRoute(

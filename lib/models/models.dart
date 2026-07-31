@@ -435,15 +435,19 @@ class OrderItemModel {
     required this.unitPrice,
     required this.lineTotal,
     this.productId,
+    this.productSlug,
     this.status,
     this.fundsReleaseStatus,
     this.imageUrl,
     this.canRequestRefund = false,
+    this.canReview = false,
+    this.buyerReview,
     this.dispute,
   });
 
   final int id;
   final int? productId;
+  final String? productSlug;
   final String productName;
   final int quantity;
   final double unitPrice;
@@ -452,6 +456,8 @@ class OrderItemModel {
   final String? fundsReleaseStatus;
   final String? imageUrl;
   final bool canRequestRefund;
+  final bool canReview;
+  final Map<String, dynamic>? buyerReview;
   final Map<String, dynamic>? dispute;
 
   double get displayTotal {
@@ -467,9 +473,11 @@ class OrderItemModel {
     if (line <= 0 && unit > 0) line = unit * qty;
     final dispute = json['dispute'];
 
+    final review = json['buyer_review'];
     return OrderItemModel(
       id: _asInt(json['id']) ?? 0,
       productId: _asInt(json['product_id']),
+      productSlug: json['product_slug'] as String?,
       productName: json['product_name'] as String? ?? '',
       quantity: qty,
       unitPrice: unit,
@@ -478,6 +486,8 @@ class OrderItemModel {
       fundsReleaseStatus: json['funds_release_status'] as String?,
       imageUrl: json['image_url'] as String?,
       canRequestRefund: json['can_request_refund'] == true,
+      canReview: json['can_review'] == true,
+      buyerReview: review is Map ? Map<String, dynamic>.from(review) : null,
       dispute: dispute is Map ? Map<String, dynamic>.from(dispute) : null,
     );
   }
