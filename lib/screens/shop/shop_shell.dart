@@ -16,7 +16,9 @@ import '../chat/messages_screens.dart';
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
 class ShopShell extends StatefulWidget {
-  const ShopShell({super.key});
+  const ShopShell({super.key, this.initialTab = 0});
+
+  final int initialTab;
 
   @override
   State<ShopShell> createState() => _ShopShellState();
@@ -24,7 +26,7 @@ class ShopShell extends StatefulWidget {
 
 class _ShopShellState extends State<ShopShell> {
   final _search = TextEditingController();
-  int _tab = 0;
+  late int _tab = widget.initialTab;
 
   @override
   void initState() {

@@ -17,6 +17,15 @@ import '../screens/shop/shop_shell.dart';
 import '../screens/store/seller_store_screen.dart';
 import '../store/app_store.dart';
 
+/// Tab names accepted by `/shop?tab=`, matching the shell's IndexedStack order.
+const _shellTabs = {
+  'home': 0,
+  'wallet': 1,
+  'orders': 2,
+  'messages': 3,
+  'account': 4,
+};
+
 bool _isDeepLinkPath(String path) {
   return path.startsWith('/products/') ||
       path.startsWith('/stores/') ||
@@ -41,7 +50,12 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
       GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
-      GoRoute(path: '/shop', builder: (_, __) => const ShopShell()),
+      GoRoute(
+        path: '/shop',
+        builder: (_, state) => ShopShell(
+          initialTab: _shellTabs[state.uri.queryParameters['tab']] ?? 0,
+        ),
+      ),
       GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
       GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
       GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),

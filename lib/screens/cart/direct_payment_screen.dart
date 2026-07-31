@@ -108,7 +108,10 @@ class _DirectPaymentScreenState extends State<DirectPaymentScreen> {
     final method = o?.sellerPaymentMethod;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Pay seller directly')),
+      appBar: AppBar(
+        title: const Text('Pay seller directly'),
+        leading: BackButton(onPressed: () => goBackOr(context, '/shop?tab=orders')),
+      ),
       body: loading
           ? const FullPageLoader(label: 'Loading payment details…')
           : error != null

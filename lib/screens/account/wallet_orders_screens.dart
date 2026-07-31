@@ -1780,9 +1780,23 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         titleSpacing: 0,
-        title: Text(
-          o == null ? 'Order' : 'Back to purchase',
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        automaticallyImplyLeading: false,
+        title: InkWell(
+          onTap: () => goBackOr(context, '/shop?tab=orders'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.arrow_back, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  o == null ? 'Order' : 'Back to purchase',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
         ),
         actions: [
           if (o != null)

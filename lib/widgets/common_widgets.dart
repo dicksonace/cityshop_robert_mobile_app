@@ -1,6 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../theme/app_theme.dart';
+
+/// Steps back a page, falling back to [fallback] when the stack is empty.
+///
+/// Screens reached with `context.go` (checkout -> direct pay -> order detail)
+/// replace the stack, so there is nothing for Navigator to pop and the user is
+/// left stranded without the fallback.
+void goBackOr(BuildContext context, String fallback) {
+  if (context.canPop()) {
+    context.pop();
+  } else {
+    context.go(fallback);
+  }
+}
 
 class AppLoader extends StatelessWidget {
   const AppLoader({
