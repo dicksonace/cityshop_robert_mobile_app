@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
@@ -106,6 +108,32 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
     }
   }
 
+  String get _storeLink {
+    final slug = (store?.slug.isNotEmpty == true) ? store!.slug : widget.slug;
+    return ApiConfig.storeShareUrl(slug);
+  }
+
+  Future<void> _shareStore() async {
+    final name = store?.storeName.trim().isNotEmpty == true
+        ? store!.storeName.trim()
+        : 'this store';
+    final url = _storeLink;
+    await SharePlus.instance.share(
+      ShareParams(
+        text: 'Shop at $name on CityShop\n$url',
+        subject: name,
+      ),
+    );
+  }
+
+  Future<void> _copyStoreLink() async {
+    await Clipboard.setData(ClipboardData(text: _storeLink));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Store link copied')),
+    );
+  }
+
   void _openSellerProfile() {
     final s = store;
     if (s == null) return;
@@ -166,6 +194,13 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         title: Text(s?.storeName ?? 'Store'),
+                        actions: [
+                          IconButton(
+                            tooltip: 'Share store',
+                            onPressed: _shareStore,
+                            icon: const Icon(Icons.share_outlined),
+                          ),
+                        ],
                         flexibleSpace: FlexibleSpaceBar(
                           background: Container(
                             decoration: const BoxDecoration(
@@ -294,6 +329,66 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                                     ),
                                   ),
                                 ],
+                              ),
+                              const SizedBox(height: 10),
+                              Material(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(14),
+                                child: InkWell(
+                                  onTap: _copyStoreLink,
+                                  onLongPress: _shareStore,
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(color: AppColors.border),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.link, size: 18, color: AppColors.primary),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text(
+                                                'Store link',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                _storeLink,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppColors.textSecondary,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Copy link',
+                                          onPressed: _copyStoreLink,
+                                          icon: const Icon(Icons.copy_outlined, size: 18),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Share',
+                                          onPressed: _shareStore,
+                                          icon: const Icon(Icons.share_outlined, size: 18),
+                                          visualDensity: VisualDensity.compact,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ),
                               if ((s?.description ?? '').trim().isNotEmpty) ...[
                                 const SizedBox(height: 14),

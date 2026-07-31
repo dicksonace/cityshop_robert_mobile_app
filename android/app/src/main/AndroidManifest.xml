@@ -35,8 +35,10 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https" android:host="cityunlock.net" android:pathPrefix="/products"/>
+                <data android:scheme="https" android:host="cityunlock.net" android:pathPrefix="/store"/>
                 <data android:scheme="https" android:host="cityunlock.net" android:pathPrefix="/stores"/>
                 <data android:scheme="https" android:host="www.cityunlock.net" android:pathPrefix="/products"/>
+                <data android:scheme="https" android:host="www.cityunlock.net" android:pathPrefix="/store"/>
                 <data android:scheme="https" android:host="www.cityunlock.net" android:pathPrefix="/stores"/>
             </intent-filter>
             <!-- Custom scheme fallback: cityshop://products/{slug} -->
@@ -45,8 +47,10 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="cityshop" android:host="products" android:pathPrefix="/"/>
+                <data android:scheme="cityshop" android:host="store" android:pathPrefix="/"/>
                 <data android:scheme="cityshop" android:host="stores" android:pathPrefix="/"/>
                 <data android:scheme="cityshop" android:pathPrefix="/products"/>
+                <data android:scheme="cityshop" android:pathPrefix="/store"/>
                 <data android:scheme="cityshop" android:pathPrefix="/stores"/>
             </intent-filter>
         </activity>

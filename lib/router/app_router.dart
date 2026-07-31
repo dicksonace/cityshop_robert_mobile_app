@@ -19,6 +19,7 @@ import '../store/app_store.dart';
 bool _isDeepLinkPath(String path) {
   return path.startsWith('/products/') ||
       path.startsWith('/stores/') ||
+      path.startsWith('/store/') ||
       path.startsWith('/orders/') ||
       path.startsWith('/messages/');
 }
@@ -50,6 +51,11 @@ GoRouter createRouter(AppStore store) {
         path: '/products/:slug',
         builder: (_, state) => ProductDetailScreen(slug: state.pathParameters['slug']!),
       ),
+      // Web uses /store/{slug}; app uses /stores/{slug}.
+      GoRoute(
+        path: '/store/:slug',
+        redirect: (_, state) => '/stores/${state.pathParameters['slug']}',
+      ),
       GoRoute(
         path: '/stores/:slug',
         builder: (_, state) => SellerStoreScreen(slug: state.pathParameters['slug']!),
@@ -79,9 +85,10 @@ GoRouter createRouter(AppStore store) {
 
       // cityshop://products/{slug} → /products/{slug}
       if (uri.scheme == 'cityshop' &&
-          (uri.host == 'products' || uri.host == 'stores') &&
+          (uri.host == 'products' || uri.host == 'stores' || uri.host == 'store') &&
           uri.path.isNotEmpty) {
-        final target = '/${uri.host}${uri.path}';
+        final host = uri.host == 'store' ? 'stores' : uri.host;
+        final target = '/$host${uri.path}';
         if (uri.hasQuery) return '$target?${uri.query}';
         return target;
       }

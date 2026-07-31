@@ -34,11 +34,12 @@ class ApiConfig {
   }
 
   /// Public storefront URL (web + app deep link).
+  /// Web route is `/store/{slug}` (singular).
   static String storeShareUrl(String slug) {
     final base = webBaseUrl.endsWith('/')
         ? webBaseUrl.substring(0, webBaseUrl.length - 1)
         : webBaseUrl;
-    return '$base/stores/$slug';
+    return '$base/store/$slug';
   }
 
   /// Turn relative storage paths into absolute URLs for images/videos.
