@@ -12,6 +12,7 @@ import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/image_viewer.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
@@ -702,6 +703,23 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
     await _videoController?.setVolume(_muted ? 0 : 1);
   }
 
+  /// Opens the viewer on the photo at gallery position [galleryIndex]. The
+  /// video pane keeps its own tap handling, so it is left out of the viewer.
+  void _openFullScreen(int galleryIndex) {
+    final items = _items;
+    final urls = <String>[];
+    var initialIndex = 0;
+
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].isVideo) continue;
+      if (i == galleryIndex) initialIndex = urls.length;
+      urls.add(items[i].url);
+    }
+
+    _videoController?.pause();
+    showImageViewer(context, urls: urls, initialIndex: initialIndex);
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _items;
@@ -736,12 +754,15 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                           if (item.isVideo) {
                             return _buildVideoPane();
                           }
-                          return CachedNetworkImage(
-                            imageUrl: item.url,
-                            fit: BoxFit.contain,
-                            placeholder: (_, __) => const Center(child: AppLoader()),
-                            errorWidget: (_, __, ___) =>
-                                const Icon(Icons.broken_image_outlined, size: 48, color: AppColors.textMuted),
+                          return GestureDetector(
+                            onTap: () => _openFullScreen(i),
+                            child: CachedNetworkImage(
+                              imageUrl: item.url,
+                              fit: BoxFit.contain,
+                              placeholder: (_, __) => const Center(child: AppLoader()),
+                              errorWidget: (_, __, ___) =>
+                                  const Icon(Icons.broken_image_outlined, size: 48, color: AppColors.textMuted),
+                            ),
                           );
                         },
                       ),
