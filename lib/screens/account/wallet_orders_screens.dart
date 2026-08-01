@@ -1835,13 +1835,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                     const SizedBox(height: 10),
                                     Row(
                                       children: [
-                                        CircleAvatar(
+                                        StoreAvatar(
+                                          name: o.storeName,
+                                          photo: o.storeLogo,
                                           radius: 22,
-                                          backgroundColor: AppColors.accent,
-                                          child: Text(
-                                            (o.storeName ?? 'S').substring(0, 1).toUpperCase(),
-                                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18),
-                                          ),
                                         ),
                                         const SizedBox(width: 10),
                                         Expanded(

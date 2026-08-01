@@ -596,6 +596,7 @@ class OrderModel {
     this.createdAt,
     this.storeName,
     this.storeSlug,
+    this.storeLogo,
     this.sellerId,
     this.sellerName,
     this.sellerMobile,
@@ -629,6 +630,7 @@ class OrderModel {
   final String? createdAt;
   final String? storeName;
   final String? storeSlug;
+  final String? storeLogo;
   final int? sellerId;
   final String? sellerName;
   final String? sellerMobile;
@@ -683,6 +685,7 @@ class OrderModel {
       createdAt: json['created_at'] as String?,
       storeName: seller is Map ? seller['store_name'] as String? : null,
       storeSlug: seller is Map ? seller['store_slug'] as String? : null,
+      storeLogo: seller is Map ? (seller['store_logo'] as String?)?.trim() : null,
       sellerId: seller is Map ? seller['id'] as int? : null,
       sellerName: seller is Map ? seller['seller_name'] as String? : null,
       sellerMobile: seller is Map ? seller['mobile'] as String? : null,
