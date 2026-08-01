@@ -30,6 +30,7 @@ const _shellTabs = {
 
 bool _isDeepLinkPath(String path) {
   return path.startsWith('/products/') ||
+      path.startsWith('/product/') ||
       path.startsWith('/stores/') ||
       path.startsWith('/store/') ||
       path.startsWith('/orders/') ||
@@ -71,6 +72,11 @@ GoRouter createRouter(AppStore store) {
         path: '/products/:slug',
         builder: (_, state) => ProductDetailScreen(slug: state.pathParameters['slug']!),
       ),
+      // Older links point at a single product by id; the API answers to both.
+      GoRoute(
+        path: '/product/:slug',
+        redirect: (_, state) => '/products/${state.pathParameters['slug']}',
+      ),
       // Web uses /store/{slug}; app uses /stores/{slug}.
       GoRoute(
         path: '/store/:slug',
@@ -104,10 +110,13 @@ GoRouter createRouter(AppStore store) {
       final uri = state.uri;
 
       // cityshop://products/{slug} → /products/{slug}
-      if (uri.scheme == 'cityshop' &&
-          (uri.host == 'products' || uri.host == 'stores' || uri.host == 'store') &&
-          uri.path.isNotEmpty) {
-        final host = uri.host == 'store' ? 'stores' : uri.host;
+      const deepLinkHosts = {'products', 'product', 'stores', 'store'};
+      if (uri.scheme == 'cityshop' && deepLinkHosts.contains(uri.host) && uri.path.isNotEmpty) {
+        final host = switch (uri.host) {
+          'store' => 'stores',
+          'product' => 'products',
+          _ => uri.host,
+        };
         final target = '/$host${uri.path}';
         if (uri.hasQuery) return '$target?${uri.query}';
         return target;
