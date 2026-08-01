@@ -11,17 +11,11 @@ import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/order_receipt_printer.dart';
+import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../cart/paystack_payment_screen.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
-
-/// Space a bottom sheet must leave free: the keyboard when open, otherwise the
-/// system navigation bar (showModalBottomSheet's useSafeArea skips the bottom).
-double _sheetBottomInset(BuildContext ctx) {
-  final keyboard = MediaQuery.viewInsetsOf(ctx).bottom;
-  return keyboard > 0 ? keyboard : MediaQuery.viewPaddingOf(ctx).bottom;
-}
 
 class WalletTab extends StatefulWidget {
   const WalletTab({super.key});
@@ -99,117 +93,95 @@ class _WalletTabState extends State<WalletTab> {
     String method = 'momo';
     var submitting = false;
 
-    final started = await showModalBottomSheet<Map<String, dynamic>>(
+    final started = await showAppSheet<Map<String, dynamic>>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
       builder: (ctx) {
-        // useSafeArea only guards the top, so lift content above the nav bar.
-        final bottomInset = _sheetBottomInset(ctx);
         return StatefulBuilder(
           builder: (ctx, setModal) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 24 + bottomInset),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.border,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
+            return SheetShell(
+              action: SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF16A34A),
+                    foregroundColor: Colors.white,
                   ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Add Funds',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Top up via Paystack (MoMo or card).',
-                    style: TextStyle(color: AppColors.textSecondary, height: 1.35),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: amountCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Amount (GHS)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: method,
-                    decoration: const InputDecoration(
-                      labelText: 'Payment method',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'momo', child: Text('Mobile Money')),
-                      DropdownMenuItem(value: 'card', child: Text('Card')),
-                    ],
-                    onChanged: submitting
-                        ? null
-                        : (v) {
-                            if (v != null) setModal(() => method = v);
-                          },
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF16A34A),
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: submitting
-                          ? null
-                          : () async {
-                              final amount = double.tryParse(amountCtrl.text.trim());
-                              if (amount == null || amount < 5) {
-                                ScaffoldMessenger.of(ctx).showSnackBar(
-                                  const SnackBar(content: Text('Enter at least GHS 5')),
+                  onPressed: submitting
+                      ? null
+                      : () async {
+                          final amount = double.tryParse(amountCtrl.text.trim());
+                          if (amount == null || amount < 5) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(content: Text('Enter at least GHS 5')),
+                            );
+                            return;
+                          }
+                          setModal(() => submitting = true);
+                          try {
+                            final pay = await context.read<AppStore>().initializeWalletPaystack(
+                                  amount: amount,
+                                  method: method,
                                 );
-                                return;
-                              }
-                              setModal(() => submitting = true);
-                              try {
-                                final pay = await context.read<AppStore>().initializeWalletPaystack(
-                                      amount: amount,
-                                      method: method,
-                                    );
-                                if (ctx.mounted) Navigator.pop(ctx, pay);
-                              } on ApiException catch (e) {
-                                setModal(() => submitting = false);
-                                if (ctx.mounted) {
-                                  ScaffoldMessenger.of(ctx).showSnackBar(
-                                    SnackBar(content: Text(e.message)),
-                                  );
-                                }
-                              } catch (e) {
-                                setModal(() => submitting = false);
-                                if (ctx.mounted) {
-                                  ScaffoldMessenger.of(ctx).showSnackBar(
-                                    SnackBar(content: Text('$e')),
-                                  );
-                                }
-                              }
-                            },
-                      child: Text(submitting ? 'Starting…' : 'Pay to Add Funds'),
-                    ),
+                            if (ctx.mounted) Navigator.pop(ctx, pay);
+                          } on ApiException catch (e) {
+                            setModal(() => submitting = false);
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(content: Text(e.message)),
+                              );
+                            }
+                          } catch (e) {
+                            setModal(() => submitting = false);
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(content: Text('$e')),
+                              );
+                            }
+                          }
+                        },
+                  child: Text(
+                    submitting ? 'Starting…' : 'Pay to Add Funds',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                   ),
-                ],
+                ),
               ),
+              children: [
+                const Text(
+                  'Add Funds',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Top up via Paystack (MoMo or card).',
+                  style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Amount (GHS)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: method,
+                  decoration: const InputDecoration(
+                    labelText: 'Payment method',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'momo', child: Text('Mobile Money')),
+                    DropdownMenuItem(value: 'card', child: Text('Card')),
+                  ],
+                  onChanged: submitting
+                      ? null
+                      : (v) {
+                          if (v != null) setModal(() => method = v);
+                        },
+                ),
+              ],
             );
           },
         );
@@ -1485,77 +1457,73 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Future<void> _requestRefund(OrderItemModel item) async {
     String reason = 'wrong_item';
     final descCtrl = TextEditingController();
-    final ok = await showModalBottomSheet<bool>(
+    final ok = await showAppSheet<bool>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
       builder: (ctx) {
-        final bottom = _sheetBottomInset(ctx);
         return StatefulBuilder(
           builder: (ctx, setModal) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 24 + bottom),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('Request a refund', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.productName,
-                    style: const TextStyle(color: AppColors.textSecondary),
+            return SheetShell(
+              action: SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.danger,
+                    foregroundColor: Colors.white,
                   ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Admin will review before any refund is approved.',
-                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  onPressed: () {
+                    if (descCtrl.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Please describe the issue')),
+                      );
+                      return;
+                    }
+                    Navigator.pop(ctx, true);
+                  },
+                  child: const Text(
+                    'Submit request',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                   ),
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<String>(
-                    value: reason,
-                    decoration: const InputDecoration(
-                      labelText: 'Reason',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'wrong_item', child: Text('Wrong item received')),
-                      DropdownMenuItem(value: 'damaged_item', child: Text('Damaged item')),
-                      DropdownMenuItem(value: 'not_delivered', child: Text('Not delivered')),
-                      DropdownMenuItem(value: 'other', child: Text('Other')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setModal(() => reason = v);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: descCtrl,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Explain why you need a refund',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
-                    onPressed: () {
-                      if (descCtrl.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(content: Text('Please describe the issue')),
-                        );
-                        return;
-                      }
-                      Navigator.pop(ctx, true);
-                    },
-                    child: const Text('Submit request'),
-                  ),
-                ],
+                ),
               ),
+              children: [
+                const Text('Request a refund', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                const SizedBox(height: 6),
+                Text(
+                  item.productName,
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Admin will review before any refund is approved.',
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  value: reason,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'wrong_item', child: Text('Wrong item received')),
+                    DropdownMenuItem(value: 'damaged_item', child: Text('Damaged item')),
+                    DropdownMenuItem(value: 'not_delivered', child: Text('Not delivered')),
+                    DropdownMenuItem(value: 'other', child: Text('Other')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setModal(() => reason = v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Explain why you need a refund',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             );
           },
         );
@@ -1601,66 +1569,59 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Future<void> _writeReview(OrderItemModel item) async {
     int rating = 5;
     final commentCtrl = TextEditingController();
-    final ok = await showModalBottomSheet<bool>(
+    final ok = await showAppSheet<bool>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
       builder: (ctx) {
-        final bottom = _sheetBottomInset(ctx);
         return StatefulBuilder(
           builder: (ctx, setModal) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(20, 14, 20, 24 + bottom),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('Write a review', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                  const SizedBox(height: 6),
-                  Text(
-                    item.productName,
-                    style: const TextStyle(color: AppColors.textSecondary),
+            return SheetShell(
+              action: SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    foregroundColor: Colors.white,
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (var i = 1; i <= 5; i++)
-                        IconButton(
-                          onPressed: () => setModal(() => rating = i),
-                          icon: Icon(
-                            i <= rating ? Icons.star_rounded : Icons.star_outline_rounded,
-                            color: const Color(0xFFF59E0B),
-                            size: 36,
-                          ),
-                        ),
-                    ],
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text(
+                    'Submit review',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                   ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: commentCtrl,
-                    maxLines: 3,
-                    maxLength: 1000,
-                    decoration: const InputDecoration(
-                      labelText: 'Comment (optional)',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accent,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('Submit review'),
-                  ),
-                ],
+                ),
               ),
+              children: [
+                const Text('Write a review', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                const SizedBox(height: 6),
+                Text(
+                  item.productName,
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (var i = 1; i <= 5; i++)
+                      IconButton(
+                        onPressed: () => setModal(() => rating = i),
+                        icon: Icon(
+                          i <= rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                          color: const Color(0xFFF59E0B),
+                          size: 36,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: commentCtrl,
+                  maxLines: 3,
+                  maxLength: 1000,
+                  decoration: const InputDecoration(
+                    labelText: 'Comment (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
             );
           },
         );

@@ -8,6 +8,7 @@ import '../../api/api_client.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
@@ -156,57 +157,56 @@ class _AddressesScreenState extends State<AddressesScreen> {
     String city = existing?.city ?? '';
     bool isDefault = existing?.isDefault ?? false;
 
-    final saved = await showModalBottomSheet<bool>(
+    final saved = await showAppSheet<bool>(
       context: context,
-      isScrollControlled: true,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModal) {
             final cities = store.citiesByRegion[region] ?? <String>[];
             if (city.isEmpty && cities.isNotEmpty) city = cities.first;
-            final keyboard = MediaQuery.viewInsetsOf(ctx).bottom;
-            // Keep Save clear of the keyboard, or of the system nav bar.
-            final freeBottom = keyboard > 0 ? keyboard : MediaQuery.viewPaddingOf(ctx).bottom;
-            return Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, freeBottom + 20),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(existing == null ? 'Add address' : 'Edit address', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-                    const SizedBox(height: 12),
-                    TextField(controller: first, decoration: const InputDecoration(labelText: 'First name')),
-                    TextField(controller: last, decoration: const InputDecoration(labelText: 'Last name')),
-                    TextField(controller: phone, decoration: const InputDecoration(labelText: 'Phone')),
-                    TextField(controller: line, decoration: const InputDecoration(labelText: 'Address line')),
-                    DropdownButtonFormField<String>(
-                      initialValue: store.regions.contains(region) ? region : null,
-                      decoration: const InputDecoration(labelText: 'Region'),
-                      items: store.regions.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
-                      onChanged: (v) => setModal(() {
-                        region = v ?? region;
-                        city = (store.citiesByRegion[region] ?? []).firstOrNull ?? '';
-                      }),
-                    ),
-                    DropdownButtonFormField<String>(
-                      initialValue: cities.contains(city) ? city : null,
-                      decoration: const InputDecoration(labelText: 'City'),
-                      items: cities.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                      onChanged: (v) => setModal(() => city = v ?? city),
-                    ),
-                    TextField(controller: digital, decoration: const InputDecoration(labelText: 'Digital address (optional)')),
-                    SwitchListTile(
-                      value: isDefault,
-                      onChanged: (v) => setModal(() => isDefault = v),
-                      title: const Text('Default address'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Save'),
-                    ),
-                  ],
+            return SheetShell(
+              action: SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text(
+                    'Save',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
                 ),
               ),
+              children: [
+                Text(
+                  existing == null ? 'Add address' : 'Edit address',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: first, decoration: const InputDecoration(labelText: 'First name')),
+                TextField(controller: last, decoration: const InputDecoration(labelText: 'Last name')),
+                TextField(controller: phone, decoration: const InputDecoration(labelText: 'Phone')),
+                TextField(controller: line, decoration: const InputDecoration(labelText: 'Address line')),
+                DropdownButtonFormField<String>(
+                  initialValue: store.regions.contains(region) ? region : null,
+                  decoration: const InputDecoration(labelText: 'Region'),
+                  items: store.regions.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                  onChanged: (v) => setModal(() {
+                    region = v ?? region;
+                    city = (store.citiesByRegion[region] ?? []).firstOrNull ?? '';
+                  }),
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: cities.contains(city) ? city : null,
+                  decoration: const InputDecoration(labelText: 'City'),
+                  items: cities.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  onChanged: (v) => setModal(() => city = v ?? city),
+                ),
+                TextField(controller: digital, decoration: const InputDecoration(labelText: 'Digital address (optional)')),
+                SwitchListTile(
+                  value: isDefault,
+                  onChanged: (v) => setModal(() => isDefault = v),
+                  title: const Text('Default address'),
+                ),
+              ],
             );
           },
         );

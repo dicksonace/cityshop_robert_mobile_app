@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../api/api_client.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/momo_widgets.dart';
 
@@ -109,51 +110,40 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
   }
 
   Future<void> _showDetails(String id, Map account) async {
-    await showModalBottomSheet<void>(
+    await showAppSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 18, 20, 16 + MediaQuery.paddingOf(ctx).bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              momoNetworkLabel(id),
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+      builder: (ctx) => SheetShell(
+        action: SizedBox(
+          height: 48,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF16A34A),
+              foregroundColor: Colors.white,
             ),
-            const SizedBox(height: 4),
-            const Text(
-              'Copy the number, send from your phone, then submit proof on this page.',
-              style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              "I've copied — continue",
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
             ),
-            const SizedBox(height: 14),
-            PaymentDetailsCard(
-              accountNumber: _number(account),
-              accountName: _name(account),
-              network: id,
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF16A34A),
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text(
-                  "I've copied — continue",
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
+        children: [
+          Text(
+            momoNetworkLabel(id),
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Copy the number, send from your phone, then submit proof on this page.',
+            style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+          PaymentDetailsCard(
+            accountNumber: _number(account),
+            accountName: _name(account),
+            network: id,
+          ),
+        ],
       ),
     );
   }
