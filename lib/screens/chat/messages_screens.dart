@@ -13,9 +13,11 @@ import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/image_viewer.dart';
 
 final _timeFmt = DateFormat('h:mm a');
 final _dayFmt = DateFormat('EEE, MMM d');
+final _money = NumberFormat.currency(locale: 'en_GH', symbol: 'GH₵', decimalDigits: 2);
 
 class MessagesTab extends StatefulWidget {
   const MessagesTab({super.key});
@@ -151,9 +153,7 @@ class _MessagesTabState extends State<MessagesTab> {
                 ],
                 const SizedBox(height: 2),
                 Text(
-                  c.latestBody?.isNotEmpty == true
-                      ? c.latestBody!
-                      : 'Start the conversation',
+                  c.preview,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: AppColors.textSecondary),
@@ -345,9 +345,15 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Call setup rows come down the same endpoint; they are not chat messages.
+  List<ChatMessage> get thread => messages.where((m) => !m.isSignalling).toList();
+
+  String? _time(String? iso) => iso == null ? null : _timeLabel(iso);
+
   @override
   Widget build(BuildContext context) {
     final title = conversation?.otherName ?? 'Chat';
+    final thread = this.thread;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -362,18 +368,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-                  if (conversation?.productName != null)
-                    Text(
-                      conversation!.productName!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-                    ),
-                ],
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
               ),
             ),
           ],
@@ -392,37 +391,9 @@ class _ChatScreenState extends State<ChatScreen> {
           : Column(
               children: [
                 if (conversation?.productName != null)
-                  Material(
-                    color: Colors.white,
-                    child: InkWell(
-                      onTap: conversation?.productId != null
-                          ? () => context.push('/product/${conversation!.productId}')
-                          : null,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: const BoxDecoration(
-                          border: Border(bottom: BorderSide(color: AppColors.border)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.shopping_bag_outlined, size: 18, color: AppColors.accent),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'About: ${conversation!.productName}',
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                              ),
-                            ),
-                            if (conversation?.productId != null)
-                              const Icon(Icons.chevron_right, color: AppColors.textMuted),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  _ProductContextCard(conversation: conversation!),
                 Expanded(
-                  child: messages.isEmpty
+                  child: thread.isEmpty
                       ? Center(
                           child: Padding(
                             padding: const EdgeInsets.all(24),
@@ -460,11 +431,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       : ListView.builder(
                           controller: _scroll,
                           padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
-                          itemCount: messages.length,
+                          itemCount: thread.length,
                           itemBuilder: (context, index) {
-                            final m = messages[index];
+                            final m = thread[index];
                             final showDay = index == 0 ||
-                                _dayKey(messages[index - 1].createdAt) != _dayKey(m.createdAt);
+                                _dayKey(thread[index - 1].createdAt) != _dayKey(m.createdAt);
                             return Column(
                               children: [
                                 if (showDay && m.createdAt != null)
@@ -482,6 +453,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                       ),
                                     ),
                                   ),
+                                if (m.isEvent)
+                                  _EventChip(label: m.eventLabel, time: _time(m.createdAt))
+                                else
                                 Align(
                                   alignment: m.mine ? Alignment.centerRight : Alignment.centerLeft,
                                   child: ConstrainedBox(
@@ -496,7 +470,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                               : null,
                                       child: Container(
                                       margin: const EdgeInsets.only(bottom: 8),
-                                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                                      padding: m.isPhoto
+                                          ? const EdgeInsets.all(4)
+                                          : const EdgeInsets.fromLTRB(12, 10, 12, 8),
                                       decoration: BoxDecoration(
                                         color: m.isDeleted
                                             ? Colors.grey.shade200
@@ -518,28 +494,51 @@ class _ChatScreenState extends State<ChatScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.end,
                                         children: [
-                                          Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Text(
-                                              m.isDeleted ? 'Message deleted' : m.body,
-                                              style: TextStyle(
-                                                color: m.isDeleted
-                                                    ? AppColors.textMuted
-                                                    : (m.mine ? Colors.white : AppColors.textPrimary),
-                                                fontStyle: m.isDeleted ? FontStyle.italic : FontStyle.normal,
-                                                height: 1.35,
+                                          if (m.isPhoto) ...[
+                                            _ChatPhoto(
+                                              url: m.imageUrl!,
+                                              caption: m.body.trim(),
+                                            ),
+                                            if (m.body.trim().isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                                                child: Align(
+                                                  alignment: Alignment.centerLeft,
+                                                  child: Text(
+                                                    m.body.trim(),
+                                                    style: TextStyle(
+                                                      color: m.mine ? Colors.white : AppColors.textPrimary,
+                                                      height: 1.35,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ] else
+                                            Align(
+                                              alignment: Alignment.centerLeft,
+                                              child: Text(
+                                                m.isDeleted ? 'Message deleted' : m.body,
+                                                style: TextStyle(
+                                                  color: m.isDeleted
+                                                      ? AppColors.textMuted
+                                                      : (m.mine ? Colors.white : AppColors.textPrimary),
+                                                  fontStyle: m.isDeleted ? FontStyle.italic : FontStyle.normal,
+                                                  height: 1.35,
+                                                ),
                                               ),
                                             ),
-                                          ),
                                           if (m.createdAt != null) ...[
                                             const SizedBox(height: 4),
-                                            Text(
-                                              _timeLabel(m.createdAt!),
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                color: m.isDeleted
-                                                    ? AppColors.textMuted
-                                                    : (m.mine ? Colors.white70 : AppColors.textMuted),
+                                            Padding(
+                                              padding: EdgeInsets.only(right: m.isPhoto ? 6 : 0),
+                                              child: Text(
+                                                _timeLabel(m.createdAt!),
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: m.isDeleted
+                                                      ? AppColors.textMuted
+                                                      : (m.mine ? Colors.white70 : AppColors.textMuted),
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -639,6 +638,168 @@ class _ChatScreenState extends State<ChatScreen> {
     final dt = DateTime.tryParse(iso)?.toLocal();
     if (dt == null) return '';
     return _timeFmt.format(dt);
+  }
+}
+
+/// The product the chat is about: tap to open it on the storefront.
+class _ProductContextCard extends StatelessWidget {
+  const _ProductContextCard({required this.conversation});
+
+  final ConversationModel conversation;
+
+  @override
+  Widget build(BuildContext context) {
+    final slug = conversation.productSlug ?? '';
+    final photo = ApiConfig.resolveMediaUrl(conversation.productImage);
+    final price = conversation.productPrice;
+
+    return Material(
+      color: Colors.white,
+      child: InkWell(
+        onTap: slug.isEmpty ? null : () => context.push('/products/$slug'),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.border)),
+          ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  color: AppColors.background,
+                  child: photo.isEmpty
+                      ? const Icon(Icons.shopping_bag_outlined, size: 18, color: AppColors.accent)
+                      : CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      conversation.productName ?? 'Product',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      price == null ? 'Chatting about this item' : _money.format(price),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: price == null ? FontWeight.w500 : FontWeight.w800,
+                        color: price == null ? AppColors.textSecondary : AppColors.accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (slug.isNotEmpty)
+                const Row(
+                  children: [
+                    Text(
+                      'View',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: AppColors.primary),
+                    ),
+                    Icon(Icons.chevron_right, size: 18, color: AppColors.primary),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Calls and other non-chat events sit in the middle of the thread.
+class _EventChip extends StatelessWidget {
+  const _EventChip({required this.label, this.time});
+
+  final String label;
+  final String? time;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.call_outlined, size: 14, color: AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                time == null ? label : '$label · $time',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatPhoto extends StatelessWidget {
+  const _ChatPhoto({required this.url, required this.caption});
+
+  final String url;
+  final String caption;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = ApiConfig.resolveMediaUrl(url);
+
+    return GestureDetector(
+      onTap: () => showImageViewer(context, urls: [resolved]),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 260, minWidth: 180),
+          child: CachedNetworkImage(
+            imageUrl: resolved,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => Container(
+              width: 180,
+              height: 180,
+              color: AppColors.background,
+              child: const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+            errorWidget: (_, __, ___) => Container(
+              width: 180,
+              height: 120,
+              color: AppColors.background,
+              child: const Center(
+                child: Icon(Icons.broken_image_outlined, color: AppColors.textMuted),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

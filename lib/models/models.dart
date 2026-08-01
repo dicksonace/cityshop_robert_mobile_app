@@ -845,7 +845,11 @@ class ConversationModel {
     this.otherMobile,
     this.productId,
     this.productName,
+    this.productSlug,
+    this.productImage,
+    this.productPrice,
     this.latestBody,
+    this.latestType,
     this.unreadCount = 0,
     this.lastMessageAt,
   });
@@ -858,9 +862,29 @@ class ConversationModel {
   final String? otherMobile;
   final int? productId;
   final String? productName;
+  final String? productSlug;
+  final String? productImage;
+  final double? productPrice;
   final String? latestBody;
+  final String? latestType;
   final int unreadCount;
   final String? lastMessageAt;
+
+  /// What the conversation list shows when the last message carries no text.
+  String get preview {
+    final body = latestBody?.trim() ?? '';
+    if (body.isNotEmpty) return body;
+    switch (latestType) {
+      case 'image':
+        return 'Photo';
+      case 'call_log':
+        return 'Voice call';
+      case null:
+        return 'Start the conversation';
+      default:
+        return 'Start the conversation';
+    }
+  }
 
   factory ConversationModel.fromJson(Map<String, dynamic> json) {
     final other = json['other'];
@@ -877,7 +901,11 @@ class ConversationModel {
       otherMobile: other is Map ? (other['mobile'] as String? ?? other['phone'] as String?) : null,
       productId: product is Map ? product['id'] as int? : null,
       productName: product is Map ? product['name'] as String? : null,
+      productSlug: product is Map ? (product['slug'] as String?)?.trim() : null,
+      productImage: product is Map ? (product['image_url'] as String?)?.trim() : null,
+      productPrice: product is Map ? (product['price'] as num?)?.toDouble() : null,
       latestBody: latest is Map ? latest['body'] as String? : null,
+      latestType: latest is Map ? latest['type'] as String? : null,
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
       lastMessageAt: json['last_message_at'] as String?,
     );
@@ -892,6 +920,7 @@ class ChatMessage {
     this.type = 'text',
     this.createdAt,
     this.imageUrl,
+    this.callLog,
     this.isDeleted = false,
     this.canDelete = false,
   });
@@ -902,8 +931,35 @@ class ChatMessage {
   final String type;
   final String? createdAt;
   final String? imageUrl;
+  final Map<String, dynamic>? callLog;
   final bool isDeleted;
   final bool canDelete;
+
+  /// Call setup rows share the message table but are not part of the chat.
+  static const signallingTypes = {'call_offer', 'call_answer', 'call_ice', 'call_end'};
+
+  bool get isSignalling => signallingTypes.contains(type);
+
+  bool get isPhoto => type == 'image' && (imageUrl ?? '').isNotEmpty && !isDeleted;
+
+  bool get isEvent => type == 'call_log' || type == 'system';
+
+  /// "Voice call · 1m 20s", "Missed call", ...
+  String get eventLabel {
+    if (type != 'call_log') return body.isEmpty ? 'Update' : body;
+
+    final status = (callLog?['status'] as String? ?? '').toLowerCase();
+    final seconds = (callLog?['duration_seconds'] as num?)?.toInt() ?? 0;
+    if (status == 'missed' || status == 'declined' || status == 'unanswered') {
+      return status == 'declined' ? 'Call declined' : 'Missed call';
+    }
+    if (seconds <= 0) return 'Voice call';
+
+    final minutes = seconds ~/ 60;
+    final rest = seconds % 60;
+    final duration = minutes > 0 ? '${minutes}m ${rest}s' : '${rest}s';
+    return 'Voice call · $duration';
+  }
 
   factory ChatMessage.fromJson(Map<String, dynamic> json, {required int myUserId}) {
     final meta = json['metadata'];
@@ -917,7 +973,11 @@ class ChatMessage {
       createdAt: json['created_at'] as String?,
       imageUrl: deleted
           ? null
-          : (meta is Map ? meta['image_url'] as String? : json['image_url'] as String?),
+          : ((meta is Map ? meta['image_url'] as String? : null) ?? json['image_url'] as String?),
+      callLog: () {
+        final log = (meta is Map ? meta['call_log'] : null) ?? json['call_log'];
+        return log is Map ? Map<String, dynamic>.from(log) : null;
+      }(),
       isDeleted: deleted,
       canDelete: json['can_delete'] == true,
     );
@@ -936,6 +996,7 @@ class ChatMessage {
       type: type,
       createdAt: createdAt,
       imageUrl: imageUrl ?? this.imageUrl,
+      callLog: callLog,
       isDeleted: isDeleted ?? this.isDeleted,
       canDelete: canDelete ?? this.canDelete,
     );
