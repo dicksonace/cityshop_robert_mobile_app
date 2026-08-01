@@ -415,6 +415,17 @@ class WalletInfo {
   final bool paystackConfigured;
   final bool manualTopUpEnabled;
 
+  WalletInfo copyWith({double? availableBalance, double? pendingBalance}) {
+    return WalletInfo(
+      availableBalance: availableBalance ?? this.availableBalance,
+      pendingBalance: pendingBalance ?? this.pendingBalance,
+      totalEarnings: totalEarnings,
+      withdrawnAmount: withdrawnAmount,
+      paystackConfigured: paystackConfigured,
+      manualTopUpEnabled: manualTopUpEnabled,
+    );
+  }
+
   factory WalletInfo.fromJson(Map<String, dynamic> json) {
     return WalletInfo(
       availableBalance: (json['available_balance'] as num?)?.toDouble() ?? 0,
@@ -493,6 +504,93 @@ class WalletTransactionPage {
           : const [],
       currentPage: meta is Map ? (meta['current_page'] as num?)?.toInt() ?? 1 : 1,
       lastPage: meta is Map ? (meta['last_page'] as num?)?.toInt() ?? 1 : 1,
+    );
+  }
+}
+
+class WithdrawalItem {
+  const WithdrawalItem({
+    required this.id,
+    required this.amount,
+    required this.momoNumber,
+    required this.accountName,
+    required this.network,
+    required this.networkLabel,
+    required this.status,
+    required this.statusLabel,
+    this.rejectionReason,
+    this.createdAt,
+    this.processedAt,
+  });
+
+  final int id;
+  final double amount;
+  final String momoNumber;
+  final String accountName;
+  final String network;
+  final String networkLabel;
+  final String status;
+  final String statusLabel;
+  final String? rejectionReason;
+  final String? createdAt;
+  final String? processedAt;
+
+  bool get isOpen => status == 'pending' || status == 'processing';
+  bool get isPaid => status == 'paid';
+  bool get isRejected => status == 'rejected';
+
+  factory WithdrawalItem.fromJson(Map<String, dynamic> json) {
+    return WithdrawalItem(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      momoNumber: json['momo_number'] as String? ?? '',
+      accountName: json['account_name'] as String? ?? '',
+      network: json['network'] as String? ?? '',
+      networkLabel: json['network_label'] as String? ?? '',
+      status: json['status'] as String? ?? 'pending',
+      statusLabel: json['status_label'] as String? ?? 'Processing',
+      rejectionReason: json['rejection_reason'] as String?,
+      createdAt: json['created_at'] as String?,
+      processedAt: json['processed_at'] as String?,
+    );
+  }
+}
+
+/// Withdrawal history plus the limits the withdraw screen enforces.
+class WithdrawalOverview {
+  const WithdrawalOverview({
+    this.items = const [],
+    this.availableBalance = 0,
+    this.minimum = 10,
+    this.hasPending = false,
+    this.defaultMomoNumber,
+    this.defaultAccountName,
+  });
+
+  final List<WithdrawalItem> items;
+  final double availableBalance;
+  final double minimum;
+  final bool hasPending;
+  final String? defaultMomoNumber;
+  final String? defaultAccountName;
+
+  bool get canWithdraw => !hasPending && availableBalance >= minimum;
+
+  factory WithdrawalOverview.fromJson(Map<String, dynamic> json) {
+    final data = json['data'];
+    final summary = json['summary'] is Map ? Map<String, dynamic>.from(json['summary'] as Map) : const {};
+    return WithdrawalOverview(
+      items: data is List
+          ? data
+              .whereType<Map>()
+              .map((e) => WithdrawalItem.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      availableBalance: (summary['available_balance'] as num?)?.toDouble() ?? 0,
+      minimum: (summary['minimum'] as num?)?.toDouble() ?? 10,
+      hasPending: summary['has_pending'] == true,
+      defaultMomoNumber: summary['default_momo_number'] as String?,
+      defaultAccountName: summary['default_account_name'] as String?,
     );
   }
 }

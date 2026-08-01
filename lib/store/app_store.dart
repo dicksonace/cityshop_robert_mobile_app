@@ -549,6 +549,39 @@ class AppStore extends ChangeNotifier {
     return WalletTransactionPage.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
+  Future<WithdrawalOverview> loadWithdrawals() async {
+    final res = await _api.get('/wallet/withdrawals');
+    return WithdrawalOverview.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  /// Requests a MoMo payout. The balance drops straight away, so refresh the
+  /// wallet the screens read from.
+  Future<WithdrawalItem> requestWithdrawal({
+    required double amount,
+    required String momoNumber,
+    required String accountName,
+    required String network,
+  }) async {
+    final res = await _api.post('/wallet/withdraw', data: {
+      'amount': amount,
+      'momo_number': momoNumber,
+      'account_name': accountName,
+      'network': network,
+    });
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final walletJson = body['wallet'];
+    if (walletJson is Map && wallet != null) {
+      wallet = wallet!.copyWith(
+        availableBalance: (walletJson['available_balance'] as num?)?.toDouble(),
+        pendingBalance: (walletJson['pending_balance'] as num?)?.toDouble(),
+      );
+      notifyListeners();
+    } else {
+      await loadWallet();
+    }
+    return WithdrawalItem.fromJson(Map<String, dynamic>.from(body['data'] as Map));
+  }
+
   Future<Map<String, dynamic>> loadManualFunding() async {
     final res = await _api.get('/wallet/manual-funding');
     return Map<String, dynamic>.from(res.data as Map);

@@ -228,6 +228,13 @@ class _WalletTabState extends State<WalletTab> {
     if (mounted) await _load();
   }
 
+  Future<void> _openWithdraw() async {
+    await context.push('/wallet/withdraw');
+    if (!mounted) return;
+    await _load();
+    _loadTransactions(reset: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
@@ -284,16 +291,28 @@ class _WalletTabState extends State<WalletTab> {
                   style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Pending: ${_money.format(wallet?.pendingBalance ?? 0)}',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                  ),
+                Row(
+                  children: [
+                    // Flexible so a long pending figure never squeezes out the
+                    // withdraw button on narrow phones.
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Pending: ${_money.format(wallet?.pendingBalance ?? 0)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _WithdrawButton(onTap: _openWithdraw),
+                  ],
                 ),
               ],
             ),
@@ -517,6 +536,42 @@ class _BalanceCell extends StatelessWidget {
 }
 
 /// Links the wallet to the manual deposit page, matching the web prompt card.
+/// Sits on the balance card so cashing out is one tap from the wallet.
+class _WithdrawButton extends StatelessWidget {
+  const _WithdrawButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          child: Row(
+            children: [
+              Icon(Icons.arrow_outward_rounded, size: 17, color: AppColors.accent),
+              SizedBox(width: 6),
+              Text(
+                'Withdraw',
+                style: TextStyle(
+                  color: AppColors.accent,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ManualDepositPrompt extends StatelessWidget {
   const _ManualDepositPrompt({required this.onTap});
 
@@ -580,12 +635,16 @@ class _ManualDepositPrompt extends StatelessWidget {
                     const SizedBox(height: 8),
                     Row(
                       children: const [
-                        Text(
-                          'Use manual payment',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                            color: Color(0xFF0369A1),
+                        Flexible(
+                          child: Text(
+                            'Use manual payment',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: Color(0xFF0369A1),
+                            ),
                           ),
                         ),
                         SizedBox(width: 4),
