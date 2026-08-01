@@ -704,7 +704,8 @@ class OrderModel {
     this.sellerPaymentMethod,
     this.directPaymentReference,
     this.directPaymentProofPath,
-    this.directPaymentSubmittedAt,
+    this.directPaymentSubmitted = false,
+    this.directPaymentConfirmedAt,
     this.directPaymentRejectionReason,
     this.canRequestRefund = false,
     this.items = const [],
@@ -738,7 +739,8 @@ class OrderModel {
   final Map<String, dynamic>? sellerPaymentMethod;
   final String? directPaymentReference;
   final String? directPaymentProofPath;
-  final String? directPaymentSubmittedAt;
+  final bool directPaymentSubmitted;
+  final String? directPaymentConfirmedAt;
   final String? directPaymentRejectionReason;
   final bool canRequestRefund;
   final List<OrderItemModel> items;
@@ -759,6 +761,20 @@ class OrderModel {
     if (pay == 'paid') return false;
     return true;
   }
+
+  bool get directPaymentRejected =>
+      isDirectPayment &&
+      (paymentStatus ?? '').toLowerCase() != 'paid' &&
+      (directPaymentRejectionReason ?? '').trim().isNotEmpty;
+
+  /// Buyer has sent the money to the seller but the seller has not confirmed it
+  /// yet, so the payment status is still pending while the order moves along.
+  bool get directPaymentUnderReview =>
+      isDirectPayment &&
+      (paymentStatus ?? '').toLowerCase() == 'pending' &&
+      (status ?? '').toLowerCase() != 'cancelled' &&
+      directPaymentSubmitted &&
+      !directPaymentRejected;
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     final seller = json['seller'];
@@ -803,7 +819,10 @@ class OrderModel {
       sellerPaymentMethod: method is Map ? Map<String, dynamic>.from(method) : null,
       directPaymentReference: json['direct_payment_reference'] as String?,
       directPaymentProofPath: json['direct_payment_proof_path'] as String?,
-      directPaymentSubmittedAt: json['direct_payment_submitted_at'] as String?,
+      directPaymentSubmitted: json['direct_payment_submitted'] == true ||
+          (json['direct_payment_reference'] as String? ?? '').trim().isNotEmpty ||
+          (json['direct_payment_proof_path'] as String? ?? '').trim().isNotEmpty,
+      directPaymentConfirmedAt: json['direct_payment_confirmed_at'] as String?,
       directPaymentRejectionReason: json['direct_payment_rejection_reason'] as String?,
       canRequestRefund: json['can_request_refund'] == true,
       items: itemsJson is List

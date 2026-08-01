@@ -741,9 +741,12 @@ class _OrdersTabState extends State<OrdersTab> {
       case 'all':
         return true;
       case 'unpaid':
-        return status != 'cancelled' && pay == 'pending' && method != 'cash';
+        return status != 'cancelled' &&
+            pay == 'pending' &&
+            method != 'cash' &&
+            !order.directPaymentUnderReview;
       case 'processing':
-        return pay == 'paid' &&
+        return (pay == 'paid' || order.directPaymentUnderReview) &&
             const {'pending', 'processing', 'packed', 'call_confirmed'}.contains(status);
       case 'delivery':
         return status == 'shipped' || itemStatuses.contains('shipped');
@@ -774,7 +777,10 @@ class _OrdersTabState extends State<OrdersTab> {
     final pay = (order.paymentStatus ?? '').toLowerCase();
     final method = (order.paymentMethod ?? '').toLowerCase();
     if (status == 'cancelled') return 'Order closed';
-    if (pay == 'pending' && method != 'cash') return 'Awaiting payment';
+    if (order.directPaymentRejected) return 'Payment declined';
+    if (pay == 'pending' && method != 'cash' && !order.directPaymentUnderReview) {
+      return 'Awaiting payment';
+    }
     if (status == 'delivered') return 'Order completed';
     if (status == 'awaiting_confirmation') return 'Confirm delivery';
     if (status == 'shipped') return 'Out for delivery';
@@ -798,7 +804,15 @@ class _OrdersTabState extends State<OrdersTab> {
     final pay = (order.paymentStatus ?? '').toLowerCase();
     final method = (order.paymentMethod ?? '').toLowerCase();
     if (status == 'cancelled') return 'Order cancelled';
-    if (pay == 'pending' && method != 'cash') return 'Waiting for payment';
+    if (order.directPaymentRejected) {
+      return 'Payment not confirmed · tap to send it again';
+    }
+    if (pay == 'pending' && method != 'cash' && !order.directPaymentUnderReview) {
+      return 'Waiting for payment';
+    }
+    if (order.directPaymentUnderReview && (status == 'pending' || status == 'processing')) {
+      return 'Payment sent · waiting for the seller to confirm';
+    }
     if (status == 'shipped') return 'Out for delivery';
     if (status == 'awaiting_confirmation') {
       return 'Delivered — tap Confirm delivery when you receive your item';
@@ -1730,8 +1744,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     final pay = (o?.paymentStatus ?? '').toLowerCase();
     final method = (o?.paymentMethod ?? o?.paymentChannel ?? 'momo').toLowerCase();
     final paid = pay == 'paid';
+    final underReview = o?.directPaymentUnderReview ?? false;
     final step = _paidStepIndex(status);
-    final showProgress = paid || method == 'cash';
+    final showProgress = paid || underReview || method == 'cash';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -1816,7 +1831,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
                                       _PillBadge(
-                                        label: paid ? 'PAID' : _prettyStatus(o.paymentStatus).toUpperCase(),
+                                        label: paid
+                                            ? 'PAID'
+                                            : underReview
+                                                ? 'PROCESSING'
+                                                : _prettyStatus(o.paymentStatus).toUpperCase(),
                                         color: paid ? AppColors.emerald : AppColors.accent,
                                       ),
                                       if (status != 'cancelled') ...[
@@ -1881,6 +1900,23 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                     : (o.paymentMethod ?? o.paymentChannel ?? 'Mobile Money'),
                                 style: const TextStyle(color: AppColors.textSecondary),
                               ),
+                              if (underReview) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Payment sent · waiting for the seller to confirm'
+                                  '${(o.directPaymentReference ?? '').isNotEmpty ? ' (ref ${o.directPaymentReference})' : ''}',
+                                  style: const TextStyle(
+                                    color: AppColors.primaryDark,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ] else if (o.directPaymentRejected) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Payment not confirmed: ${o.directPaymentRejectionReason}',
+                                  style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600),
+                                ),
+                              ],
                               const SizedBox(height: 16),
                               Container(
                                 padding: const EdgeInsets.all(12),
