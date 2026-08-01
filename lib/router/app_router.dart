@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../screens/account/account_screens.dart';
+import '../screens/account/manual_deposit_screen.dart';
 import '../screens/account/notifications_screen.dart';
 import '../screens/account/wallet_orders_screens.dart';
 import '../screens/auth/login_screen.dart';
@@ -60,6 +61,7 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
       GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
       GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
+      GoRoute(path: '/wallet/manual-deposit', builder: (_, __) => const ManualDepositScreen()),
       GoRoute(path: '/addresses', builder: (_, __) => const AddressesScreen()),
       GoRoute(path: '/profile/edit', builder: (_, __) => const ProfileEditScreen()),
       GoRoute(path: '/profile/password', builder: (_, __) => const ChangePasswordScreen()),

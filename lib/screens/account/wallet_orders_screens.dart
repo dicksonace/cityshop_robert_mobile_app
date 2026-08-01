@@ -2,7 +2,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -93,14 +92,6 @@ class _WalletTabState extends State<WalletTab> {
     } finally {
       if (mounted) setState(() => loadingMore = false);
     }
-  }
-
-  Future<void> _copy(String label, String value) async {
-    await Clipboard.setData(ClipboardData(text: value));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label copied')),
-    );
   }
 
   Future<void> _paystackTopUp() async {
@@ -259,239 +250,10 @@ class _WalletTabState extends State<WalletTab> {
     }
   }
 
-  Future<void> _topUp() async {
-    final amountCtrl = TextEditingController();
-    final refCtrl = TextEditingController();
-    String network = 'mtn';
-    XFile? proof;
-
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (ctx) {
-        final bottomInset = MediaQuery.viewInsetsOf(ctx).bottom;
-        final maxHeight = MediaQuery.sizeOf(ctx).height * 0.88;
-        return StatefulBuilder(
-          builder: (ctx, setModal) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottomInset),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxHeight),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 10),
-                    Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.border,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const Text(
-                              'Top up wallet',
-                              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Pay into a CityShop MoMo account, then upload your proof here.',
-                              style: TextStyle(color: AppColors.textSecondary, height: 1.35),
-                            ),
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: amountCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(
-                                labelText: 'Amount (GH₵)',
-                                prefixText: 'GH₵ ',
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (final amt in const [20, 50, 100, 200])
-                                  ActionChip(
-                                    label: Text('GH₵$amt'),
-                                    onPressed: () => setModal(() {
-                                      amountCtrl.text = '$amt';
-                                    }),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<String>(
-                              initialValue: network,
-                              decoration: const InputDecoration(labelText: 'Network used'),
-                              items: const [
-                                DropdownMenuItem(value: 'mtn', child: Text('MTN')),
-                                DropdownMenuItem(value: 'telecel', child: Text('Telecel')),
-                                DropdownMenuItem(value: 'airteltigo', child: Text('AirtelTigo')),
-                              ],
-                              onChanged: (v) => setModal(() => network = v ?? 'mtn'),
-                            ),
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: refCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Payment reference',
-                                hintText: 'MoMo transaction ID',
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            Material(
-                              color: proof == null ? AppColors.ringOrange : const Color(0xFFECFDF5),
-                              borderRadius: BorderRadius.circular(14),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(14),
-                                onTap: () async {
-                                  final file = await ImagePicker().pickImage(
-                                    source: ImageSource.gallery,
-                                    imageQuality: 85,
-                                  );
-                                  if (file != null) setModal(() => proof = file);
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: proof == null ? const Color(0xFFFDBA74) : AppColors.emerald,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        proof == null ? Icons.add_photo_alternate_outlined : Icons.check_circle,
-                                        color: proof == null ? AppColors.primary : AppColors.emerald,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              proof == null ? 'Upload payment proof *' : 'Proof selected',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w800,
-                                                color: proof == null ? AppColors.textPrimary : AppColors.emerald,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              proof == null
-                                                  ? 'Screenshot of MoMo confirmation'
-                                                  : (proof!.name),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                color: AppColors.textSecondary,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const Icon(Icons.chevron_right, color: AppColors.textMuted),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text(
-                              'Submit payment',
-                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    final amountText = amountCtrl.text.trim();
-    final reference = refCtrl.text.trim();
-    final selectedNetwork = network;
-    final selectedProof = proof;
-    amountCtrl.dispose();
-    refCtrl.dispose();
-
-    if (ok != true || !mounted) return;
-    final amount = double.tryParse(amountText);
-    if (amount == null || amount < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid amount (min GH₵10)')),
-      );
-      return;
-    }
-    if (selectedProof == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payment proof is required')),
-      );
-      return;
-    }
-
-    try {
-      await context.read<AppStore>().submitWalletTopUp(
-            amount: amount,
-            network: selectedNetwork,
-            proofPath: selectedProof.path,
-            paymentReference: reference,
-          );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Top-up submitted for verification')),
-      );
-      _load();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    }
-  }
-
-  Color _networkColor(String network) {
-    switch (network.toLowerCase()) {
-      case 'mtn':
-        return const Color(0xFFFFCC00);
-      case 'telecel':
-        return const Color(0xFFE60000);
-      case 'airteltigo':
-        return const Color(0xFFED1C24);
-      default:
-        return AppColors.accent;
-    }
+  /// Manual deposit lives on its own page, mirroring the web flow.
+  Future<void> _openManualDeposit() async {
+    await context.push('/wallet/manual-deposit');
+    if (mounted) await _load();
   }
 
   @override
@@ -517,9 +279,6 @@ class _WalletTabState extends State<WalletTab> {
     final enabled = funding?['enabled'] == true || wallet?.manualTopUpEnabled == true;
     final paystackConfigured =
         wallet?.paystackConfigured == true || funding?['paystack_configured'] == true;
-    final accounts = (funding?['accounts'] is List)
-        ? (funding!['accounts'] as List).whereType<Map>().toList()
-        : <Map>[];
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -605,64 +364,11 @@ class _WalletTabState extends State<WalletTab> {
                 ],
                 if (enabled) ...[
                   const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'MANUAL TOP-UP',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
-                            color: Color(0xFF1D4ED8),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Paying a large amount? Send money to CityShop MoMo or bank, then submit proof — admin credits your wallet.',
-                          style: TextStyle(fontSize: 12, height: 1.35, color: AppColors.textSecondary),
-                        ),
-                        TextButton(
-                          onPressed: _topUp,
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            foregroundColor: AppColors.primary,
-                          ),
-                          child: const Text('Use manual payment ›'),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _ManualDepositPrompt(onTap: _openManualDeposit),
                 ],
               ],
             ),
           ),
-          if (enabled) ...[
-            const SizedBox(height: 18),
-            const Text('Pay into these accounts', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-            const SizedBox(height: 6),
-            Text(
-              funding?['instructions']?.toString() ??
-                  'Send payment to one of the accounts below, then submit your proof and reference so we can credit your wallet.',
-              style: const TextStyle(color: AppColors.textSecondary, height: 1.4),
-            ),
-            const SizedBox(height: 12),
-            for (final acc in accounts)
-              _FundingAccountCard(
-                network: '${acc['network'] ?? acc['name'] ?? 'Account'}',
-                number: '${acc['number'] ?? acc['account_number'] ?? ''}',
-                color: _networkColor('${acc['network'] ?? ''}'),
-                onCopy: () {
-                  final number = '${acc['number'] ?? acc['account_number'] ?? ''}';
-                  if (number.isNotEmpty) _copy('Number', number);
-                },
-              ),
-          ],
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(16),
@@ -838,61 +544,88 @@ class _BalanceCell extends StatelessWidget {
   }
 }
 
-class _FundingAccountCard extends StatelessWidget {
-  const _FundingAccountCard({
-    required this.network,
-    required this.number,
-    required this.color,
-    required this.onCopy,
-  });
+/// Links the wallet to the manual deposit page, matching the web prompt card.
+class _ManualDepositPrompt extends StatelessWidget {
+  const _ManualDepositPrompt({required this.onTap});
 
-  final String network;
-  final String number;
-  final Color color;
-  final VoidCallback onCopy;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              network.isNotEmpty ? network[0].toUpperCase() : 'M',
-              style: TextStyle(fontWeight: FontWeight.w900, color: color == const Color(0xFFFFCC00) ? Colors.black87 : color),
-            ),
+    return Material(
+      color: const Color(0xFFF0F9FF),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFBAE6FD)),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(network.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                Text(number, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
-              ],
-            ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0284C7), Color(0xFF0891B2)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.account_balance, color: Colors.white, size: 21),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'MANUAL TOP-UP',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                        color: Color(0xFF0284C7),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Paying a large amount?',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                    ),
+                    const SizedBox(height: 3),
+                    const Text(
+                      'Send money to CityShop MoMo or bank, then submit proof — admin credits your wallet.',
+                      style: TextStyle(fontSize: 12.5, height: 1.35, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: const [
+                        Text(
+                          'Use manual payment',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                            color: Color(0xFF0369A1),
+                          ),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(Icons.arrow_forward, size: 14, color: Color(0xFF0369A1)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: 'Copy number',
-            onPressed: onCopy,
-            icon: const Icon(Icons.copy_rounded, color: AppColors.accent),
-          ),
-        ],
+        ),
       ),
     );
   }
