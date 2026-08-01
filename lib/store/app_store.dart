@@ -428,20 +428,34 @@ class AppStore extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Flips the heart before the request goes out so the tap feels instant, then
+  /// settles on whatever the server says (or rolls back if it never answers).
   Future<bool> toggleWishlist(int productId) async {
-    final res = await _api.post('/wishlist/toggle', data: {'product_id': productId});
-    final wishlisted = res.data is Map ? res.data['wishlisted'] as bool? ?? false : false;
-    if (wishlisted) {
+    final was = wishlistProductIds.contains(productId);
+    _setWishlisted(productId, !was);
+
+    try {
+      final res = await _api.post('/wishlist/toggle', data: {'product_id': productId});
+      final wishlisted = res.data is Map ? res.data['wishlisted'] as bool? ?? !was : !was;
+      if (wishlisted == was) _setWishlisted(productId, wishlisted);
+      if (wishlisted || wishlist.isEmpty) {
+        await loadWishlist();
+      }
+      return wishlisted;
+    } catch (_) {
+      _setWishlisted(productId, was);
+      rethrow;
+    }
+  }
+
+  void _setWishlisted(int productId, bool on) {
+    if (on) {
       wishlistProductIds = {...wishlistProductIds, productId};
     } else {
       wishlistProductIds = {...wishlistProductIds}..remove(productId);
       wishlist = wishlist.where((w) => w.productId != productId).toList();
     }
     notifyListeners();
-    if (wishlisted || wishlist.isEmpty) {
-      await loadWishlist();
-    }
-    return wishlisted;
   }
 
   Future<void> loadOrders() async {

@@ -35,6 +35,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   bool wishBusy = false;
   int qty = 1;
 
+  /// Whether this buyer's like was already counted in the fetched total, so the
+  /// displayed count can follow the heart without refetching the product.
+  bool likeCounted = false;
+
   @override
   void initState() {
     super.initState();
@@ -47,12 +51,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       error = null;
     });
     try {
-      final detail = await context.read<AppStore>().fetchProductDetail(widget.slug);
+      final store = context.read<AppStore>();
+      final detail = await store.fetchProductDetail(widget.slug);
       if (!mounted) return;
       setState(() {
         product = detail.product;
         related = detail.related;
         reviews = detail.reviews;
+        likeCounted = store.wishlistProductIds.contains(detail.product.id);
         loading = false;
       });
     } catch (e) {
@@ -196,6 +202,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   related: related,
                   reviews: reviews,
                   qty: qty,
+                  likeCount: p.wishlistAdds + (wishlisted ? 1 : 0) - (likeCounted ? 1 : 0),
                   onQtyChanged: (q) => setState(() => qty = q),
                   onMessage: _messageSeller,
                 ),
@@ -236,6 +243,7 @@ class _Body extends StatelessWidget {
     required this.related,
     required this.reviews,
     required this.qty,
+    required this.likeCount,
     required this.onQtyChanged,
     required this.onMessage,
   });
@@ -244,6 +252,7 @@ class _Body extends StatelessWidget {
   final List<Product> related;
   final List<Map<String, dynamic>> reviews;
   final int qty;
+  final int likeCount;
   final ValueChanged<int> onQtyChanged;
   final VoidCallback onMessage;
 
@@ -326,7 +335,7 @@ class _Body extends StatelessWidget {
                   const SizedBox(width: 10),
                   Icon(Icons.favorite_border, size: 16, color: Colors.grey.shade600),
                   const SizedBox(width: 4),
-                  Text('${product.wishlistAdds}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  Text('$likeCount', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                 ],
               ),
               const SizedBox(height: 14),
