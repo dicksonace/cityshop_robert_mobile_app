@@ -523,6 +523,16 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// One page of the wallet ledger. Paging stays with the screen so the list
+  /// can grow without holding every page in the store.
+  Future<WalletTransactionPage> fetchWalletTransactions({int page = 1, int perPage = 20}) async {
+    final res = await _api.get('/wallet/transactions', query: {
+      'page': page,
+      'per_page': perPage,
+    });
+    return WalletTransactionPage.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
   Future<Map<String, dynamic>> loadManualFunding() async {
     final res = await _api.get('/wallet/manual-funding');
     return Map<String, dynamic>.from(res.data as Map);

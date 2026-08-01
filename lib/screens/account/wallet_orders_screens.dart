@@ -36,6 +36,12 @@ class _WalletTabState extends State<WalletTab> {
   String? error;
   Map<String, dynamic>? funding;
 
+  List<WalletTransactionItem> transactions = [];
+  int transactionsPage = 0;
+  int transactionsLastPage = 1;
+  bool loadingMore = false;
+  String? transactionsError;
+
   @override
   void initState() {
     super.initState();
@@ -55,12 +61,37 @@ class _WalletTabState extends State<WalletTab> {
     try {
       await store.loadWallet();
       funding = await store.loadManualFunding();
+      await _loadTransactions(reset: true);
     } on ApiException catch (e) {
       error = e.message;
     } catch (e) {
       error = e.toString();
     } finally {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _loadTransactions({bool reset = false}) async {
+    if (loadingMore) return;
+    final nextPage = reset ? 1 : transactionsPage + 1;
+    setState(() {
+      loadingMore = true;
+      transactionsError = null;
+    });
+    try {
+      final page = await context.read<AppStore>().fetchWalletTransactions(page: nextPage);
+      if (!mounted) return;
+      setState(() {
+        transactions = reset ? page.items : [...transactions, ...page.items];
+        transactionsPage = page.currentPage;
+        transactionsLastPage = page.lastPage;
+      });
+    } on ApiException catch (e) {
+      if (mounted) setState(() => transactionsError = e.message);
+    } catch (e) {
+      if (mounted) setState(() => transactionsError = e.toString());
+    } finally {
+      if (mounted) setState(() => loadingMore = false);
     }
   }
 
@@ -632,8 +663,177 @@ class _WalletTabState extends State<WalletTab> {
                 },
               ),
           ],
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Transaction History', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                if (transactionsError != null) ...[
+                  const SizedBox(height: 10),
+                  Text(transactionsError!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
+                  TextButton(
+                    onPressed: () => _loadTransactions(reset: true),
+                    child: const Text('Retry'),
+                  ),
+                ] else if (transactions.isEmpty && !loadingMore) ...[
+                  const SizedBox(height: 10),
+                  const Text(
+                    'No transactions yet.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                ] else ...[
+                  for (final tx in transactions) _WalletTransactionRow(tx: tx),
+                  if (transactionsPage < transactionsLastPage)
+                    TextButton(
+                      onPressed: loadingMore ? null : () => _loadTransactions(),
+                      child: Text(loadingMore ? 'Loading…' : 'Load more'),
+                    ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _WalletTransactionRow extends StatelessWidget {
+  const _WalletTransactionRow({required this.tx});
+
+  final WalletTransactionItem tx;
+
+  static final _stamp = DateFormat('d MMM yyyy, h:mm a');
+
+  String get _when {
+    final raw = tx.createdAt;
+    if (raw == null || raw.isEmpty) return '';
+    try {
+      return _stamp.format(DateTime.parse(raw).toLocal());
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final credit = tx.isCredit;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            tx.typeLabel,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        if ((tx.reference ?? '').isNotEmpty)
+                          Text(
+                            tx.reference!,
+                            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                          ),
+                      ],
+                    ),
+                    if (tx.description.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        tx.description,
+                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      ),
+                    ],
+                    if (_when.isNotEmpty)
+                      Text(_when, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '${credit ? '+' : ''}${_money.format(tx.amount)}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: credit ? const Color(0xFF16A34A) : AppColors.danger,
+                ),
+              ),
+            ],
+          ),
+          if (tx.balanceBefore != null || tx.balanceAfter != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _BalanceCell(label: 'Before balance', value: tx.balanceBefore),
+                  ),
+                  Expanded(
+                    child: _BalanceCell(
+                      label: 'After balance',
+                      value: tx.balanceAfter,
+                      alignEnd: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BalanceCell extends StatelessWidget {
+  const _BalanceCell({required this.label, required this.value, this.alignEnd = false});
+
+  final String label;
+  final double? value;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        Text(
+          _money.format(value ?? 0),
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+      ],
     );
   }
 }

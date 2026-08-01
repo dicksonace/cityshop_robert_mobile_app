@@ -427,6 +427,76 @@ class WalletInfo {
   }
 }
 
+class WalletTransactionItem {
+  const WalletTransactionItem({
+    required this.id,
+    required this.type,
+    required this.typeLabel,
+    required this.amount,
+    required this.description,
+    this.reference,
+    this.createdAt,
+    this.balanceBefore,
+    this.balanceAfter,
+  });
+
+  final int id;
+  final String type;
+  final String typeLabel;
+  final double amount;
+  final String description;
+  final String? reference;
+  final String? createdAt;
+  final double? balanceBefore;
+  final double? balanceAfter;
+
+  bool get isCredit => amount > 0;
+
+  factory WalletTransactionItem.fromJson(Map<String, dynamic> json) {
+    final type = json['type'] as String? ?? '';
+    return WalletTransactionItem(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      type: type,
+      typeLabel: json['type_label'] as String? ?? type.replaceAll('_', ' '),
+      amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      description: json['description'] as String? ?? '',
+      reference: json['reference'] as String?,
+      createdAt: json['created_at'] as String?,
+      balanceBefore: (json['balance_before'] as num?)?.toDouble(),
+      balanceAfter: (json['balance_after'] as num?)?.toDouble(),
+    );
+  }
+}
+
+class WalletTransactionPage {
+  const WalletTransactionPage({
+    required this.items,
+    required this.currentPage,
+    required this.lastPage,
+  });
+
+  final List<WalletTransactionItem> items;
+  final int currentPage;
+  final int lastPage;
+
+  bool get hasMore => currentPage < lastPage;
+
+  factory WalletTransactionPage.fromJson(Map<String, dynamic> json) {
+    final data = json['data'];
+    final meta = json['meta'];
+    return WalletTransactionPage(
+      items: data is List
+          ? data
+              .whereType<Map>()
+              .map((e) => WalletTransactionItem.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      currentPage: meta is Map ? (meta['current_page'] as num?)?.toInt() ?? 1 : 1,
+      lastPage: meta is Map ? (meta['last_page'] as num?)?.toInt() ?? 1 : 1,
+    );
+  }
+}
+
 class OrderItemModel {
   const OrderItemModel({
     required this.id,
