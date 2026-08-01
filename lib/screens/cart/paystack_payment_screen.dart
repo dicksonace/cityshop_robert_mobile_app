@@ -122,12 +122,6 @@ class _PaystackPaymentScreenState extends State<PaystackPaymentScreen> {
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(false),
         ),
-        actions: [
-          TextButton(
-            onPressed: _verifying ? null : () => _verify(widget.reference),
-            child: const Text('I paid'),
-          ),
-        ],
       ),
       body: Stack(
         children: [

@@ -218,8 +218,10 @@ class _WalletTabState extends State<WalletTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Funds added to your wallet')),
       );
-      await _load();
     }
+    // Reload either way: Paystack's webhook may have credited the top-up even
+    // when the in-app verification did not run.
+    await _load();
   }
 
   /// Manual deposit lives on its own page, mirroring the web flow.

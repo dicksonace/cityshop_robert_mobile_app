@@ -85,7 +85,8 @@ class _FakeApiClient extends ApiClient {
 
   @override
   Future<Response<dynamic>> post(String path, {Object? data}) async {
-    posts.add((path, Map<String, dynamic>.from(data as Map)));
+    final body = Map<String, dynamic>.from(data as Map);
+    posts.add((path, body));
 
     return Response(
       requestOptions: RequestOptions(path: path),
@@ -94,10 +95,10 @@ class _FakeApiClient extends ApiClient {
         'message': 'Withdrawal request submitted.',
         'data': {
           'id': 11,
-          'amount': (data as Map)['amount'],
-          'momo_number': data['momo_number'],
-          'account_name': data['account_name'],
-          'network': data['network'],
+          'amount': body['amount'],
+          'momo_number': body['momo_number'],
+          'account_name': body['account_name'],
+          'network': body['network'],
           'network_label': 'MTN Mobile Money',
           'status': 'pending',
           'status_label': 'Processing',
