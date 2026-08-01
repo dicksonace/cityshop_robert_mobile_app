@@ -752,11 +752,11 @@ class _OrdersTabState extends State<OrdersTab> {
         return status == 'shipped' || itemStatuses.contains('shipped');
       case 'confirm':
         return status == 'awaiting_confirmation' ||
-            itemStatuses.any((s) => s == 'awaiting_confirmation' || s.contains('deliver'));
+            itemStatuses.contains('awaiting_confirmation');
       case 'completed':
         return status == 'delivered' && pay == 'paid';
       case 'review':
-        return status == 'delivered' && pay == 'paid';
+        return order.items.any((i) => i.canReview);
       case 'cancelled':
         return status == 'cancelled';
       default:
