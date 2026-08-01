@@ -69,7 +69,7 @@ class _ShopShellState extends State<ShopShell> {
         selectedIndex: _tab,
         onDestinationSelected: (i) {
           setState(() => _tab = i);
-          if (store.isLoggedIn && (i == 0 || i == 3 || i == 4)) {
+          if (store.isLoggedIn && (i == 0 || i == 2 || i == 3 || i == 4)) {
             store.refreshNotificationCounts();
           }
         },
@@ -86,7 +86,11 @@ class _ShopShellState extends State<ShopShell> {
             label: 'Wallet',
           ),
           NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined, color: _tab == 2 ? Colors.white : AppColors.textSecondary),
+            icon: Badge(
+              isLabelVisible: store.isLoggedIn && store.activeOrders > 0,
+              label: Text('${store.activeOrders > 9 ? '9+' : store.activeOrders}'),
+              child: Icon(Icons.inventory_2_outlined, color: _tab == 2 ? Colors.white : AppColors.textSecondary),
+            ),
             label: 'My Order',
           ),
           NavigationDestination(

@@ -1093,8 +1093,11 @@ class _OrdersTabState extends State<OrdersTab> {
               children: [
                 Row(
                   children: [
-                    const Expanded(
-                      child: Text('My orders', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                    Expanded(
+                      child: Text(
+                        store.totalOrders > 0 ? 'My orders (${store.totalOrders})' : 'My orders',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                      ),
                     ),
                     TextButton(
                       onPressed: () => setState(() => activeTab = 'all'),

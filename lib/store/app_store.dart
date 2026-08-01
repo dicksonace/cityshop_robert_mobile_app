@@ -40,6 +40,8 @@ class AppStore extends ChangeNotifier {
   List<AppNotificationItem> notifications = [];
   int unreadNotifications = 0;
   int unreadMessages = 0;
+  int activeOrders = 0;
+  int totalOrders = 0;
 
   bool get isLoggedIn => user != null;
 
@@ -331,7 +333,10 @@ class AppStore extends ChangeNotifier {
     addresses = [];
     notifications = [];
     unreadNotifications = 0;
-    unreadMessages = 0;    notifyListeners();
+    unreadMessages = 0;
+    activeOrders = 0;
+    totalOrders = 0;
+    notifyListeners();
   }
 
   Future<void> updateProfile({
@@ -466,6 +471,17 @@ class AppStore extends ChangeNotifier {
           .whereType<Map>()
           .map((e) => OrderModel.fromJson(Map<String, dynamic>.from(e)))
           .toList();
+      final meta = res.data is Map ? res.data['meta'] : null;
+      final total = meta is Map ? (meta['total'] as num?)?.toInt() : null;
+      totalOrders = total ?? orders.length;
+      // Only retally locally when this page holds every order; otherwise the
+      // count from /notifications/counts stays authoritative.
+      if (total == null || total <= orders.length) {
+        activeOrders = orders.where((o) {
+          final status = (o.status ?? '').toLowerCase();
+          return !const {'delivered', 'cancelled', 'refunded'}.contains(status);
+        }).length;
+      }
     }
     notifyListeners();
   }
@@ -575,6 +591,8 @@ class AppStore extends ChangeNotifier {
     if (!isLoggedIn) {
       unreadNotifications = 0;
       unreadMessages = 0;
+      activeOrders = 0;
+      totalOrders = 0;
       notifyListeners();
       return;
     }
@@ -584,6 +602,8 @@ class AppStore extends ChangeNotifier {
       if (data is Map) {
         unreadNotifications = (data['unread_notifications'] as num?)?.toInt() ?? 0;
         unreadMessages = (data['unread_messages'] as num?)?.toInt() ?? 0;
+        activeOrders = (data['active_orders'] as num?)?.toInt() ?? activeOrders;
+        totalOrders = (data['total_orders'] as num?)?.toInt() ?? totalOrders;
       }
       notifyListeners();
     } catch (_) {}
