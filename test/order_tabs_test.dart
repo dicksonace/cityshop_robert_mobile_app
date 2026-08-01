@@ -116,6 +116,13 @@ Future<void> _openTab(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
+/// Where the status tab strip sits on screen; the order list starts under it.
+double _stripTop(WidgetTester tester, String allLabel) =>
+    tester.getTopLeft(find.text(allLabel)).dy;
+
+double _screenWidth(WidgetTester tester) =>
+    tester.view.physicalSize.width / tester.view.devicePixelRatio;
+
 void main() {
   testWidgets('Confirm only counts orders still waiting on the buyer', (tester) async {
     await _pumpOrders(tester);
@@ -167,6 +174,37 @@ void main() {
 
     expect(_hubCount(tester, 'Confirm'), '1');
     expect(_hubCount(tester, 'Completed'), '0');
+  });
+
+  testWidgets('View all pulls the order list up to the top of the screen', (tester) async {
+    await _pumpOrders(tester, orders: [
+      for (var i = 1; i <= 12; i++)
+        _order(i, 'delivered', items: [_item(i, 'Item $i', 'delivered')]),
+    ]);
+
+    // The list starts well below the hub cards.
+    expect(_stripTop(tester, 'All (12)'), greaterThan(300));
+
+    await tester.tap(find.text('View all'));
+    await tester.pumpAndSettle();
+
+    expect(_stripTop(tester, 'All (12)'), lessThan(30));
+    expect(find.text('Item 1'), findsOneWidget);
+  });
+
+  testWidgets('a hub shortcut scrolls its own tab into view', (tester) async {
+    await _pumpOrders(tester);
+
+    // Review sits off the right edge of the tab strip until it is picked.
+    expect(tester.getTopLeft(find.text('Review (1)')).dx, greaterThan(_screenWidth(tester)));
+    final before = _stripTop(tester, 'All (4)');
+
+    await _openTab(tester, 'Review');
+
+    final tab = tester.getRect(find.text('Review (1)'));
+    expect(tab.left, greaterThanOrEqualTo(0));
+    expect(tab.right, lessThanOrEqualTo(_screenWidth(tester)));
+    expect(_stripTop(tester, 'All (4)'), lessThan(before));
   });
 
   testWidgets('nothing to confirm reads as zero', (tester) async {

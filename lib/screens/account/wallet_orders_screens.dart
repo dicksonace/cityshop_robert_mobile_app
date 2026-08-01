@@ -704,10 +704,39 @@ class _OrdersTabState extends State<OrdersTab> {
     (key: 'cancelled', label: 'Cancelled'),
   ];
 
+  /// The order list sits below the hub cards, so picking a tab has to bring it
+  /// into view — otherwise the tap looks like it did nothing.
+  final _listSection = GlobalKey();
+  final _tabAnchors = {for (final tab in _statusTabs) tab.key: GlobalKey()};
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  void _selectTab(String key) {
+    setState(() => activeTab = key);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final tab = _tabAnchors[key]?.currentContext;
+      if (tab != null) {
+        Scrollable.ensureVisible(
+          tab,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      }
+      final section = _listSection.currentContext;
+      if (section != null) {
+        Scrollable.ensureVisible(
+          section,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -880,8 +909,19 @@ class _OrdersTabState extends State<OrdersTab> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () => setState(() => activeTab = 'all'),
-                      child: const Text('View all >'),
+                      onPressed: () => _selectTab('all'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.accent,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('View all'),
+                          Icon(Icons.chevron_right, size: 16),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -900,7 +940,7 @@ class _OrdersTabState extends State<OrdersTab> {
                         icon: item.icon,
                         count: counts[item.key] ?? 0,
                         active: activeTab == item.key,
-                        onTap: () => setState(() => activeTab = item.key),
+                        onTap: () => _selectTab(item.key),
                       ),
                   ],
                 ),
@@ -953,44 +993,47 @@ class _OrdersTabState extends State<OrdersTab> {
           ),
           const SizedBox(height: 10),
           Container(
+            key: _listSection,
             color: Colors.white,
             child: Column(
               children: [
                 SizedBox(
                   height: 48,
-                  child: ListView.separated(
+                  child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: _statusTabs.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 4),
-                    itemBuilder: (context, index) {
-                      final tab = _statusTabs[index];
-                      final active = activeTab == tab.key;
-                      final count = counts[tab.key] ?? 0;
-                      return InkWell(
-                        onTap: () => setState(() => activeTab = tab.key),
-                        child: Container(
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: active ? AppColors.accent : Colors.transparent,
-                                width: 2.5,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final tab in _statusTabs) ...[
+                          InkWell(
+                            key: _tabAnchors[tab.key],
+                            onTap: () => _selectTab(tab.key),
+                            child: Container(
+                              alignment: Alignment.center,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: activeTab == tab.key ? AppColors.accent : Colors.transparent,
+                                    width: 2.5,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                (counts[tab.key] ?? 0) > 0 ? '${tab.label} (${counts[tab.key]})' : tab.label,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: activeTab == tab.key ? AppColors.accent : AppColors.textSecondary,
+                                ),
                               ),
                             ),
                           ),
-                          child: Text(
-                            count > 0 ? '${tab.label} ($count)' : tab.label,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              color: active ? AppColors.accent : AppColors.textSecondary,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                          const SizedBox(width: 4),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
                 if (filtered.isEmpty)
