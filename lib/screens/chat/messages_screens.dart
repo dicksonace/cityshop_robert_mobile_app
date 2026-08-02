@@ -15,6 +15,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../api/api_client.dart';
 import '../../api/api_config.dart';
+import '../../api/chat_realtime.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -227,18 +228,20 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _poll;
   Timer? _recordTick;
   final _recorder = AudioRecorder();
+  ConversationRealtime? _realtime;
+  bool _realtimeLive = false;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _poll = Timer.periodic(const Duration(seconds: 4), (_) => _pollNew());
   }
 
   @override
   void dispose() {
     _poll?.cancel();
     _recordTick?.cancel();
+    unawaited(_realtime?.dispose() ?? Future<void>.value());
     _recorder.dispose();
     _controller.dispose();
     _scroll.dispose();
@@ -248,7 +251,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _load() async {
     try {
-      final result = await context.read<AppStore>().loadConversation(widget.conversationId);
+      final store = context.read<AppStore>();
+      final result = await store.loadConversation(widget.conversationId);
       if (!mounted) return;
       setState(() {
         conversation = result.conversation;
@@ -256,11 +260,54 @@ class _ChatScreenState extends State<ChatScreen> {
         loading = false;
       });
       _jumpToEnd();
+      await _startRealtime(store);
+      _startPoll();
     } catch (e) {
       if (!mounted) return;
       setState(() => loading = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
+  }
+
+  Future<void> _startRealtime(AppStore store) async {
+    final config = await store.fetchRealtimeConfig();
+    final token = await store.apiToken;
+    final myId = store.user?.id;
+    if (!mounted || config == null || !config.isUsable || token == null || myId == null) {
+      return;
+    }
+
+    final realtime = ConversationRealtime(
+      config: config,
+      token: token,
+      conversationId: widget.conversationId,
+      myUserId: myId,
+      onMessage: (msg) {
+        if (!mounted) return;
+        if (messages.any((m) => m.id == msg.id)) return;
+        setState(() => messages = [...messages, msg]);
+        _jumpToEnd();
+      },
+    );
+
+    final ok = await realtime.start();
+    if (!mounted) {
+      await realtime.dispose();
+      return;
+    }
+    if (ok) {
+      _realtime = realtime;
+      _realtimeLive = true;
+      _startPoll();
+    } else {
+      await realtime.dispose();
+    }
+  }
+
+  void _startPoll() {
+    _poll?.cancel();
+    final seconds = _realtimeLive ? 15 : 4;
+    _poll = Timer.periodic(Duration(seconds: seconds), (_) => _pollNew());
   }
 
   Future<void> _pollNew() async {

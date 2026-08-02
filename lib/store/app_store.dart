@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../api/api_config.dart';
+import '../api/chat_realtime.dart';
 import '../models/models.dart';
 
 class AppStore extends ChangeNotifier {
@@ -44,6 +45,8 @@ class AppStore extends ChangeNotifier {
   int totalOrders = 0;
 
   bool get isLoggedIn => user != null;
+
+  Future<String?> get apiToken => _api.getToken();
 
   Future<void> init() async {
     booting = true;
@@ -839,6 +842,17 @@ class AppStore extends ChangeNotifier {
               myUserId: user?.id ?? 0,
             ))
         .toList();
+  }
+
+  Future<RealtimeConfig?> fetchRealtimeConfig() async {
+    try {
+      final res = await _api.get('/realtime/config');
+      final data = res.data;
+      if (data is! Map) return null;
+      return RealtimeConfig.fromJson(Map<String, dynamic>.from(data));
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> loadAddresses() async {
