@@ -225,19 +225,21 @@ void main() {
       expect(find.text('Say hello to the seller'), findsOneWidget);
     });
 
-    testWidgets('the composer has a photo button that opens camera or gallery', (tester) async {
+    testWidgets('the composer opens an attach grid instead of a low sheet', (tester) async {
       await _pumpChat(tester, _FakeApiClient(product: _honda));
 
-      expect(find.byTooltip('Send photo'), findsOneWidget);
+      expect(find.byTooltip('Attach'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Send photo'));
+      await tester.tap(find.byTooltip('Attach'));
       // The chat screen polls on a timer, so settle would never finish.
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Send a photo'), findsOneWidget);
-      expect(find.text('Take photo'), findsOneWidget);
-      expect(find.text('Choose from gallery'), findsOneWidget);
+      expect(find.text('Camera'), findsOneWidget);
+      expect(find.text('Album'), findsOneWidget);
+      expect(find.text('Video'), findsOneWidget);
+      expect(find.text('Voice'), findsOneWidget);
+      expect(find.text('Send a photo'), findsNothing);
     });
   });
 
@@ -270,7 +272,7 @@ void main() {
       for (final type in const ['call_offer', 'call_answer', 'call_ice', 'call_end']) {
         expect(parse(_message(1, type: type)).isSignalling, isTrue, reason: type);
       }
-      for (final type in const ['text', 'image', 'call_log', 'system']) {
+      for (final type in const ['text', 'image', 'video', 'voice', 'call_log', 'system']) {
         expect(parse(_message(1, type: type)).isSignalling, isFalse, reason: type);
       }
     });
@@ -291,6 +293,30 @@ void main() {
       expect(parse(_message(1, type: 'image', imageUrl: 'a.jpg')).isPhoto, isTrue);
       expect(parse(_message(1, type: 'image')).isPhoto, isFalse);
     });
+
+    test('video and voice messages carry their media urls', () {
+      final video = parse({
+        'id': 1,
+        'sender_id': 9,
+        'type': 'video',
+        'body': '',
+        'metadata': {'video_url': 'https://cdn.example.com/v.mp4', 'duration_seconds': 12},
+        'is_deleted': false,
+      });
+      final voice = parse({
+        'id': 2,
+        'sender_id': 9,
+        'type': 'voice',
+        'body': '',
+        'metadata': {'voice_url': 'https://cdn.example.com/v.m4a', 'duration_seconds': 8},
+        'is_deleted': false,
+      });
+
+      expect(video.isVideo, isTrue);
+      expect(video.durationLabel, '0:12');
+      expect(voice.isVoice, isTrue);
+      expect(voice.durationLabel, '0:08');
+    });
   });
 
   group('ConversationModel', () {
@@ -303,6 +329,8 @@ void main() {
 
     test('previews a photo or a call instead of a blank line', () {
       expect(parse(const {'body': '', 'type': 'image'}).preview, 'Photo');
+      expect(parse(const {'body': '', 'type': 'video'}).preview, 'Video');
+      expect(parse(const {'body': '', 'type': 'voice'}).preview, 'Voice message');
       expect(parse(const {'body': 'Voice call', 'type': 'call_log'}).preview, 'Voice call');
       expect(parse(const {'body': 'Hello', 'type': 'text'}).preview, 'Hello');
       expect(parse(null).preview, 'Start the conversation');

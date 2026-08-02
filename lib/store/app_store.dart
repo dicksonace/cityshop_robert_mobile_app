@@ -773,6 +773,52 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  Future<ChatMessage> sendVideoMessage(
+    int conversationId,
+    String filePath, {
+    String? caption,
+    String filename = 'chat.mp4',
+    int? durationSeconds,
+  }) async {
+    final res = await _api.postMultipart(
+      '/messages/$conversationId/video',
+      fields: {
+        if (caption != null && caption.trim().isNotEmpty) 'caption': caption.trim(),
+        if (durationSeconds != null) 'duration_seconds': '$durationSeconds',
+      },
+      fileField: 'video',
+      filePath: filePath,
+      filename: filename,
+    );
+    final msg = res.data['message'];
+    return ChatMessage.fromJson(
+      Map<String, dynamic>.from(msg as Map),
+      myUserId: user?.id ?? 0,
+    );
+  }
+
+  Future<ChatMessage> sendVoiceMessage(
+    int conversationId,
+    String filePath, {
+    String filename = 'voice.m4a',
+    int? durationSeconds,
+  }) async {
+    final res = await _api.postMultipart(
+      '/messages/$conversationId/voice',
+      fields: {
+        if (durationSeconds != null && durationSeconds > 0) 'duration_seconds': '$durationSeconds',
+      },
+      fileField: 'voice',
+      filePath: filePath,
+      filename: filename,
+    );
+    final msg = res.data['message'];
+    return ChatMessage.fromJson(
+      Map<String, dynamic>.from(msg as Map),
+      myUserId: user?.id ?? 0,
+    );
+  }
+
   Future<ChatMessage> deleteMessage(int conversationId, int messageId) async {
     final res = await _api.delete('/messages/$conversationId/messages/$messageId');
     final msg = res.data['message'];

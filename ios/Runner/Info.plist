@@ -67,9 +67,11 @@
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>NSCameraUsageDescription</key>
-	<string>CityShop needs camera access so you can search for products and send photos in chat.</string>
+	<string>CityShop needs camera access so you can search for products and send photos or video in chat.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>CityShop needs microphone access so you can send voice messages in chat.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>CityShop needs photo library access so you can search for products and send photos in chat.</string>
+	<string>CityShop needs photo library access so you can search for products and send photos or video in chat.</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UISupportedInterfaceOrientations</key>

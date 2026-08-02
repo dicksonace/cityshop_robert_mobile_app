@@ -877,6 +877,10 @@ class ConversationModel {
     switch (latestType) {
       case 'image':
         return 'Photo';
+      case 'video':
+        return 'Video';
+      case 'voice':
+        return 'Voice message';
       case 'call_log':
         return 'Voice call';
       case null:
@@ -920,6 +924,9 @@ class ChatMessage {
     this.type = 'text',
     this.createdAt,
     this.imageUrl,
+    this.videoUrl,
+    this.voiceUrl,
+    this.durationSeconds,
     this.callLog,
     this.isDeleted = false,
     this.canDelete = false,
@@ -931,6 +938,9 @@ class ChatMessage {
   final String type;
   final String? createdAt;
   final String? imageUrl;
+  final String? videoUrl;
+  final String? voiceUrl;
+  final int? durationSeconds;
   final Map<String, dynamic>? callLog;
   final bool isDeleted;
   final bool canDelete;
@@ -941,6 +951,12 @@ class ChatMessage {
   bool get isSignalling => signallingTypes.contains(type);
 
   bool get isPhoto => type == 'image' && (imageUrl ?? '').isNotEmpty && !isDeleted;
+
+  bool get isVideo => type == 'video' && (videoUrl ?? '').isNotEmpty && !isDeleted;
+
+  bool get isVoice => type == 'voice' && (voiceUrl ?? '').isNotEmpty && !isDeleted;
+
+  bool get isMedia => isPhoto || isVideo || isVoice;
 
   bool get isEvent => type == 'call_log' || type == 'system';
 
@@ -961,19 +977,39 @@ class ChatMessage {
     return 'Voice call · $duration';
   }
 
+  String get durationLabel {
+    final seconds = durationSeconds ?? 0;
+    if (seconds <= 0) return '';
+    final minutes = seconds ~/ 60;
+    final rest = seconds % 60;
+    return minutes > 0
+        ? '$minutes:${rest.toString().padLeft(2, '0')}'
+        : '0:${rest.toString().padLeft(2, '0')}';
+  }
+
   factory ChatMessage.fromJson(Map<String, dynamic> json, {required int myUserId}) {
     final meta = json['metadata'];
     final deleted = json['is_deleted'] == true ||
         (meta is Map && meta['deleted_at'] != null);
+    String? media(String key) {
+      if (deleted) return null;
+      final fromMeta = meta is Map ? meta[key] as String? : null;
+      return fromMeta ?? json[key] as String?;
+    }
+
     return ChatMessage(
       id: json['id'] as int,
       body: deleted ? '' : (json['body'] as String? ?? ''),
       mine: (json['sender_id'] as int?) == myUserId || json['is_mine'] == true,
       type: json['type'] as String? ?? 'text',
       createdAt: json['created_at'] as String?,
-      imageUrl: deleted
-          ? null
-          : ((meta is Map ? meta['image_url'] as String? : null) ?? json['image_url'] as String?),
+      imageUrl: media('image_url'),
+      videoUrl: media('video_url'),
+      voiceUrl: media('voice_url'),
+      durationSeconds: () {
+        final raw = (meta is Map ? meta['duration_seconds'] : null) ?? json['duration_seconds'];
+        return (raw as num?)?.toInt();
+      }(),
       callLog: () {
         final log = (meta is Map ? meta['call_log'] : null) ?? json['call_log'];
         return log is Map ? Map<String, dynamic>.from(log) : null;
@@ -996,6 +1032,9 @@ class ChatMessage {
       type: type,
       createdAt: createdAt,
       imageUrl: imageUrl ?? this.imageUrl,
+      videoUrl: videoUrl,
+      voiceUrl: voiceUrl,
+      durationSeconds: durationSeconds,
       callLog: callLog,
       isDeleted: isDeleted ?? this.isDeleted,
       canDelete: canDelete ?? this.canDelete,

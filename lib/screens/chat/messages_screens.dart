@@ -1,19 +1,23 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../api/api_client.dart';
 import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 
@@ -216,8 +220,13 @@ class _ChatScreenState extends State<ChatScreen> {
   List<ChatMessage> messages = [];
   bool loading = true;
   bool sending = false;
-  bool uploadingImage = false;
+  bool uploadingMedia = false;
+  bool showAttachPanel = false;
+  bool recordingVoice = false;
+  int recordSeconds = 0;
   Timer? _poll;
+  Timer? _recordTick;
+  final _recorder = AudioRecorder();
 
   @override
   void initState() {
@@ -229,6 +238,8 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _poll?.cancel();
+    _recordTick?.cancel();
+    _recorder.dispose();
     _controller.dispose();
     _scroll.dispose();
     _focus.dispose();
@@ -314,8 +325,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _controller.text).trim();
-    if (text.isEmpty || sending || uploadingImage) return;
-    setState(() => sending = true);
+    if (text.isEmpty || sending || uploadingMedia) return;
+    setState(() {
+      sending = true;
+      showAttachPanel = false;
+    });
     try {
       final msg = await context.read<AppStore>().sendMessage(widget.conversationId, text);
       if (preset == null) _controller.clear();
@@ -330,70 +344,20 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _pickAndSendImage() async {
-    if (sending || uploadingImage) return;
+  void _toggleAttachPanel() {
+    _focus.unfocus();
+    setState(() => showAttachPanel = !showAttachPanel);
+  }
 
-    final source = await showAppSheet<ImageSource>(
-      context: context,
-      builder: (ctx) => SheetShell(
-        children: [
-          const Text('Send a photo', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-          const SizedBox(height: 6),
-          const Text(
-            'Take a picture or choose one from your gallery.',
-            style: TextStyle(color: AppColors.textSecondary, height: 1.35),
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.ringOrange,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.photo_camera_outlined, color: AppColors.accent),
-            ),
-            title: const Text('Take photo', style: TextStyle(fontWeight: FontWeight.w700)),
-            onTap: () => Navigator.pop(ctx, ImageSource.camera),
-          ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.ringOrange,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.photo_library_outlined, color: AppColors.accent),
-            ),
-            title: const Text('Choose from gallery', style: TextStyle(fontWeight: FontWeight.w700)),
-            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-          ),
-        ],
-      ),
-    );
-
-    if (source == null || !mounted) return;
-
-    final file = await ImagePicker().pickImage(
-      source: source,
-      imageQuality: 85,
-      maxWidth: 1600,
-    );
-    if (file == null || !mounted) return;
-
-    final caption = _controller.text.trim();
-    setState(() => uploadingImage = true);
+  Future<void> _appendMedia(Future<ChatMessage> Function() send) async {
+    if (sending || uploadingMedia) return;
+    setState(() {
+      uploadingMedia = true;
+      showAttachPanel = false;
+    });
     try {
-      final msg = await context.read<AppStore>().sendImageMessage(
-            widget.conversationId,
-            file.path,
-            caption: caption.isEmpty ? null : caption,
-            filename: file.name.isNotEmpty ? file.name : 'chat.jpg',
-          );
+      final msg = await send();
       if (!mounted) return;
-      if (caption.isNotEmpty) _controller.clear();
       setState(() => messages = [...messages, msg]);
       _jumpToEnd();
     } on ApiException catch (e) {
@@ -403,12 +367,116 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not send that photo. Try another one.')),
+          const SnackBar(content: Text('Could not send that. Try again.')),
         );
       }
     } finally {
-      if (mounted) setState(() => uploadingImage = false);
+      if (mounted) setState(() => uploadingMedia = false);
     }
+  }
+
+  Future<void> _sendPhoto(ImageSource source) async {
+    final file = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1600,
+    );
+    if (file == null || !mounted) return;
+    final caption = _controller.text.trim();
+    await _appendMedia(() async {
+      final msg = await context.read<AppStore>().sendImageMessage(
+            widget.conversationId,
+            file.path,
+            caption: caption.isEmpty ? null : caption,
+            filename: file.name.isNotEmpty ? file.name : 'chat.jpg',
+          );
+      if (caption.isNotEmpty && mounted) _controller.clear();
+      return msg;
+    });
+  }
+
+  Future<void> _sendVideo() async {
+    final file = await ImagePicker().pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 3),
+    );
+    if (file == null || !mounted) return;
+    final caption = _controller.text.trim();
+    await _appendMedia(() async {
+      final msg = await context.read<AppStore>().sendVideoMessage(
+            widget.conversationId,
+            file.path,
+            caption: caption.isEmpty ? null : caption,
+            filename: file.name.isNotEmpty ? file.name : 'chat.mp4',
+          );
+      if (caption.isNotEmpty && mounted) _controller.clear();
+      return msg;
+    });
+  }
+
+  Future<void> _startVoice() async {
+    if (recordingVoice || uploadingMedia) return;
+    final allowed = await _recorder.hasPermission();
+    if (!allowed) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Allow microphone access to send voice messages')),
+        );
+      }
+      return;
+    }
+
+    final dir = await getTemporaryDirectory();
+    final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await _recorder.start(
+      const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
+      path: path,
+    );
+    setState(() {
+      recordingVoice = true;
+      recordSeconds = 0;
+      showAttachPanel = false;
+    });
+    _recordTick?.cancel();
+    _recordTick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => recordSeconds += 1);
+      if (recordSeconds >= 120) _stopVoice(send: true);
+    });
+  }
+
+  Future<void> _stopVoice({required bool send}) async {
+    _recordTick?.cancel();
+    final path = await _recorder.stop();
+    final seconds = recordSeconds;
+    setState(() {
+      recordingVoice = false;
+      recordSeconds = 0;
+    });
+    if (!send || path == null || path.isEmpty) {
+      if (path != null) {
+        try {
+          await File(path).delete();
+        } catch (_) {}
+      }
+      return;
+    }
+    if (seconds < 1) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Hold a little longer to record')),
+        );
+      }
+      return;
+    }
+    await _appendMedia(
+      () => context.read<AppStore>().sendVoiceMessage(
+            widget.conversationId,
+            path,
+            filename: 'voice.m4a',
+            durationSeconds: seconds,
+          ),
+    );
   }
 
   Future<void> _callSeller() async {
@@ -419,6 +487,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       return;
     }
+    setState(() => showAttachPanel = false);
     final uri = Uri(scheme: 'tel', path: mobile.replaceAll(RegExp(r'[^\d+]'), ''));
     if (!await launchUrl(uri)) {
       if (mounted) {
@@ -554,7 +623,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                               : null,
                                       child: Container(
                                       margin: const EdgeInsets.only(bottom: 8),
-                                      padding: m.isPhoto
+                                      padding: m.isMedia
                                           ? const EdgeInsets.all(4)
                                           : const EdgeInsets.fromLTRB(12, 10, 12, 8),
                                       decoration: BoxDecoration(
@@ -597,7 +666,29 @@ class _ChatScreenState extends State<ChatScreen> {
                                                   ),
                                                 ),
                                               ),
-                                          ] else
+                                          ] else if (m.isVideo) ...[
+                                            _ChatVideo(url: m.videoUrl!, mine: m.mine),
+                                            if (m.body.trim().isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                                                child: Align(
+                                                  alignment: Alignment.centerLeft,
+                                                  child: Text(
+                                                    m.body.trim(),
+                                                    style: TextStyle(
+                                                      color: m.mine ? Colors.white : AppColors.textPrimary,
+                                                      height: 1.35,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ] else if (m.isVoice)
+                                            _ChatVoice(
+                                              url: m.voiceUrl!,
+                                              durationLabel: m.durationLabel,
+                                              mine: m.mine,
+                                            )
+                                          else
                                             Align(
                                               alignment: Alignment.centerLeft,
                                               child: Text(
@@ -614,7 +705,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                           if (m.createdAt != null) ...[
                                             const SizedBox(height: 4),
                                             Padding(
-                                              padding: EdgeInsets.only(right: m.isPhoto ? 6 : 0),
+                                              padding: EdgeInsets.only(right: m.isMedia ? 6 : 0),
                                               child: Text(
                                                 _timeLabel(m.createdAt!),
                                                 style: TextStyle(
@@ -640,73 +731,121 @@ class _ChatScreenState extends State<ChatScreen> {
                 SafeArea(
                   top: false,
                   child: Container(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
                     decoration: const BoxDecoration(
                       color: Colors.white,
                       border: Border(top: BorderSide(color: AppColors.border)),
                     ),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          tooltip: 'Send photo',
-                          onPressed: (sending || uploadingImage) ? null : _pickAndSendImage,
-                          style: IconButton.styleFrom(
-                            foregroundColor: AppColors.accent,
-                            disabledForegroundColor: AppColors.textMuted,
-                          ),
-                          icon: uploadingImage
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
-                                )
-                              : const Icon(Icons.image_outlined),
-                        ),
-                        Expanded(
-                          child: TextField(
-                            controller: _controller,
-                            focusNode: _focus,
-                            minLines: 1,
-                            maxLines: 4,
-                            enabled: !uploadingImage,
-                            textInputAction: TextInputAction.send,
-                            decoration: InputDecoration(
-                              hintText: uploadingImage ? 'Sending photo…' : 'Type a message…',
-                              filled: true,
-                              fillColor: AppColors.background,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
-                              ),
+                        if (recordingVoice)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.mic, color: AppColors.danger),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Recording… ${_formatRecord(recordSeconds)}',
+                                    style: const TextStyle(fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => _stopVoice(send: false),
+                                  child: const Text('Cancel'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => _stopVoice(send: true),
+                                  style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
+                                  child: const Text('Send'),
+                                ),
+                              ],
                             ),
-                            onSubmitted: (_) => _send(),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                tooltip: showAttachPanel ? 'Close' : 'Attach',
+                                onPressed: (sending || uploadingMedia || recordingVoice) ? null : _toggleAttachPanel,
+                                style: IconButton.styleFrom(
+                                  foregroundColor: AppColors.accent,
+                                  disabledForegroundColor: AppColors.textMuted,
+                                ),
+                                icon: uploadingMedia
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                                      )
+                                    : Icon(showAttachPanel ? Icons.close_rounded : Icons.add_circle_outline_rounded),
+                              ),
+                              Expanded(
+                                child: TextField(
+                                  controller: _controller,
+                                  focusNode: _focus,
+                                  minLines: 1,
+                                  maxLines: 4,
+                                  enabled: !uploadingMedia && !recordingVoice,
+                                  textInputAction: TextInputAction.send,
+                                  onTap: () {
+                                    if (showAttachPanel) setState(() => showAttachPanel = false);
+                                  },
+                                  decoration: InputDecoration(
+                                    hintText: uploadingMedia
+                                        ? 'Sending…'
+                                        : recordingVoice
+                                            ? 'Recording voice…'
+                                            : 'Type a message…',
+                                    filled: true,
+                                    fillColor: AppColors.background,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                      borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
+                                    ),
+                                  ),
+                                  onSubmitted: (_) => _send(),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton.filled(
+                                onPressed: (sending || uploadingMedia || recordingVoice) ? null : _send,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: AppColors.accent,
+                                  disabledBackgroundColor: AppColors.ringOrange,
+                                  padding: const EdgeInsets.all(12),
+                                ),
+                                icon: sending
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      )
+                                    : const Icon(Icons.send_rounded, color: Colors.white),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          onPressed: (sending || uploadingImage) ? null : _send,
-                          style: IconButton.styleFrom(
-                            backgroundColor: AppColors.accent,
-                            disabledBackgroundColor: AppColors.ringOrange,
-                            padding: const EdgeInsets.all(12),
+                        if (showAttachPanel)
+                          _AttachPanel(
+                            canCall: (conversation?.otherMobile ?? '').trim().isNotEmpty,
+                            onCamera: () => _sendPhoto(ImageSource.camera),
+                            onAlbum: () => _sendPhoto(ImageSource.gallery),
+                            onVideo: _sendVideo,
+                            onVoice: _startVoice,
+                            onCall: _callSeller,
                           ),
-                          icon: sending
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.send_rounded, color: Colors.white),
-                        ),
                       ],
                     ),
                   ),
@@ -714,6 +853,12 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
     );
+  }
+
+  String _formatRecord(int seconds) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
   }
 
   String? _dayKey(String? iso) {
@@ -932,6 +1077,258 @@ class _ConversationAvatar extends StatelessWidget {
               ),
             )
           : null,
+    );
+  }
+}
+
+/// Alibaba-style attach grid sits under the composer, not as a sheet on the
+/// navigation bar — so options stay visible and clear of system chrome.
+class _AttachPanel extends StatelessWidget {
+  const _AttachPanel({
+    required this.canCall,
+    required this.onCamera,
+    required this.onAlbum,
+    required this.onVideo,
+    required this.onVoice,
+    required this.onCall,
+  });
+
+  final bool canCall;
+  final VoidCallback onCamera;
+  final VoidCallback onAlbum;
+  final VoidCallback onVideo;
+  final VoidCallback onVoice;
+  final VoidCallback onCall;
+
+  @override
+  Widget build(BuildContext context) {
+    final tiles = <_AttachTileData>[
+      _AttachTileData('Camera', Icons.photo_camera_outlined, onCamera),
+      _AttachTileData('Album', Icons.photo_library_outlined, onAlbum),
+      _AttachTileData('Video', Icons.videocam_outlined, onVideo),
+      _AttachTileData('Voice', Icons.mic_none_rounded, onVoice),
+      if (canCall) _AttachTileData('Call', Icons.call_outlined, onCall),
+    ];
+
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFF8FAFC),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 4,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 0.92,
+        children: [
+          for (final tile in tiles)
+            InkWell(
+              onTap: tile.onTap,
+              borderRadius: BorderRadius.circular(16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Icon(tile.icon, color: AppColors.accent, size: 24),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    tile.label,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttachTileData {
+  const _AttachTileData(this.label, this.icon, this.onTap);
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+}
+
+class _ChatVideo extends StatefulWidget {
+  const _ChatVideo({required this.url, required this.mine});
+
+  final String url;
+  final bool mine;
+
+  @override
+  State<_ChatVideo> createState() => _ChatVideoState();
+}
+
+class _ChatVideoState extends State<_ChatVideo> {
+  VideoPlayerController? _controller;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final resolved = ApiConfig.resolveMediaUrl(widget.url);
+    _controller = VideoPlayerController.networkUrl(Uri.parse(resolved))
+      ..initialize().then((_) {
+        if (mounted) setState(() {});
+      }).catchError((_) {
+        if (mounted) setState(() => _failed = true);
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _controller;
+    if (_failed || c == null) {
+      return Container(
+        width: 220,
+        height: 140,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: widget.mine ? Colors.white24 : AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.videocam_off_outlined, color: AppColors.textMuted),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        width: 220,
+        height: 160,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (c.value.isInitialized)
+              FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: c.value.size.width,
+                  height: c.value.size.height,
+                  child: VideoPlayer(c),
+                ),
+              )
+            else
+              const ColoredBox(color: Colors.black12),
+            Material(
+              color: Colors.black45,
+              shape: const CircleBorder(),
+              child: IconButton(
+                onPressed: () {
+                  setState(() {
+                    if (c.value.isPlaying) {
+                      c.pause();
+                    } else {
+                      c.play();
+                    }
+                  });
+                },
+                icon: Icon(
+                  c.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatVoice extends StatefulWidget {
+  const _ChatVoice({
+    required this.url,
+    required this.durationLabel,
+    required this.mine,
+  });
+
+  final String url;
+  final String durationLabel;
+  final bool mine;
+
+  @override
+  State<_ChatVoice> createState() => _ChatVoiceState();
+}
+
+class _ChatVoiceState extends State<_ChatVoice> {
+  final _player = AudioPlayer();
+  bool _playing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _player.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _playing = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (_playing) {
+      await _player.stop();
+      setState(() => _playing = false);
+      return;
+    }
+    final resolved = ApiConfig.resolveMediaUrl(widget.url);
+    await _player.play(UrlSource(resolved));
+    setState(() => _playing = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = widget.mine ? Colors.white : AppColors.textPrimary;
+    return SizedBox(
+      width: 200,
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: _toggle,
+            icon: Icon(_playing ? Icons.pause_circle_filled : Icons.play_circle_filled, color: fg, size: 34),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: widget.mine ? Colors.white54 : AppColors.border,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.durationLabel.isEmpty ? 'Voice message' : widget.durationLabel,
+                  style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
