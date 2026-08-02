@@ -751,6 +751,28 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  Future<ChatMessage> sendImageMessage(
+    int conversationId,
+    String filePath, {
+    String? caption,
+    String filename = 'chat.jpg',
+  }) async {
+    final res = await _api.postMultipart(
+      '/messages/$conversationId/image',
+      fields: {
+        if (caption != null && caption.trim().isNotEmpty) 'caption': caption.trim(),
+      },
+      fileField: 'image',
+      filePath: filePath,
+      filename: filename,
+    );
+    final msg = res.data['message'];
+    return ChatMessage.fromJson(
+      Map<String, dynamic>.from(msg as Map),
+      myUserId: user?.id ?? 0,
+    );
+  }
+
   Future<ChatMessage> deleteMessage(int conversationId, int messageId) async {
     final res = await _api.delete('/messages/$conversationId/messages/$messageId');
     final msg = res.data['message'];

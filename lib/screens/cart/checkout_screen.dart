@@ -68,6 +68,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         preview = p;
         addressId = p.addresses.where((a) => a.isDefault).firstOrNull?.id ??
             p.addresses.firstOrNull?.id;
+        if (paymentMethod == 'cash' && _storesWithoutCash(p).isNotEmpty) {
+          paymentMethod = 'momo';
+        }
         loading = false;
       });
     } on ApiException catch (e) {
@@ -84,6 +87,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       });
     }
   }
+
+  /// Stores in the cart that switched cash on delivery off. One payment method
+  /// covers the whole order, so a single store is enough to rule cash out.
+  List<String> _storesWithoutCash(CheckoutPreview p) => p.sellerGroups
+      .where((g) => g['accepts_cash'] == false)
+      .map((g) => (g['seller_name'] as String?)?.trim())
+      .map((name) => (name == null || name.isEmpty) ? 'This store' : name)
+      .toList();
 
   Map<String, dynamic> _sellerPaymentsPayload() {
     if (paymentMethod == 'cash') return {};
@@ -287,6 +298,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget _form(CheckoutPreview p) {
     final selected = p.addresses.where((a) => a.id == addressId).firstOrNull;
     final walletShort = p.walletAvailable < p.grandTotal;
+    final noCashStores = _storesWithoutCash(p);
+    final cashAllowed = noCashStores.isEmpty;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -328,8 +341,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               _PayRow(
                 icon: Icons.payments_rounded,
                 title: 'Cash on delivery',
-                subtitle: 'Pay when it arrives',
+                subtitle: cashAllowed
+                    ? 'Pay when it arrives'
+                    : '${noCashStores.join(', ')} ${noCashStores.length == 1 ? 'does' : 'do'} not take cash',
                 selected: paymentMethod == 'cash',
+                enabled: cashAllowed,
                 onTap: () => setState(() => paymentMethod = 'cash'),
               ),
             ],
@@ -882,6 +898,7 @@ class _PayRow extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.warn = false,
+    this.enabled = true,
   });
 
   final IconData icon;
@@ -889,59 +906,63 @@ class _PayRow extends StatelessWidget {
   final String subtitle;
   final bool selected;
   final bool warn;
+  final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? const Color(0xFFFFF7ED) : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: selected ? AppColors.ringOrange : AppColors.background,
-                  borderRadius: BorderRadius.circular(9),
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: Material(
+        color: selected ? const Color(0xFFFFF7ED) : Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.ringOrange : AppColors.background,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 17,
+                    color: selected ? AppColors.accent : AppColors.textSecondary,
+                  ),
                 ),
-                child: Icon(
-                  icon,
-                  size: 17,
-                  color: selected ? AppColors.accent : AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: warn ? AppColors.danger : AppColors.textSecondary,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 1),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: warn ? AppColors.danger : AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(
-                selected ? Icons.check_circle_rounded : Icons.circle_outlined,
-                size: 20,
-                color: selected ? AppColors.accent : AppColors.textMuted,
-              ),
-            ],
+                Icon(
+                  selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+                  size: 20,
+                  color: selected ? AppColors.accent : AppColors.textMuted,
+                ),
+              ],
+            ),
           ),
         ),
       ),

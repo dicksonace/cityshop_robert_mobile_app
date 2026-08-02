@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,6 +13,7 @@ import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 
@@ -214,6 +216,7 @@ class _ChatScreenState extends State<ChatScreen> {
   List<ChatMessage> messages = [];
   bool loading = true;
   bool sending = false;
+  bool uploadingImage = false;
   Timer? _poll;
 
   @override
@@ -311,7 +314,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _controller.text).trim();
-    if (text.isEmpty || sending) return;
+    if (text.isEmpty || sending || uploadingImage) return;
     setState(() => sending = true);
     try {
       final msg = await context.read<AppStore>().sendMessage(widget.conversationId, text);
@@ -324,6 +327,87 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } finally {
       if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Future<void> _pickAndSendImage() async {
+    if (sending || uploadingImage) return;
+
+    final source = await showAppSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SheetShell(
+        children: [
+          const Text('Send a photo', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+          const SizedBox(height: 6),
+          const Text(
+            'Take a picture or choose one from your gallery.',
+            style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.ringOrange,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.photo_camera_outlined, color: AppColors.accent),
+            ),
+            title: const Text('Take photo', style: TextStyle(fontWeight: FontWeight.w700)),
+            onTap: () => Navigator.pop(ctx, ImageSource.camera),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.ringOrange,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.photo_library_outlined, color: AppColors.accent),
+            ),
+            title: const Text('Choose from gallery', style: TextStyle(fontWeight: FontWeight.w700)),
+            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+          ),
+        ],
+      ),
+    );
+
+    if (source == null || !mounted) return;
+
+    final file = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1600,
+    );
+    if (file == null || !mounted) return;
+
+    final caption = _controller.text.trim();
+    setState(() => uploadingImage = true);
+    try {
+      final msg = await context.read<AppStore>().sendImageMessage(
+            widget.conversationId,
+            file.path,
+            caption: caption.isEmpty ? null : caption,
+            filename: file.name.isNotEmpty ? file.name : 'chat.jpg',
+          );
+      if (!mounted) return;
+      if (caption.isNotEmpty) _controller.clear();
+      setState(() => messages = [...messages, msg]);
+      _jumpToEnd();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not send that photo. Try another one.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => uploadingImage = false);
     }
   }
 
@@ -563,15 +647,31 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     child: Row(
                       children: [
+                        IconButton(
+                          tooltip: 'Send photo',
+                          onPressed: (sending || uploadingImage) ? null : _pickAndSendImage,
+                          style: IconButton.styleFrom(
+                            foregroundColor: AppColors.accent,
+                            disabledForegroundColor: AppColors.textMuted,
+                          ),
+                          icon: uploadingImage
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                                )
+                              : const Icon(Icons.image_outlined),
+                        ),
                         Expanded(
                           child: TextField(
                             controller: _controller,
                             focusNode: _focus,
                             minLines: 1,
                             maxLines: 4,
+                            enabled: !uploadingImage,
                             textInputAction: TextInputAction.send,
                             decoration: InputDecoration(
-                              hintText: 'Type a message…',
+                              hintText: uploadingImage ? 'Sending photo…' : 'Type a message…',
                               filled: true,
                               fillColor: AppColors.background,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -593,7 +693,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         const SizedBox(width: 8),
                         IconButton.filled(
-                          onPressed: sending ? null : _send,
+                          onPressed: (sending || uploadingImage) ? null : _send,
                           style: IconButton.styleFrom(
                             backgroundColor: AppColors.accent,
                             disabledBackgroundColor: AppColors.ringOrange,

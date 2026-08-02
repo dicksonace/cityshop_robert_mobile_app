@@ -53,6 +53,7 @@ class _FakeApiClient extends ApiClient {
 
   final Map<String, dynamic>? product;
   final List<Map<String, dynamic>> messages;
+  final uploads = <Map<String, dynamic>>[];
 
   @override
   Future<Response<dynamic>> get(String path, {Map<String, dynamic>? query}) async {
@@ -70,6 +71,35 @@ class _FakeApiClient extends ApiClient {
         : const <String, dynamic>{'messages': <dynamic>[]};
 
     return Response(requestOptions: RequestOptions(path: path), data: data);
+  }
+
+  @override
+  Future<Response<dynamic>> postMultipart(
+    String path, {
+    required Map<String, dynamic> fields,
+    required String fileField,
+    required String filePath,
+    String filename = 'upload.jpg',
+  }) async {
+    uploads.add({
+      'path': path,
+      'fields': fields,
+      'fileField': fileField,
+      'filePath': filePath,
+      'filename': filename,
+    });
+    return Response(
+      requestOptions: RequestOptions(path: path),
+      data: {
+        'message': _message(
+          99,
+          type: 'image',
+          body: fields['caption'] as String? ?? '',
+          senderId: 1,
+          imageUrl: 'https://cdn.example.com/chat/sent.jpg',
+        ),
+      },
+    );
   }
 }
 
@@ -193,6 +223,43 @@ void main() {
       );
 
       expect(find.text('Say hello to the seller'), findsOneWidget);
+    });
+
+    testWidgets('the composer has a photo button that opens camera or gallery', (tester) async {
+      await _pumpChat(tester, _FakeApiClient(product: _honda));
+
+      expect(find.byTooltip('Send photo'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Send photo'));
+      // The chat screen polls on a timer, so settle would never finish.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Send a photo'), findsOneWidget);
+      expect(find.text('Take photo'), findsOneWidget);
+      expect(find.text('Choose from gallery'), findsOneWidget);
+    });
+  });
+
+  group('AppStore.sendImageMessage', () {
+    test('posts the photo to the chat image endpoint', () async {
+      final api = _FakeApiClient(product: _honda);
+      final store = AppStore(api)
+        ..user = const AppUser(id: 1, name: 'Robert', email: 'robert@example.com');
+
+      final msg = await store.sendImageMessage(
+        7,
+        '/tmp/honda.jpg',
+        caption: 'Still available?',
+        filename: 'honda.jpg',
+      );
+
+      expect(msg.isPhoto, isTrue);
+      expect(msg.body, 'Still available?');
+      expect(api.uploads.single['path'], '/messages/7/image');
+      expect(api.uploads.single['fileField'], 'image');
+      expect(api.uploads.single['filename'], 'honda.jpg');
+      expect(api.uploads.single['fields'], {'caption': 'Still available?'});
     });
   });
 

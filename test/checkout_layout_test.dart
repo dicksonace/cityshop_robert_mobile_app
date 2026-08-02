@@ -193,6 +193,43 @@ void main() {
     expect(find.text('Place order'), findsOneWidget);
   });
 
+  testWidgets('a store that stopped taking cash blocks the cash option', (tester) async {
+    final api = await _pumpCheckout(tester, preview: {
+      ..._preview,
+      'seller_groups': [
+        {...(_preview['seller_groups'] as List).first as Map<String, dynamic>, 'accepts_cash': false},
+      ],
+    });
+
+    expect(find.text('City Unlock does not take cash'), findsOneWidget);
+
+    await tester.tap(find.text('Cash on delivery'));
+    await tester.pumpAndSettle();
+
+    // The tap is ignored, so the seller payment choice stays on screen.
+    expect(find.text('Paying City Unlock'), findsOneWidget);
+
+    await tester.tap(find.text('Place order'));
+    await tester.pumpAndSettle();
+
+    expect((api.posted.single['data'] as Map)['payment_method'], 'momo');
+  });
+
+  testWidgets('cash stays available while the store allows it', (tester) async {
+    await _pumpCheckout(tester, preview: {
+      ..._preview,
+      'seller_groups': [
+        {...(_preview['seller_groups'] as List).first as Map<String, dynamic>, 'accepts_cash': true},
+      ],
+    });
+
+    await tester.tap(find.text('Cash on delivery'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pay when it arrives'), findsOneWidget);
+    expect(find.text('Paying City Unlock'), findsNothing);
+  });
+
   testWidgets('placing the order still sends the seller payment choice', (tester) async {
     final api = await _pumpCheckout(tester);
 
