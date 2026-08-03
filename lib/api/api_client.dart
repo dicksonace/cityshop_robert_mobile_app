@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http_parser/http_parser.dart';
 
 import 'api_config.dart';
 
@@ -108,11 +109,16 @@ class ApiClient {
     required String fileField,
     required String filePath,
     String filename = 'upload.jpg',
+    String? contentType,
   }) async {
     try {
       final form = FormData.fromMap({
         ...fields,
-        fileField: await MultipartFile.fromFile(filePath, filename: filename),
+        fileField: await MultipartFile.fromFile(
+          filePath,
+          filename: filename,
+          contentType: contentType == null ? null : _parseMediaType(contentType),
+        ),
       });
       return await _dio.post(
         path,
@@ -122,6 +128,12 @@ class ApiClient {
     } on DioException catch (e) {
       throw _mapError(e);
     }
+  }
+
+  MediaType? _parseMediaType(String value) {
+    final parts = value.split('/');
+    if (parts.length != 2 || parts[0].isEmpty || parts[1].isEmpty) return null;
+    return MediaType(parts[0], parts[1]);
   }
 
   ApiException _mapError(DioException e) {

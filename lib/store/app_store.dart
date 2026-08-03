@@ -814,6 +814,7 @@ class AppStore extends ChangeNotifier {
       fileField: 'voice',
       filePath: filePath,
       filename: filename,
+      contentType: 'audio/mp4',
     );
     final msg = res.data['message'];
     return ChatMessage.fromJson(
