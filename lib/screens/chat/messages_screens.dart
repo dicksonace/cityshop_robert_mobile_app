@@ -333,7 +333,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _deleteMessage(ChatMessage message) async {
-    if (!message.canDelete && !(message.mine && !message.isDeleted && message.type == 'text')) {
+    const deletable = {'text', 'image', 'video', 'voice'};
+    if (!message.canDelete && !(message.mine && !message.isDeleted && deletable.contains(message.type))) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('This message can no longer be deleted')),
       );
@@ -343,7 +344,11 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete message?'),
-        content: const Text('This removes the wrong message for both of you.'),
+        content: Text(
+          message.isMedia
+              ? 'This removes the media for both of you.'
+              : 'This removes the message for both of you.',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
@@ -666,7 +671,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                     child: GestureDetector(
                                       onLongPress: m.isDeleted
                                           ? null
-                                          : (m.canDelete || (m.mine && m.type == 'text'))
+                                          : (m.canDelete ||
+                                                  (m.mine &&
+                                                      const {'text', 'image', 'video', 'voice'}
+                                                          .contains(m.type)))
                                               ? () => _deleteMessage(m)
                                               : null,
                                       child: Container(
