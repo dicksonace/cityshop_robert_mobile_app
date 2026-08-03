@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
@@ -806,19 +808,35 @@ class AppStore extends ChangeNotifier {
     String filename = 'voice.m4a',
     int? durationSeconds,
   }) async {
+    var path = filePath.trim();
+    if (path.startsWith('file://')) {
+      path = Uri.parse(path).toFilePath();
+    }
+    final file = File(path);
+    if (!await file.exists()) {
+      throw ApiException('Recording file was not saved. Try again.');
+    }
+    if (await file.length() < 64) {
+      throw ApiException('Recording was too short or empty. Hold longer, then send.');
+    }
+
     final res = await _api.postMultipart(
       '/messages/$conversationId/voice',
       fields: {
         if (durationSeconds != null && durationSeconds > 0) 'duration_seconds': '$durationSeconds',
       },
       fileField: 'voice',
-      filePath: filePath,
-      filename: filename,
+      filePath: path,
+      filename: filename.toLowerCase().endsWith('.m4a') ? filename : 'voice.m4a',
+      // AAC in an m4a container — matches what Android MediaRecorder writes.
       contentType: 'audio/mp4',
     );
-    final msg = res.data['message'];
+    final data = res.data;
+    if (data is! Map || data['message'] is! Map) {
+      throw ApiException('Voice uploaded but the reply was incomplete. Pull to refresh.');
+    }
     return ChatMessage.fromJson(
-      Map<String, dynamic>.from(msg as Map),
+      Map<String, dynamic>.from(data['message'] as Map),
       myUserId: user?.id ?? 0,
     );
   }

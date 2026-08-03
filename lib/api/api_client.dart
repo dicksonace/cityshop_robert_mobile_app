@@ -112,6 +112,8 @@ class ApiClient {
     String? contentType,
   }) async {
     try {
+      // Let Dio set multipart Content-Type with boundary — do not force
+      // "multipart/form-data" alone or PHP may never see the file.
       final form = FormData.fromMap({
         ...fields,
         fileField: await MultipartFile.fromFile(
@@ -123,7 +125,12 @@ class ApiClient {
       return await _dio.post(
         path,
         data: form,
-        options: Options(contentType: 'multipart/form-data'),
+        options: Options(
+          sendTimeout: const Duration(seconds: 90),
+          receiveTimeout: const Duration(seconds: 90),
+          // Clear JSON default so Dio can attach the multipart boundary.
+          headers: {Headers.contentTypeHeader: null},
+        ),
       );
     } on DioException catch (e) {
       throw _mapError(e);

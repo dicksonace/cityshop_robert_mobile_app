@@ -1008,7 +1008,9 @@ class ChatMessage {
       voiceUrl: media('voice_url'),
       durationSeconds: () {
         final raw = (meta is Map ? meta['duration_seconds'] : null) ?? json['duration_seconds'];
-        return (raw as num?)?.toInt();
+        if (raw is num) return raw.toInt();
+        if (raw is String) return int.tryParse(raw);
+        return null;
       }(),
       callLog: () {
         final log = (meta is Map ? meta['call_log'] : null) ?? json['call_log'];

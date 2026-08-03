@@ -417,10 +417,17 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
+        final detail = e.toString().replaceFirst(RegExp(r'^[^:]+:\s*'), '').trim();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not send that. Try again.')),
+          SnackBar(
+            content: Text(
+              detail.isEmpty || detail.length > 120
+                  ? 'Could not send that. Try again.'
+                  : detail,
+            ),
+          ),
         );
       }
     } finally {
@@ -469,43 +476,73 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _startVoice() async {
     if (recordingVoice || uploadingMedia) return;
-    final allowed = await _recorder.hasPermission();
-    if (!allowed) {
+    try {
+      final allowed = await _recorder.hasPermission();
+      if (!allowed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Allow microphone access to send voice messages')),
+          );
+        }
+        return;
+      }
+
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 96000,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+        path: path,
+      );
+      if (!mounted) return;
+      setState(() {
+        recordingVoice = true;
+        recordSeconds = 0;
+        showAttachPanel = false;
+      });
+      _recordTick?.cancel();
+      _recordTick = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) return;
+        setState(() => recordSeconds += 1);
+        if (recordSeconds >= 120) _stopVoice(send: true);
+      });
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Allow microphone access to send voice messages')),
+          SnackBar(content: Text('Could not start recording. ${e.toString().split('\n').first}')),
         );
       }
-      return;
     }
-
-    final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-    await _recorder.start(
-      const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
-      path: path,
-    );
-    setState(() {
-      recordingVoice = true;
-      recordSeconds = 0;
-      showAttachPanel = false;
-    });
-    _recordTick?.cancel();
-    _recordTick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() => recordSeconds += 1);
-      if (recordSeconds >= 120) _stopVoice(send: true);
-    });
   }
 
   Future<void> _stopVoice({required bool send}) async {
+    if (!recordingVoice) return;
     _recordTick?.cancel();
-    final path = await _recorder.stop();
     final seconds = recordSeconds;
-    setState(() {
+    String? path;
+    try {
+      path = await _recorder.stop();
+    } catch (_) {
+      path = null;
+    }
+    if (mounted) {
+      setState(() {
+        recordingVoice = false;
+        recordSeconds = 0;
+      });
+    } else {
       recordingVoice = false;
       recordSeconds = 0;
-    });
+    }
+
+    if (path != null && path.startsWith('file://')) {
+      path = Uri.parse(path).toFilePath();
+    }
+
     if (!send || path == null || path.isEmpty) {
       if (path != null) {
         try {
@@ -515,6 +552,9 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     if (seconds < 1) {
+      try {
+        await File(path).delete();
+      } catch (_) {}
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Hold a little longer to record')),
@@ -522,10 +562,31 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       return;
     }
+
+    // MediaRecorder can finish writing a beat after stop() returns.
+    var uploadPath = path;
+    var ready = false;
+    for (var i = 0; i < 8; i++) {
+      final file = File(uploadPath);
+      if (await file.exists() && await file.length() > 64) {
+        ready = true;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+    }
+    if (!ready) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Recording did not save. Try again.')),
+        );
+      }
+      return;
+    }
+
     await _appendMedia(
       () => context.read<AppStore>().sendVoiceMessage(
             widget.conversationId,
-            path,
+            uploadPath,
             filename: 'voice.m4a',
             durationSeconds: seconds,
           ),
