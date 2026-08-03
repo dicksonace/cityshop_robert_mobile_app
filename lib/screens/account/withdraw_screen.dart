@@ -248,17 +248,19 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
         children: [
           _BalanceCard(
             available: overview.availableBalance,
-            onWithdrawAll: tooSmall || overview.hasPending ? null : _withdrawAll,
+            onWithdrawAll: tooSmall ? null : _withdrawAll,
           ),
           const SizedBox(height: 16),
-          if (overview.hasPending)
+          if (overview.hasPending) ...[
             const _Notice(
               icon: Icons.hourglass_top_rounded,
               title: 'Withdrawal in processing',
-              body: 'Please wait for your current request to finish (usually within 1 hour) '
-                  'before asking for another one.',
-            )
-          else if (tooSmall)
+              body: 'Your earlier request is still being paid out (usually within 1 hour). '
+                  'You can submit another withdrawal with your remaining balance.',
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (tooSmall)
             _Notice(
               icon: Icons.info_outline_rounded,
               title: 'Minimum withdrawal is ${_money.format(overview.minimum)}',

@@ -250,15 +250,16 @@ void main() {
     expect(api.posts.single.$2['network'], 'telecel');
   });
 
-  testWidgets('a request in flight replaces the form with a notice', (tester) async {
+  testWidgets('a request in flight still leaves the form open for another withdrawal', (tester) async {
     await _pumpWithdraw(
       tester,
       _FakeApiClient(overview: _overview(hasPending: true, items: [_paidRequest])),
     );
 
     expect(find.text('Withdrawal in processing'), findsOneWidget);
-    expect(find.widgetWithText(ElevatedButton, 'Review withdrawal'), findsNothing);
-    expect(find.text('Withdraw all'), findsNothing);
+    expect(find.textContaining('You can submit another withdrawal'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Review withdrawal'), findsOneWidget);
+    expect(find.text('Withdraw all'), findsOneWidget);
   });
 
   testWidgets('too small a balance explains itself instead of failing later', (tester) async {
@@ -299,8 +300,8 @@ void main() {
       expect(overview.items.single.isPaid, isTrue);
     });
 
-    test('blocks withdrawing while a request is open or the balance is short', () {
-      expect(WithdrawalOverview.fromJson(_overview(hasPending: true)).canWithdraw, isFalse);
+    test('blocks withdrawing only when the balance is short', () {
+      expect(WithdrawalOverview.fromJson(_overview(hasPending: true)).canWithdraw, isTrue);
       expect(WithdrawalOverview.fromJson(_overview(available: 9.99)).canWithdraw, isFalse);
     });
   });

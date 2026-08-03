@@ -574,7 +574,7 @@ class WithdrawalOverview {
   final String? defaultMomoNumber;
   final String? defaultAccountName;
 
-  bool get canWithdraw => !hasPending && availableBalance >= minimum;
+  bool get canWithdraw => availableBalance >= minimum;
 
   factory WithdrawalOverview.fromJson(Map<String, dynamic> json) {
     final data = json['data'];
