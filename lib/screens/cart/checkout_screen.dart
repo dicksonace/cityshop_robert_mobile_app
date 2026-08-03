@@ -202,6 +202,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       if (!mounted) return;
 
+      if (next == 'direct_pay') {
+        final packages = result['packages'];
+        final shipping = result['shipping'];
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message']?.toString() ??
+                  'Send payment to the seller, then upload proof. No order yet.',
+            ),
+          ),
+        );
+        context.go('/checkout/direct-pay', extra: {
+          'packages': packages is List ? packages : const [],
+          'shipping': shipping is Map ? shipping : null,
+        });
+        return;
+      }
+
       if (directIds.isNotEmpty || next == 'direct_payment') {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result['message']?.toString() ?? 'Complete direct seller payment')),

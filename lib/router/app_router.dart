@@ -12,6 +12,7 @@ import '../screens/auth/register_screen.dart';
 import '../screens/auth/splash_screen.dart';
 import '../screens/cart/cart_screen.dart';
 import '../screens/cart/checkout_screen.dart';
+import '../screens/cart/direct_pay_draft_screen.dart';
 import '../screens/cart/direct_payment_screen.dart';
 import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
@@ -92,6 +93,31 @@ GoRouter createRouter(AppStore store) {
           orderId: int.parse(state.pathParameters['id']!),
           initialAction: state.uri.queryParameters['action'],
         ),
+      ),
+      GoRoute(
+        path: '/checkout/direct-pay',
+        builder: (_, state) {
+          final extra = state.extra;
+          List<Map<String, dynamic>>? packages;
+          Map<String, dynamic>? shipping;
+          if (extra is Map) {
+            final rawPackages = extra['packages'];
+            if (rawPackages is List) {
+              packages = rawPackages
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList();
+            }
+            final rawShipping = extra['shipping'];
+            if (rawShipping is Map) {
+              shipping = Map<String, dynamic>.from(rawShipping);
+            }
+          }
+          return DirectPayDraftScreen(
+            initialPackages: packages,
+            initialShipping: shipping,
+          );
+        },
       ),
       GoRoute(
         path: '/orders/:id/direct-pay',

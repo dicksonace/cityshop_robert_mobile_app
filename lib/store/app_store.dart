@@ -915,6 +915,39 @@ class AppStore extends ChangeNotifier {
       'payment_method': paymentMethod,
       if (sellerPayments != null && sellerPayments.isNotEmpty) 'seller_payments': sellerPayments,
     });
+    final data = Map<String, dynamic>.from(res.data as Map);
+    // Direct-only draft keeps cart items until proof is submitted.
+    if (data['next'] != 'direct_pay') {
+      await loadCart();
+    }
+    return data;
+  }
+
+  Future<Map<String, dynamic>> fetchDirectPayDraft() async {
+    final res = await _api.get('/checkout/direct-pay');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> submitDirectPayDraft({
+    required int sellerId,
+    String? reference,
+    String? proofPath,
+  }) async {
+    if (proofPath != null && proofPath.isNotEmpty) {
+      final res = await _api.postMultipart(
+        '/checkout/direct-pay/$sellerId',
+        fields: {
+          if (reference != null && reference.trim().isNotEmpty) 'reference': reference.trim(),
+        },
+        fileField: 'proof',
+        filePath: proofPath,
+      );
+      await loadCart();
+      return Map<String, dynamic>.from(res.data as Map);
+    }
+    final res = await _api.post('/checkout/direct-pay/$sellerId', data: {
+      if (reference != null && reference.trim().isNotEmpty) 'reference': reference.trim(),
+    });
     await loadCart();
     return Map<String, dynamic>.from(res.data as Map);
   }
