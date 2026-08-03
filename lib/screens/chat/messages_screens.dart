@@ -21,6 +21,7 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
+import '../../widgets/video_viewer.dart';
 
 final _timeFmt = DateFormat('h:mm a');
 final _dayFmt = DateFormat('EEE, MMM d');
@@ -1227,7 +1228,9 @@ class _ChatVideoState extends State<_ChatVideo> {
     final resolved = ApiConfig.resolveMediaUrl(widget.url);
     _controller = VideoPlayerController.networkUrl(Uri.parse(resolved))
       ..initialize().then((_) {
-        if (mounted) setState(() {});
+        if (!mounted) return;
+        _controller?.setVolume(0);
+        setState(() {});
       }).catchError((_) {
         if (mounted) setState(() => _failed = true);
       });
@@ -1239,61 +1242,80 @@ class _ChatVideoState extends State<_ChatVideo> {
     super.dispose();
   }
 
+  Future<void> _open() async {
+    await showVideoViewer(context, url: widget.url);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = _controller;
-    if (_failed || c == null) {
-      return Container(
-        width: 220,
-        height: 140,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: widget.mine ? Colors.white24 : AppColors.background,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Icon(Icons.videocam_off_outlined, color: AppColors.textMuted),
-      );
-    }
+    final ready = c != null && c.value.isInitialized && !_failed;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        width: 220,
-        height: 160,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            if (c.value.isInitialized)
-              FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: c.value.size.width,
-                  height: c.value.size.height,
-                  child: VideoPlayer(c),
-                ),
-              )
-            else
-              const ColoredBox(color: Colors.black12),
-            Material(
-              color: Colors.black45,
-              shape: const CircleBorder(),
-              child: IconButton(
-                onPressed: () {
-                  setState(() {
-                    if (c.value.isPlaying) {
-                      c.pause();
-                    } else {
-                      c.play();
-                    }
-                  });
-                },
-                icon: Icon(
-                  c.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  color: Colors.white,
-                ),
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _failed ? null : _open,
+        borderRadius: BorderRadius.circular(12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: 220,
+            height: 160,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (ready)
+                  FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: c.value.size.width,
+                      height: c.value.size.height,
+                      child: VideoPlayer(c),
+                    ),
+                  )
+                else
+                  ColoredBox(
+                    color: widget.mine ? Colors.white24 : AppColors.background,
+                    child: Center(
+                      child: _failed
+                          ? const Icon(Icons.videocam_off_outlined, color: AppColors.textMuted)
+                          : const SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                            ),
+                    ),
+                  ),
+                if (!_failed)
+                  Container(
+                    color: Colors.black26,
+                    alignment: Alignment.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: const BoxDecoration(
+                            color: Colors.black54,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Tap to play',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
