@@ -16,6 +16,10 @@ class ApiException implements Exception {
 
 class ApiClient {
   ApiClient() {
+    // Do not set a global Content-Type. JSON requests get application/json from
+    // Dio when the body is a Map; multipart must set its own boundary header.
+    // A global application/json conflicts with FormData and throws:
+    // "Unable to set different values for contentType and the content-type header".
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
@@ -23,7 +27,6 @@ class ApiClient {
         receiveTimeout: const Duration(seconds: 30),
         headers: {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
         },
       ),
     );
@@ -67,7 +70,13 @@ class ApiClient {
     Object? data,
   }) async {
     try {
-      return await _dio.post(path, data: data);
+      return await _dio.post(
+        path,
+        data: data,
+        options: data == null || data is FormData
+            ? null
+            : Options(contentType: Headers.jsonContentType),
+      );
     } on DioException catch (e) {
       throw _mapError(e);
     }
@@ -78,7 +87,13 @@ class ApiClient {
     Object? data,
   }) async {
     try {
-      return await _dio.patch(path, data: data);
+      return await _dio.patch(
+        path,
+        data: data,
+        options: data == null || data is FormData
+            ? null
+            : Options(contentType: Headers.jsonContentType),
+      );
     } on DioException catch (e) {
       throw _mapError(e);
     }
@@ -89,7 +104,13 @@ class ApiClient {
     Object? data,
   }) async {
     try {
-      return await _dio.put(path, data: data);
+      return await _dio.put(
+        path,
+        data: data,
+        options: data == null || data is FormData
+            ? null
+            : Options(contentType: Headers.jsonContentType),
+      );
     } on DioException catch (e) {
       throw _mapError(e);
     }
@@ -112,8 +133,6 @@ class ApiClient {
     String? contentType,
   }) async {
     try {
-      // Let Dio set multipart Content-Type with boundary — do not force
-      // "multipart/form-data" alone or PHP may never see the file.
       final form = FormData.fromMap({
         ...fields,
         fileField: await MultipartFile.fromFile(
@@ -122,14 +141,13 @@ class ApiClient {
           contentType: contentType == null ? null : _parseMediaType(contentType),
         ),
       });
+      // Leave contentType unset so Dio can add multipart/form-data; boundary=...
       return await _dio.post(
         path,
         data: form,
         options: Options(
           sendTimeout: const Duration(seconds: 90),
           receiveTimeout: const Duration(seconds: 90),
-          // Clear JSON default so Dio can attach the multipart boundary.
-          headers: {Headers.contentTypeHeader: null},
         ),
       );
     } on DioException catch (e) {
