@@ -312,11 +312,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _pollNew() async {
-    if (messages.isEmpty || !mounted) return;
+    if (!mounted) return;
     try {
+      final afterId = messages.isEmpty ? 0 : messages.last.id;
       final newer = await context.read<AppStore>().pollMessages(
             widget.conversationId,
-            messages.last.id,
+            afterId,
           );
       if (newer.isEmpty || !mounted) return;
       setState(() => messages = [...messages, ...newer]);
