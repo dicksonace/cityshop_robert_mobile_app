@@ -85,16 +85,41 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     try {
       await store.addToCart(p.id, quantity: qty);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.clearSnackBars();
+      if (goCheckout) {
+        // Go straight to cart — don't leave a sticky bar stacked on the next screen.
+        context.push('/cart');
+        return;
+      }
+      messenger.showSnackBar(
         SnackBar(
-          content: Text(goCheckout ? 'Added — continue to checkout' : 'Added to cart'),
-          action: SnackBarAction(label: 'Cart', onPressed: () => context.push('/cart')),
+          content: const Text('Added to cart'),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+          duration: const Duration(seconds: 2),
+          dismissDirection: DismissDirection.down,
+          action: SnackBarAction(
+            label: 'Cart',
+            onPressed: () {
+              messenger.hideCurrentSnackBar();
+              context.push('/cart');
+            },
+          ),
         ),
       );
-      if (goCheckout) context.push('/cart');
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     } finally {
       if (mounted) setState(() => adding = false);
     }
