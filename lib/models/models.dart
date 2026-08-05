@@ -921,6 +921,8 @@ class ConversationModel {
         return 'Video';
       case 'voice':
         return 'Voice message';
+      case 'product':
+        return 'Product';
       case 'call_log':
         return 'Voice call';
       case null:
@@ -968,6 +970,11 @@ class ChatMessage {
     this.voiceUrl,
     this.durationSeconds,
     this.callLog,
+    this.productId,
+    this.productName,
+    this.productSlug,
+    this.productImage,
+    this.productPrice,
     this.isDeleted = false,
     this.canDelete = false,
   });
@@ -982,6 +989,11 @@ class ChatMessage {
   final String? voiceUrl;
   final int? durationSeconds;
   final Map<String, dynamic>? callLog;
+  final int? productId;
+  final String? productName;
+  final String? productSlug;
+  final String? productImage;
+  final double? productPrice;
   final bool isDeleted;
   final bool canDelete;
 
@@ -995,6 +1007,8 @@ class ChatMessage {
   bool get isVideo => type == 'video' && (videoUrl ?? '').isNotEmpty && !isDeleted;
 
   bool get isVoice => type == 'voice' && (voiceUrl ?? '').isNotEmpty && !isDeleted;
+
+  bool get isProduct => type == 'product' && !isDeleted && productId != null;
 
   bool get isMedia => isPhoto || isVideo || isVoice;
 
@@ -1037,6 +1051,12 @@ class ChatMessage {
       return fromMeta ?? json[key] as String?;
     }
 
+    final productRaw = deleted
+        ? null
+        : ((json['product'] is Map ? json['product'] : null) ??
+            (meta is Map ? meta['product'] : null));
+    final product = productRaw is Map ? Map<String, dynamic>.from(productRaw) : null;
+
     return ChatMessage(
       id: json['id'] as int,
       body: deleted ? '' : (json['body'] as String? ?? ''),
@@ -1056,6 +1076,11 @@ class ChatMessage {
         final log = (meta is Map ? meta['call_log'] : null) ?? json['call_log'];
         return log is Map ? Map<String, dynamic>.from(log) : null;
       }(),
+      productId: product?['id'] is num ? (product!['id'] as num).toInt() : null,
+      productName: product?['name'] as String?,
+      productSlug: (product?['slug'] as String?)?.trim(),
+      productImage: (product?['image_url'] as String?)?.trim(),
+      productPrice: (product?['price'] as num?)?.toDouble(),
       isDeleted: deleted,
       canDelete: json['can_delete'] == true,
     );
@@ -1078,6 +1103,11 @@ class ChatMessage {
       voiceUrl: voiceUrl,
       durationSeconds: durationSeconds,
       callLog: callLog,
+      productId: productId,
+      productName: productName,
+      productSlug: productSlug,
+      productImage: productImage,
+      productPrice: productPrice,
       isDeleted: isDeleted ?? this.isDeleted,
       canDelete: canDelete ?? this.canDelete,
     );

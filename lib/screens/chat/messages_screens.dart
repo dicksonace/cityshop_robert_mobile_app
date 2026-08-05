@@ -334,7 +334,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _deleteMessage(ChatMessage message) async {
-    const deletable = {'text', 'image', 'video', 'voice'};
+    const deletable = {'text', 'image', 'video', 'voice', 'product'};
     if (!message.canDelete && !(message.mine && !message.isDeleted && deletable.contains(message.type))) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('This message can no longer be deleted')),
@@ -346,8 +346,8 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete message?'),
         content: Text(
-          message.isMedia
-              ? 'This removes the media for both of you.'
+          message.isMedia || message.isProduct
+              ? 'This removes the shared item for both of you.'
               : 'This removes the message for both of you.',
         ),
         actions: [
@@ -735,19 +735,26 @@ class _ChatScreenState extends State<ChatScreen> {
                                           ? null
                                           : (m.canDelete ||
                                                   (m.mine &&
-                                                      const {'text', 'image', 'video', 'voice'}
+                                                      const {'text', 'image', 'video', 'voice', 'product'}
                                                           .contains(m.type)))
                                               ? () => _deleteMessage(m)
                                               : null,
                                       child: Container(
                                       margin: const EdgeInsets.only(bottom: 8),
-                                      padding: m.isMedia
-                                          ? const EdgeInsets.all(4)
-                                          : const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                                      padding: m.isProduct
+                                          ? EdgeInsets.zero
+                                          : m.isMedia
+                                              ? const EdgeInsets.all(4)
+                                              : const EdgeInsets.fromLTRB(12, 10, 12, 8),
                                       decoration: BoxDecoration(
                                         color: m.isDeleted
                                             ? Colors.grey.shade200
-                                            : (m.mine ? AppColors.accent : Colors.white),
+                                            : m.isProduct
+                                                ? Colors.white
+                                                : (m.mine ? AppColors.accent : Colors.white),
+                                        border: m.isProduct
+                                            ? Border.all(color: const Color(0xFFFFE0C2))
+                                            : null,
                                         borderRadius: BorderRadius.only(
                                           topLeft: const Radius.circular(16),
                                           topRight: const Radius.circular(16),
@@ -765,7 +772,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.end,
                                         children: [
-                                          if (m.isPhoto) ...[
+                                          if (m.isProduct)
+                                            _ChatProductCard(message: m)
+                                          else if (m.isPhoto) ...[
                                             _ChatPhoto(
                                               url: m.imageUrl!,
                                               caption: m.body.trim(),
@@ -823,12 +832,16 @@ class _ChatScreenState extends State<ChatScreen> {
                                           if (m.createdAt != null) ...[
                                             const SizedBox(height: 4),
                                             Padding(
-                                              padding: EdgeInsets.only(right: m.isMedia ? 6 : 0),
+                                              padding: EdgeInsets.only(
+                                                right: m.isMedia || m.isProduct ? 8 : 0,
+                                                bottom: m.isProduct ? 8 : 0,
+                                                left: m.isProduct ? 8 : 0,
+                                              ),
                                               child: Text(
                                                 _timeLabel(m.createdAt!),
                                                 style: TextStyle(
                                                   fontSize: 10,
-                                                  color: m.isDeleted
+                                                  color: m.isDeleted || m.isProduct
                                                       ? AppColors.textMuted
                                                       : (m.mine ? Colors.white70 : AppColors.textMuted),
                                                 ),
@@ -1072,6 +1085,81 @@ class _ProductContextCard extends StatelessWidget {
                     Icon(Icons.chevron_right, size: 18, color: AppColors.primary),
                   ],
                 ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// In-thread product share card (sent when opening chat from product detail).
+class _ChatProductCard extends StatelessWidget {
+  const _ChatProductCard({required this.message});
+
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final slug = message.productSlug ?? '';
+    final photo = ApiConfig.resolveMediaUrl(message.productImage);
+    final price = message.productPrice;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: slug.isEmpty ? null : () => context.push('/products/$slug'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  color: AppColors.background,
+                  child: photo.isEmpty
+                      ? const Icon(Icons.shopping_bag_outlined, color: AppColors.accent)
+                      : CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      message.productName ?? message.body,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    if (price != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _money.format(price),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Tap to view product',
+                      style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
