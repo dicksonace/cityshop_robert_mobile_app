@@ -11,6 +11,7 @@ import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/tab_refresh.dart';
 import '../account/wallet_orders_screens.dart';
 import '../chat/messages_screens.dart';
 
@@ -52,18 +53,21 @@ class _ShopShellState extends State<ShopShell> {
 
     return Scaffold(
       body: SafeArea(
-        child: IndexedStack(
+        child: ActiveTab(
           index: _tab,
-          children: [
-            _ShopHome(searchController: _search),
-            const WalletTab(),
-            OrdersTab(
-              onOpenWallet: () => setState(() => _tab = 1),
-              onOpenMessages: () => setState(() => _tab = 3),
-            ),
-            const MessagesTab(),
-            AccountSettingsTab(user: store.user),
-          ],
+          child: IndexedStack(
+            index: _tab,
+            children: [
+              _ShopHome(searchController: _search),
+              const WalletTab(),
+              OrdersTab(
+                onOpenWallet: () => setState(() => _tab = 1),
+                onOpenMessages: () => setState(() => _tab = 3),
+              ),
+              const MessagesTab(),
+              AccountSettingsTab(user: store.user),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: NavigationBarTheme(
@@ -138,8 +142,27 @@ class _ShopHome extends StatefulWidget {
   State<_ShopHome> createState() => _ShopHomeState();
 }
 
-class _ShopHomeState extends State<_ShopHome> {
+class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
   int _matchesTick = 0;
+
+  @override
+  int? get tabIndex => 0;
+
+  @override
+  bool get refreshNeedsLogin => false;
+
+  @override
+  bool get tabAlreadyHasData => context.read<AppStore>().products.isNotEmpty;
+
+  @override
+  Future<void> refreshTabData({required bool background}) async {
+    final store = context.read<AppStore>();
+    await store.loadShop();
+    if (!mounted || background) return;
+    // Recreating the picks-for-you strip is jarring mid-browse, so only do it
+    // when the shopper asked for a refresh.
+    setState(() => _matchesTick++);
+  }
 
   Future<void> _pickImageSearch(BuildContext context) async {
     final source = await showModalBottomSheet<ImageSource>(
@@ -236,10 +259,7 @@ class _ShopHomeState extends State<_ShopHome> {
         Expanded(
           child: RefreshIndicator(
             color: AppColors.accent,
-            onRefresh: () async {
-              await store.loadShop();
-              if (mounted) setState(() => _matchesTick++);
-            },
+            onRefresh: refreshNow,
             child: CustomScrollView(
               slivers: [
                 const SliverToBoxAdapter(child: _HeroBanner()),
@@ -1173,13 +1193,32 @@ class ProductCard extends StatelessWidget {
   }
 }
 
-class AccountSettingsTab extends StatelessWidget {
+class AccountSettingsTab extends StatefulWidget {
   const AccountSettingsTab({super.key, this.user});
   final AppUser? user;
 
   @override
+  State<AccountSettingsTab> createState() => _AccountSettingsTabState();
+}
+
+class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefreshTab {
+  @override
+  int? get tabIndex => 4;
+
+  @override
+  Future<void> refreshTabData({required bool background}) async {
+    final store = context.read<AppStore>();
+    await store.refreshMe();
+    await store.refreshNotificationCounts();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final user = widget.user ?? context.watch<AppStore>().user;
+
     if (user == null) {
+      if (tabIsWarmingUp) return const FullPageLoader(label: 'Loading your account…');
+
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -1223,7 +1262,10 @@ class AccountSettingsTab extends StatelessWidget {
       (Icons.shopping_cart_outlined, 'My cart', 'Review items before checkout', '/cart'),
     ];
 
-    return ListView(
+    return RefreshIndicator(
+      color: AppColors.accent,
+      onRefresh: refreshNow,
+      child: ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
       children: [
         Container(
@@ -1239,7 +1281,7 @@ class AccountSettingsTab extends StatelessWidget {
                 radius: 28,
                 backgroundColor: AppColors.accent,
                 child: Text(
-                  user!.name.isNotEmpty ? user!.name[0].toUpperCase() : 'U',
+                  user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
                   style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
                 ),
               ),
@@ -1248,10 +1290,10 @@ class AccountSettingsTab extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(user!.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-                    Text(user!.email, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                    if (user!.mobile != null)
-                      Text(user!.mobile!, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                    Text(user.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+                    Text(user.email, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                    if (user.mobile != null)
+                      Text(user.mobile!, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -1336,6 +1378,7 @@ class AccountSettingsTab extends StatelessWidget {
           label: const Text('Log out'),
         ),
       ],
+      ),
     );
   }
 }

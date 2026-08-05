@@ -21,6 +21,7 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
+import '../../widgets/tab_refresh.dart';
 import '../../widgets/video_viewer.dart';
 
 final _timeFmt = DateFormat('h:mm a');
@@ -34,28 +35,32 @@ class MessagesTab extends StatefulWidget {
   State<MessagesTab> createState() => _MessagesTabState();
 }
 
-class _MessagesTabState extends State<MessagesTab> {
+class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
   bool loading = true;
   String? error;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-  }
+  int? get tabIndex => 3;
 
-  Future<void> _load() async {
+  @override
+  Future<void> refreshTabData({required bool background}) => _load(background: background);
+
+  Future<void> _load({bool background = false}) async {
     final store = context.read<AppStore>();
     if (!store.isLoggedIn) {
-      setState(() => loading = false);
+      if (mounted) setState(() => loading = false);
       return;
     }
-    setState(() {
-      loading = true;
-      error = null;
-    });
+    if (!background) {
+      setState(() {
+        loading = true;
+        error = null;
+      });
+    }
     try {
       await store.loadConversations();
+      await store.refreshNotificationCounts();
+      error = null;
     } on ApiException catch (e) {
       error = e.message;
     } catch (e) {
@@ -69,6 +74,8 @@ class _MessagesTabState extends State<MessagesTab> {
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
     if (!store.isLoggedIn) {
+      if (tabIsWarmingUp) return const FullPageLoader(label: 'Loading messages…');
+
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -101,19 +108,20 @@ class _MessagesTabState extends State<MessagesTab> {
               padding: const EdgeInsets.all(24),
               child: Text(error!, textAlign: TextAlign.center),
             ),
-            TextButton(onPressed: _load, child: const Text('Retry')),
+            TextButton(onPressed: refreshNow, child: const Text('Retry')),
           ],
         ),
       );
     }
     if (store.conversations.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
+      // Scrollable so an empty inbox can still be pulled down to refresh.
+      return RefreshIndicator(
+        onRefresh: refreshNow,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
+          children: [
+            Center(
+              child: Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: AppColors.ringOrange,
@@ -121,22 +129,26 @@ class _MessagesTabState extends State<MessagesTab> {
                 ),
                 child: const Icon(Icons.forum_outlined, size: 36, color: AppColors.accent),
               ),
-              const SizedBox(height: 16),
-              const Text('No conversations yet', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-              const SizedBox(height: 8),
-              const Text(
-                'Open a product and tap Chat to message the seller.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'No conversations yet',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Open a product and tap Chat to message the seller.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ],
         ),
       );
     }
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: refreshNow,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: store.conversations.length,

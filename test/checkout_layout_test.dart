@@ -236,8 +236,14 @@ void main() {
     await tester.tap(find.text('Pay seller'));
     await tester.pumpAndSettle();
 
-    // Scroll the account clear of the pinned pay bar before tapping it.
-    await tester.drag(find.byType(ListView), const Offset(0, -220));
+    // The account list sits below the trust notice, so scroll to it first.
+    await tester.scrollUntilVisible(
+      find.textContaining('Fidelity Bank'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.textContaining('Fidelity Bank'));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Fidelity Bank'));
     await tester.pumpAndSettle();

@@ -13,6 +13,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/order_receipt_printer.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/tab_refresh.dart';
 import '../cart/paystack_payment_screen.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
@@ -24,7 +25,7 @@ class WalletTab extends StatefulWidget {
   State<WalletTab> createState() => _WalletTabState();
 }
 
-class _WalletTabState extends State<WalletTab> {
+class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
   bool loading = true;
   String? error;
   Map<String, dynamic>? funding;
@@ -36,25 +37,30 @@ class _WalletTabState extends State<WalletTab> {
   String? transactionsError;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-  }
+  int? get tabIndex => 1;
 
-  Future<void> _load() async {
+  @override
+  Future<void> refreshTabData({required bool background}) => _load(background: background);
+
+  Future<void> _load({bool background = false}) async {
     final store = context.read<AppStore>();
     if (!store.isLoggedIn) {
-      setState(() => loading = false);
+      if (mounted) setState(() => loading = false);
       return;
     }
-    setState(() {
-      loading = true;
-      error = null;
-    });
+    if (!background) {
+      setState(() {
+        loading = true;
+        error = null;
+      });
+    }
     try {
       await store.loadWallet();
-      funding = await store.loadManualFunding();
-      await _loadTransactions(reset: true);
+      final funds = await store.loadManualFunding();
+      if (!mounted) return;
+      funding = funds;
+      error = null;
+      await _loadTransactions(reset: true, background: background);
     } on ApiException catch (e) {
       error = e.message;
     } catch (e) {
@@ -64,13 +70,15 @@ class _WalletTabState extends State<WalletTab> {
     }
   }
 
-  Future<void> _loadTransactions({bool reset = false}) async {
+  Future<void> _loadTransactions({bool reset = false, bool background = false}) async {
     if (loadingMore) return;
     final nextPage = reset ? 1 : transactionsPage + 1;
-    setState(() {
-      loadingMore = true;
-      transactionsError = null;
-    });
+    if (!background) {
+      setState(() {
+        loadingMore = true;
+        transactionsError = null;
+      });
+    }
     try {
       final page = await context.read<AppStore>().fetchWalletTransactions(page: nextPage);
       if (!mounted) return;
@@ -241,6 +249,7 @@ class _WalletTabState extends State<WalletTab> {
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
     if (!store.isLoggedIn) {
+      if (tabIsWarmingUp) return const FullPageLoader(label: 'Loading wallet…');
       return _Guest(onLogin: () => context.push('/login'));
     }
     if (loading) return const FullPageLoader(label: 'Loading wallet…');
@@ -250,7 +259,7 @@ class _WalletTabState extends State<WalletTab> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(error!),
-            TextButton(onPressed: _load, child: const Text('Retry')),
+            TextButton(onPressed: refreshNow, child: const Text('Retry')),
           ],
         ),
       );
@@ -262,7 +271,7 @@ class _WalletTabState extends State<WalletTab> {
         wallet?.paystackConfigured == true || funding?['paystack_configured'] == true;
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: refreshNow,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
@@ -678,7 +687,7 @@ class OrdersTab extends StatefulWidget {
   State<OrdersTab> createState() => _OrdersTabState();
 }
 
-class _OrdersTabState extends State<OrdersTab> {
+class _OrdersTabState extends State<OrdersTab> with AutoRefreshTab {
   bool loading = true;
   String? error;
   /// Fixed tab order matching web Manage orders (never randomized).
@@ -710,10 +719,10 @@ class _OrdersTabState extends State<OrdersTab> {
   final _tabAnchors = {for (final tab in _statusTabs) tab.key: GlobalKey()};
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-  }
+  int? get tabIndex => 2;
+
+  @override
+  Future<void> refreshTabData({required bool background}) => _load(background: background);
 
   void _selectTab(String key) {
     setState(() => activeTab = key);
@@ -739,18 +748,22 @@ class _OrdersTabState extends State<OrdersTab> {
     });
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool background = false}) async {
     final store = context.read<AppStore>();
     if (!store.isLoggedIn) {
-      setState(() => loading = false);
+      if (mounted) setState(() => loading = false);
       return;
     }
-    setState(() {
-      loading = true;
-      error = null;
-    });
+    if (!background) {
+      setState(() {
+        loading = true;
+        error = null;
+      });
+    }
     try {
       await store.loadOrders();
+      await store.refreshNotificationCounts();
+      error = null;
     } on ApiException catch (e) {
       error = e.message;
     } catch (e) {
@@ -859,7 +872,10 @@ class _OrdersTabState extends State<OrdersTab> {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
-    if (!store.isLoggedIn) return _Guest(onLogin: () => context.push('/login'));
+    if (!store.isLoggedIn) {
+      if (tabIsWarmingUp) return const FullPageLoader(label: 'Loading orders…');
+      return _Guest(onLogin: () => context.push('/login'));
+    }
     if (loading) return const FullPageLoader(label: 'Loading orders…');
     if (error != null) {
       return Center(
@@ -867,7 +883,7 @@ class _OrdersTabState extends State<OrdersTab> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(error!),
-            TextButton(onPressed: _load, child: const Text('Retry')),
+            TextButton(onPressed: refreshNow, child: const Text('Retry')),
           ],
         ),
       );
@@ -878,7 +894,7 @@ class _OrdersTabState extends State<OrdersTab> {
     final filtered = orders.where((o) => _matchesTab(o, activeTab)).toList();
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: refreshNow,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(0, 0, 0, 28),
         children: [

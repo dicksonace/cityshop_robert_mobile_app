@@ -80,6 +80,7 @@ class _FakeApiClient extends ApiClient {
     required String fileField,
     required String filePath,
     String filename = 'upload.jpg',
+    String? contentType,
   }) async {
     uploads.add({
       'path': path,
