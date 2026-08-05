@@ -982,8 +982,8 @@ class AppStore extends ChangeNotifier {
       if (sellerPayments != null && sellerPayments.isNotEmpty) 'seller_payments': sellerPayments,
     });
     final data = Map<String, dynamic>.from(res.data as Map);
-    // Direct-only draft keeps cart items until proof is submitted.
-    if (data['next'] != 'direct_pay') {
+    // Keep cart until payment/proof is submitted (draft flows).
+    if (data['next'] != 'direct_pay' && data['next'] != 'paystack') {
       await loadCart();
     }
     return data;
@@ -1050,6 +1050,19 @@ class AppStore extends ChangeNotifier {
     required String reference,
   }) async {
     final res = await _api.post('/checkouts/$checkoutId/pay/verify', data: {
+      'reference': reference,
+    });
+    await loadCart();
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> initializeDraftPaystack() async {
+    final res = await _api.post('/checkout/paystack/initialize');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> verifyDraftPaystack(String reference) async {
+    final res = await _api.post('/checkout/paystack/verify', data: {
       'reference': reference,
     });
     await loadCart();

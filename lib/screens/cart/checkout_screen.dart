@@ -158,6 +158,49 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       if (!mounted) return;
 
+      // Deferred Paystack: no order until payment succeeds.
+      if ((paymentMethod == 'momo' || paymentMethod == 'card') &&
+          next == 'paystack' &&
+          (preview?.paystackConfigured ?? result['paystack_configured'] == true)) {
+        try {
+          final pay = await store.initializeDraftPaystack();
+          if (!mounted) return;
+          final url = pay['authorization_url'] as String?;
+          final reference = pay['reference'] as String? ?? '';
+          if (url != null && url.isNotEmpty) {
+            final paid = await Navigator.of(context).push<bool>(
+              MaterialPageRoute(
+                builder: (_) => PaystackPaymentScreen(
+                  authorizationUrl: url,
+                  reference: reference,
+                  onVerify: (ref) => store.verifyDraftPaystack(ref),
+                ),
+              ),
+            );
+            if (!mounted) return;
+            if (paid == true) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Payment successful. Your order is placed.')),
+              );
+              await store.loadCart();
+              if (!mounted) return;
+              context.go('/shop');
+              return;
+            }
+            // Cancelled / closed — cart kept, no order created.
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Payment cancelled. No order was created.')),
+            );
+            return;
+          }
+        } on ApiException catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+          }
+          return;
+        }
+      }
+
       final needsPaystack = (paymentMethod == 'momo' || paymentMethod == 'card') &&
           (next == 'paystack_or_direct' || next == 'paystack') &&
           checkoutId != null &&
