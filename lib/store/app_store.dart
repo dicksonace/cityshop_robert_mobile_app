@@ -727,7 +727,8 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<({ConversationModel conversation, List<ChatMessage> messages})> openConversation({
+  Future<({ConversationModel conversation, List<ChatMessage> messages, AttachProduct? attachProduct})>
+      openConversation({
     required int sellerId,
     int? productId,
   }) async {
@@ -737,6 +738,7 @@ class AppStore extends ChangeNotifier {
     });
     final convJson = res.data['conversation'];
     final msgs = res.data['messages'];
+    final attachRaw = res.data['attach_product'];
     final conversation = ConversationModel.fromJson(Map<String, dynamic>.from(convJson as Map));
     final messages = msgs is List
         ? msgs
@@ -747,7 +749,10 @@ class AppStore extends ChangeNotifier {
                 ))
             .toList()
         : <ChatMessage>[];
-    return (conversation: conversation, messages: messages);
+    final attachProduct = attachRaw is Map
+        ? AttachProduct.fromJson(Map<String, dynamic>.from(attachRaw))
+        : null;
+    return (conversation: conversation, messages: messages, attachProduct: attachProduct);
   }
 
   Future<({ConversationModel conversation, List<ChatMessage> messages})> loadConversation(
@@ -771,6 +776,17 @@ class AppStore extends ChangeNotifier {
 
   Future<ChatMessage> sendMessage(int conversationId, String body) async {
     final res = await _api.post('/messages/$conversationId/send', data: {'body': body});
+    final msg = res.data['message'];
+    return ChatMessage.fromJson(
+      Map<String, dynamic>.from(msg as Map),
+      myUserId: user?.id ?? 0,
+    );
+  }
+
+  Future<ChatMessage> sendProductMessage(int conversationId, int productId) async {
+    final res = await _api.post('/messages/$conversationId/product', data: {
+      'product_id': productId,
+    });
     final msg = res.data['message'];
     return ChatMessage.fromJson(
       Map<String, dynamic>.from(msg as Map),
@@ -872,17 +888,27 @@ class AppStore extends ChangeNotifier {
     );
   }
 
-  Future<List<ChatMessage>> pollMessages(int conversationId, int afterId) async {
+  Future<({List<ChatMessage> messages, List<int> readMessageIds})> pollMessages(
+    int conversationId,
+    int afterId,
+  ) async {
     final res = await _api.get('/messages/$conversationId/poll', query: {'after': afterId});
-    final msgs = res.data is Map ? res.data['messages'] : null;
-    if (msgs is! List) return [];
-    return msgs
-        .whereType<Map>()
-        .map((e) => ChatMessage.fromJson(
-              Map<String, dynamic>.from(e),
-              myUserId: user?.id ?? 0,
-            ))
-        .toList();
+    final data = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    final msgs = data['messages'];
+    final readIds = data['read_message_ids'];
+    final messages = msgs is List
+        ? msgs
+            .whereType<Map>()
+            .map((e) => ChatMessage.fromJson(
+                  Map<String, dynamic>.from(e),
+                  myUserId: user?.id ?? 0,
+                ))
+            .toList()
+        : <ChatMessage>[];
+    final readMessageIds = readIds is List
+        ? readIds.whereType<num>().map((e) => e.toInt()).toList()
+        : <int>[];
+    return (messages: messages, readMessageIds: readMessageIds);
   }
 
   Future<RealtimeConfig?> fetchRealtimeConfig() async {

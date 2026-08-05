@@ -134,7 +134,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     try {
       final result = await store.openConversation(sellerId: p.sellerId!, productId: p.id);
       if (!mounted) return;
-      context.push('/messages/${result.conversation.id}');
+      context.push(
+        '/messages/${result.conversation.id}',
+        extra: result.attachProduct,
+      );
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));

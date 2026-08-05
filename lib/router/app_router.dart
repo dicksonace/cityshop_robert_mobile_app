@@ -19,6 +19,7 @@ import '../screens/product/product_detail_screen.dart';
 import '../screens/shop/shop_shell.dart';
 import '../screens/store/seller_store_screen.dart';
 import '../store/app_store.dart';
+import '../models/models.dart';
 
 /// Tab names accepted by `/shop?tab=`, matching the shell's IndexedStack order.
 const _shellTabs = {
@@ -129,6 +130,7 @@ GoRouter createRouter(AppStore store) {
         path: '/messages/:id',
         builder: (_, state) => ChatScreen(
           conversationId: int.parse(state.pathParameters['id']!),
+          attachProduct: state.extra is AttachProduct ? state.extra as AttachProduct : null,
         ),
       ),
     ],

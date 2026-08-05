@@ -958,6 +958,33 @@ class ConversationModel {
   }
 }
 
+/// Product waiting for the buyer to tap Send in chat (not auto-posted).
+class AttachProduct {
+  const AttachProduct({
+    required this.id,
+    required this.name,
+    required this.slug,
+    this.price,
+    this.imageUrl,
+  });
+
+  final int id;
+  final String name;
+  final String slug;
+  final double? price;
+  final String? imageUrl;
+
+  factory AttachProduct.fromJson(Map<String, dynamic> json) {
+    return AttachProduct(
+      id: (json['id'] as num).toInt(),
+      name: json['name'] as String? ?? 'Product',
+      slug: (json['slug'] as String? ?? '').trim(),
+      price: (json['price'] as num?)?.toDouble(),
+      imageUrl: (json['image_url'] as String?)?.trim(),
+    );
+  }
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -975,6 +1002,7 @@ class ChatMessage {
     this.productSlug,
     this.productImage,
     this.productPrice,
+    this.readAt,
     this.isDeleted = false,
     this.canDelete = false,
   });
@@ -994,6 +1022,7 @@ class ChatMessage {
   final String? productSlug;
   final String? productImage;
   final double? productPrice;
+  final String? readAt;
   final bool isDeleted;
   final bool canDelete;
 
@@ -1013,6 +1042,8 @@ class ChatMessage {
   bool get isMedia => isPhoto || isVideo || isVoice;
 
   bool get isEvent => type == 'call_log' || type == 'system';
+
+  bool get isRead => readAt != null && readAt!.isNotEmpty;
 
   /// "Voice call · 1m 20s", "Missed call", ...
   String get eventLabel {
@@ -1081,6 +1112,7 @@ class ChatMessage {
       productSlug: (product?['slug'] as String?)?.trim(),
       productImage: (product?['image_url'] as String?)?.trim(),
       productPrice: (product?['price'] as num?)?.toDouble(),
+      readAt: json['read_at'] as String?,
       isDeleted: deleted,
       canDelete: json['can_delete'] == true,
     );
@@ -1091,6 +1123,7 @@ class ChatMessage {
     bool? isDeleted,
     bool? canDelete,
     String? imageUrl,
+    String? readAt,
   }) {
     return ChatMessage(
       id: id,
@@ -1108,6 +1141,7 @@ class ChatMessage {
       productSlug: productSlug,
       productImage: productImage,
       productPrice: productPrice,
+      readAt: readAt ?? this.readAt,
       isDeleted: isDeleted ?? this.isDeleted,
       canDelete: canDelete ?? this.canDelete,
     );

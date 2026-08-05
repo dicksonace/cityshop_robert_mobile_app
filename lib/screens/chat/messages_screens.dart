@@ -207,8 +207,9 @@ class _MessagesTabState extends State<MessagesTab> {
 }
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key, required this.conversationId});
+  const ChatScreen({super.key, required this.conversationId, this.attachProduct});
   final int conversationId;
+  final AttachProduct? attachProduct;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -220,8 +221,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final _focus = FocusNode();
   ConversationModel? conversation;
   List<ChatMessage> messages = [];
+  AttachProduct? pendingProduct;
   bool loading = true;
   bool sending = false;
+  bool sendingProduct = false;
   bool uploadingMedia = false;
   bool showAttachPanel = false;
   bool recordingVoice = false;
@@ -235,6 +238,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    pendingProduct = widget.attachProduct;
     _load();
   }
 
@@ -315,13 +319,24 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
     try {
       final afterId = messages.isEmpty ? 0 : messages.last.id;
-      final newer = await context.read<AppStore>().pollMessages(
+      final polled = await context.read<AppStore>().pollMessages(
             widget.conversationId,
             afterId,
           );
-      if (newer.isEmpty || !mounted) return;
-      setState(() => messages = [...messages, ...newer]);
-      _jumpToEnd();
+      if (!mounted) return;
+      final readSet = polled.readMessageIds.toSet();
+      var changed = polled.messages.isNotEmpty;
+      final merged = [
+        ...messages.map((m) {
+          if (!m.mine || m.isRead || !readSet.contains(m.id)) return m;
+          changed = true;
+          return m.copyWith(readAt: DateTime.now().toIso8601String());
+        }),
+        ...polled.messages,
+      ];
+      if (!changed) return;
+      setState(() => messages = merged);
+      if (polled.messages.isNotEmpty) _jumpToEnd();
     } catch (_) {}
   }
 
@@ -395,6 +410,47 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } finally {
       if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Future<void> _sendPendingProduct() async {
+    final product = pendingProduct;
+    if (product == null || sendingProduct || sending || uploadingMedia) return;
+    setState(() => sendingProduct = true);
+    try {
+      final msg = await context.read<AppStore>().sendProductMessage(
+            widget.conversationId,
+            product.id,
+          );
+      if (!mounted) return;
+      setState(() {
+        messages = [...messages, msg];
+        pendingProduct = null;
+        conversation = ConversationModel(
+          id: conversation?.id ?? widget.conversationId,
+          otherName: conversation?.otherName ?? 'Seller',
+          otherId: conversation?.otherId,
+          otherAvatar: conversation?.otherAvatar,
+          storeName: conversation?.storeName,
+          otherMobile: conversation?.otherMobile,
+          productId: product.id,
+          productName: product.name,
+          productSlug: product.slug,
+          productImage: product.imageUrl,
+          productPrice: product.price,
+          latestBody: conversation?.latestBody,
+          latestType: 'product',
+          unreadCount: conversation?.unreadCount ?? 0,
+          lastMessageAt: conversation?.lastMessageAt,
+        );
+      });
+      _jumpToEnd();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => sendingProduct = false);
     }
   }
 
@@ -837,14 +893,31 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 bottom: m.isProduct ? 8 : 0,
                                                 left: m.isProduct ? 8 : 0,
                                               ),
-                                              child: Text(
-                                                _timeLabel(m.createdAt!),
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: m.isDeleted || m.isProduct
-                                                      ? AppColors.textMuted
-                                                      : (m.mine ? Colors.white70 : AppColors.textMuted),
-                                                ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    _timeLabel(m.createdAt!),
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: m.isDeleted || m.isProduct
+                                                          ? AppColors.textMuted
+                                                          : (m.mine ? Colors.white70 : AppColors.textMuted),
+                                                    ),
+                                                  ),
+                                                  if (m.mine && !m.isDeleted) ...[
+                                                    const SizedBox(width: 4),
+                                                    Icon(
+                                                      m.isRead ? Icons.done_all_rounded : Icons.done_rounded,
+                                                      size: 14,
+                                                      color: m.isRead
+                                                          ? (m.isProduct ? const Color(0xFF38BDF8) : const Color(0xFFBAE6FD))
+                                                          : (m.isProduct
+                                                              ? AppColors.textMuted
+                                                              : Colors.white70),
+                                                    ),
+                                                  ],
+                                                ],
                                               ),
                                             ),
                                           ],
@@ -869,6 +942,13 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (pendingProduct != null)
+                          _PendingProductStrip(
+                            product: pendingProduct!,
+                            sending: sendingProduct,
+                            onSend: _sendPendingProduct,
+                            onDismiss: () => setState(() => pendingProduct = null),
+                          ),
                         if (recordingVoice)
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -900,7 +980,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             children: [
                               IconButton(
                                 tooltip: showAttachPanel ? 'Close' : 'Attach',
-                                onPressed: (sending || uploadingMedia || recordingVoice) ? null : _toggleAttachPanel,
+                                onPressed: (sending || uploadingMedia || recordingVoice || sendingProduct)
+                                    ? null
+                                    : _toggleAttachPanel,
                                 style: IconButton.styleFrom(
                                   foregroundColor: AppColors.accent,
                                   disabledForegroundColor: AppColors.textMuted,
@@ -1014,6 +1096,88 @@ class _ChatScreenState extends State<ChatScreen> {
     final dt = DateTime.tryParse(iso)?.toLocal();
     if (dt == null) return '';
     return _timeFmt.format(dt);
+  }
+}
+
+/// Product waiting above the composer — buyer taps Send to share it.
+class _PendingProductStrip extends StatelessWidget {
+  const _PendingProductStrip({
+    required this.product,
+    required this.sending,
+    required this.onSend,
+    required this.onDismiss,
+  });
+
+  final AttachProduct product;
+  final bool sending;
+  final VoidCallback onSend;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = ApiConfig.resolveMediaUrl(product.imageUrl);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFFF7ED),
+        border: Border(bottom: BorderSide(color: Color(0xFFFFE0C2))),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 48,
+              height: 48,
+              color: Colors.white,
+              child: photo.isEmpty
+                  ? const Icon(Icons.shopping_bag_outlined, color: AppColors.accent)
+                  : CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+                if (product.price != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    _money.format(product.price),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          FilledButton(
+            onPressed: sending ? null : onSend,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.accent,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            child: Text(sending ? 'Sending…' : 'Send'),
+          ),
+          IconButton(
+            tooltip: 'Dismiss',
+            onPressed: sending ? null : onDismiss,
+            icon: const Icon(Icons.close_rounded),
+          ),
+        ],
+      ),
+    );
   }
 }
 
