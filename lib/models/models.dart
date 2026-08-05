@@ -644,6 +644,7 @@ class OrderItemModel {
     this.status,
     this.fundsReleaseStatus,
     this.imageUrl,
+    this.autoConfirmIn,
     this.canRequestRefund = false,
     this.canReview = false,
     this.buyerReview,
@@ -660,6 +661,7 @@ class OrderItemModel {
   final String? status;
   final String? fundsReleaseStatus;
   final String? imageUrl;
+  final String? autoConfirmIn;
   final bool canRequestRefund;
   final bool canReview;
   final Map<String, dynamic>? buyerReview;
@@ -690,6 +692,7 @@ class OrderItemModel {
       status: json['status'] as String?,
       fundsReleaseStatus: json['funds_release_status'] as String?,
       imageUrl: json['image_url'] as String?,
+      autoConfirmIn: json['auto_confirm_in'] as String?,
       canRequestRefund: json['can_request_refund'] == true,
       canReview: json['can_review'] == true,
       buyerReview: review is Map ? Map<String, dynamic>.from(review) : null,

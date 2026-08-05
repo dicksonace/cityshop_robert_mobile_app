@@ -66,51 +66,64 @@ class _ShopShellState extends State<ShopShell> {
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) {
-          setState(() => _tab = i);
-          if (store.isLoggedIn && (i == 0 || i == 2 || i == 3 || i == 4)) {
-            store.refreshNotificationCounts();
-          }
-        },
-        height: 68,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        indicatorColor: AppColors.accent,
-        destinations: [
-          NavigationDestination(
-            icon: Icon(Icons.storefront_outlined, color: _tab == 0 ? Colors.white : AppColors.textSecondary),
-            label: 'Shop',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined, color: _tab == 1 ? Colors.white : AppColors.textSecondary),
-            label: 'Wallet',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: store.isLoggedIn && store.activeOrders > 0,
-              label: Text('${store.activeOrders > 9 ? '9+' : store.activeOrders}'),
-              child: Icon(Icons.inventory_2_outlined, color: _tab == 2 ? Colors.white : AppColors.textSecondary),
+      bottomNavigationBar: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          indicatorColor: AppColors.accent,
+          indicatorShape: const CircleBorder(),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            final active = states.contains(WidgetState.selected);
+            return TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: active ? AppColors.accent : AppColors.textSecondary,
+            );
+          }),
+        ),
+        child: NavigationBar(
+          selectedIndex: _tab,
+          onDestinationSelected: (i) {
+            setState(() => _tab = i);
+            if (store.isLoggedIn && (i == 0 || i == 2 || i == 3 || i == 4)) {
+              store.refreshNotificationCounts();
+            }
+          },
+          height: 68,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: [
+            NavigationDestination(
+              icon: Icon(Icons.storefront_outlined, color: _tab == 0 ? Colors.white : AppColors.textSecondary),
+              label: 'Shop',
             ),
-            label: 'My Order',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: store.unreadMessages > 0,
-              label: Text('${store.unreadMessages > 9 ? '9+' : store.unreadMessages}'),
-              child: Icon(Icons.chat_bubble_outline, color: _tab == 3 ? Colors.white : AppColors.textSecondary),
+            NavigationDestination(
+              icon: Icon(Icons.account_balance_wallet_outlined, color: _tab == 1 ? Colors.white : AppColors.textSecondary),
+              label: 'Wallet',
             ),
-            label: 'Message',
-          ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: store.unreadNotifications > 0,
-              label: Text('${store.unreadNotifications > 9 ? '9+' : store.unreadNotifications}'),
-              child: Icon(Icons.person_outline, color: _tab == 4 ? Colors.white : AppColors.textSecondary),
+            NavigationDestination(
+              icon: Badge(
+                isLabelVisible: store.isLoggedIn && store.activeOrders > 0,
+                label: Text('${store.activeOrders > 9 ? '9+' : store.activeOrders}'),
+                child: Icon(Icons.inventory_2_outlined, color: _tab == 2 ? Colors.white : AppColors.textSecondary),
+              ),
+              label: 'My Order',
             ),
-            label: 'Profile',
-          ),
-        ],
+            NavigationDestination(
+              icon: Badge(
+                isLabelVisible: store.unreadMessages > 0,
+                label: Text('${store.unreadMessages > 9 ? '9+' : store.unreadMessages}'),
+                child: Icon(Icons.chat_bubble_outline, color: _tab == 3 ? Colors.white : AppColors.textSecondary),
+              ),
+              label: 'Message',
+            ),
+            NavigationDestination(
+              icon: Badge(
+                isLabelVisible: store.unreadNotifications > 0,
+                label: Text('${store.unreadNotifications > 9 ? '9+' : store.unreadNotifications}'),
+                child: Icon(Icons.person_outline, color: _tab == 4 ? Colors.white : AppColors.textSecondary),
+              ),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -2037,27 +2037,70 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                           ),
                                           if (_canConfirm(item)) ...[
                                             const SizedBox(height: 10),
-                                            SizedBox(
+                                            Container(
                                               width: double.infinity,
-                                              child: ElevatedButton(
-                                                onPressed: () async {
-                                                  try {
-                                                    await context.read<AppStore>().confirmDelivery(o.id, item.id);
-                                                    if (context.mounted) {
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        const SnackBar(content: Text('Delivery confirmed')),
-                                                      );
-                                                      _load();
-                                                    }
-                                                  } on ApiException catch (e) {
-                                                    if (context.mounted) {
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        SnackBar(content: Text(e.message)),
-                                                      );
-                                                    }
-                                                  }
-                                                },
-                                                child: const Text('Confirm delivery'),
+                                              padding: const EdgeInsets.all(14),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFFF7ED),
+                                                borderRadius: BorderRadius.circular(14),
+                                                border: Border.all(color: const Color(0xFFFED7AA)),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  const Text(
+                                                    'Waiting for delivery confirmation',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.w800,
+                                                      fontSize: 14,
+                                                      color: Color(0xFF431407),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 6),
+                                                  Text(
+                                                    item.autoConfirmIn == null || item.autoConfirmIn!.isEmpty
+                                                        ? 'Confirm delivery if you have received the products.'
+                                                        : 'Confirm delivery if you have received the products. The system will confirm delivery automatically in ${item.autoConfirmIn}.',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      height: 1.35,
+                                                      color: Color(0xFF9A3412),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  SizedBox(
+                                                    width: double.infinity,
+                                                    child: ElevatedButton.icon(
+                                                      onPressed: () async {
+                                                        try {
+                                                          await context.read<AppStore>().confirmDelivery(o.id, item.id);
+                                                          if (context.mounted) {
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              const SnackBar(content: Text('Delivery confirmed')),
+                                                            );
+                                                            _load();
+                                                          }
+                                                        } on ApiException catch (e) {
+                                                          if (context.mounted) {
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              SnackBar(content: Text(e.message)),
+                                                            );
+                                                          }
+                                                        }
+                                                      },
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: AppColors.accent,
+                                                        foregroundColor: Colors.white,
+                                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                                      ),
+                                                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                                                      label: const Text(
+                                                        'Confirm delivery',
+                                                        style: TextStyle(fontWeight: FontWeight.w800),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ],
@@ -2102,17 +2145,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                               ),
                                             ),
                                           ] else if (item.canRequestRefund) ...[
-                                            const SizedBox(height: 10),
-                                            SizedBox(
-                                              width: double.infinity,
-                                              child: OutlinedButton.icon(
-                                                onPressed: () => _requestRefund(item),
-                                                style: OutlinedButton.styleFrom(
-                                                  foregroundColor: AppColors.danger,
-                                                  side: const BorderSide(color: AppColors.danger),
-                                                ),
-                                                icon: const Icon(Icons.report_gmailerrorred_outlined, size: 18),
-                                                label: const Text('Apply for refund'),
+                                            const SizedBox(height: 8),
+                                            TextButton.icon(
+                                              onPressed: () => _requestRefund(item),
+                                              style: TextButton.styleFrom(
+                                                foregroundColor: AppColors.danger,
+                                                padding: EdgeInsets.zero,
+                                                visualDensity: VisualDensity.compact,
+                                              ),
+                                              icon: const Icon(Icons.warning_amber_rounded, size: 16),
+                                              label: const Text(
+                                                'Request refund',
+                                                style: TextStyle(fontWeight: FontWeight.w700, decoration: TextDecoration.underline),
                                               ),
                                             ),
                                           ],
