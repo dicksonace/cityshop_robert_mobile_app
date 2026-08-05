@@ -1037,7 +1037,7 @@ class ChatMessage {
 
   bool get isVoice => type == 'voice' && (voiceUrl ?? '').isNotEmpty && !isDeleted;
 
-  bool get isProduct => type == 'product' && !isDeleted && productId != null;
+  bool get isProduct => type == 'product' && !isDeleted;
 
   bool get isMedia => isPhoto || isVideo || isVoice;
 

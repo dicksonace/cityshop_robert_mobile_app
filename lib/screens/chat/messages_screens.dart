@@ -318,7 +318,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _pollNew() async {
     if (!mounted) return;
     try {
-      final afterId = messages.isEmpty ? 0 : messages.last.id;
+      final afterId = messages.where((m) => !m.isSignalling).fold<int>(
+            0,
+            (max, m) => m.id > max ? m.id : max,
+          );
       final polled = await context.read<AppStore>().pollMessages(
             widget.conversationId,
             afterId,
