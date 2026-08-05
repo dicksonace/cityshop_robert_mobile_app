@@ -40,6 +40,43 @@ class ProductImage {
   }
 }
 
+/// Compact card for the "Matches for recent views" carousel.
+class RecentViewMatch {
+  const RecentViewMatch({
+    required this.id,
+    required this.name,
+    required this.slug,
+    required this.price,
+    this.discountPrice,
+    this.imageUrl,
+    this.sellersInCategory = 1,
+  });
+
+  final int id;
+  final String name;
+  final String slug;
+  final double price;
+  final double? discountPrice;
+  final String? imageUrl;
+  final int sellersInCategory;
+
+  double get fromPrice => discountPrice ?? price;
+
+  factory RecentViewMatch.fromJson(Map<String, dynamic> json) {
+    final price = (json['price'] as num?)?.toDouble() ?? 0;
+    final discount = (json['discount_price'] as num?)?.toDouble();
+    final effective = (json['effective_price'] as num?)?.toDouble();
+    return RecentViewMatch(
+      id: json['id'] as int? ?? 0,
+      name: json['name'] as String? ?? '',
+      slug: json['slug'] as String? ?? '',
+      price: effective ?? discount ?? price,
+      discountPrice: discount,
+      imageUrl: json['image_url'] as String?,
+      sellersInCategory: (json['sellers_in_category'] as num?)?.toInt() ?? 1,
+    );
+  }
+}
 class Product {
   const Product({
     required this.id,

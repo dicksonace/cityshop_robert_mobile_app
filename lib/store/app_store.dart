@@ -6,6 +6,7 @@ import '../api/api_client.dart';
 import '../api/api_config.dart';
 import '../api/chat_realtime.dart';
 import '../models/models.dart';
+import '../services/recent_views.dart';
 
 class AppStore extends ChangeNotifier {
   AppStore(this._api);
@@ -218,6 +219,27 @@ class AppStore extends ChangeNotifier {
     final body = res.data;
     final data = body is Map ? (body['data'] ?? body) : body;
     return Product.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  /// Products similar to locally stored recent views (same categories).
+  Future<List<RecentViewMatch>> fetchMatchesForRecentViews() async {
+    final ids = await RecentViews.getIds();
+    if (ids.isEmpty) return const [];
+    final res = await _api.get(
+      '/products/matches-for-recent-views',
+      query: {'ids': ids.join(',')},
+    );
+    final body = res.data;
+    final list = body is Map ? body['products'] : null;
+    if (list is! List) return const [];
+    return list
+        .whereType<Map>()
+        .map((e) => RecentViewMatch.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<void> recordProductView(Product product) async {
+    await RecentViews.record(id: product.id, categoryId: product.categoryId);
   }
 
   Future<({SellerStore store, List<Product> products})> fetchSellerStore(

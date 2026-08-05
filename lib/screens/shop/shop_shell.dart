@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
+import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -115,10 +116,17 @@ class _ShopShellState extends State<ShopShell> {
   }
 }
 
-class _ShopHome extends StatelessWidget {
+class _ShopHome extends StatefulWidget {
   const _ShopHome({required this.searchController});
 
   final TextEditingController searchController;
+
+  @override
+  State<_ShopHome> createState() => _ShopHomeState();
+}
+
+class _ShopHomeState extends State<_ShopHome> {
+  int _matchesTick = 0;
 
   Future<void> _pickImageSearch(BuildContext context) async {
     final source = await showModalBottomSheet<ImageSource>(
@@ -215,7 +223,10 @@ class _ShopHome extends StatelessWidget {
         Expanded(
           child: RefreshIndicator(
             color: AppColors.accent,
-            onRefresh: () => store.loadShop(),
+            onRefresh: () async {
+              await store.loadShop();
+              if (mounted) setState(() => _matchesTick++);
+            },
             child: CustomScrollView(
               slivers: [
                 const SliverToBoxAdapter(child: _HeroBanner()),
@@ -278,7 +289,7 @@ class _ShopHome extends StatelessWidget {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: TextField(
-                                    controller: searchController,
+                                    controller: widget.searchController,
                                     decoration: const InputDecoration(
                                       hintText: 'Search products, stores, brands…',
                                       border: InputBorder.none,
@@ -307,7 +318,7 @@ class _ShopHome extends StatelessWidget {
                                     child: InkWell(
                                       onTap: store.loadingShop
                                           ? null
-                                          : () => store.loadShop(search: searchController.text),
+                                          : () => store.loadShop(search: widget.searchController.text),
                                       borderRadius: BorderRadius.circular(10),
                                       child: const SizedBox(
                                         width: 44,
@@ -406,6 +417,7 @@ class _ShopHome extends StatelessWidget {
                     ),
                   ),
                 ),
+                SliverToBoxAdapter(child: _MatchesForRecentViews(key: ValueKey(_matchesTick))),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -805,6 +817,143 @@ class _Stat extends StatelessWidget {
             style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Horizontal “Matches for recent views” strip — same idea as web home.
+class _MatchesForRecentViews extends StatefulWidget {
+  const _MatchesForRecentViews({super.key});
+
+  @override
+  State<_MatchesForRecentViews> createState() => _MatchesForRecentViewsState();
+}
+
+class _MatchesForRecentViewsState extends State<_MatchesForRecentViews> {
+  List<RecentViewMatch> _products = const [];
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final items = await context.read<AppStore>().fetchMatchesForRecentViews();
+      if (!mounted) return;
+      setState(() {
+        _products = items;
+        _loaded = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _products = const [];
+        _loaded = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded || _products.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Matches for recent views',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                ),
+                Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 148,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _products.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final item = _products[index];
+                  final sellers = item.sellersInCategory < 1 ? 1 : item.sellersInCategory;
+                  final image = ApiConfig.resolveMediaUrl(item.imageUrl);
+                  return InkWell(
+                    onTap: () => context.push('/products/${item.slug}'),
+                    borderRadius: BorderRadius.circular(12),
+                    child: SizedBox(
+                      width: 110,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Color(0xFFF8FAFC), Color(0xFFFFF7ED)],
+                                ),
+                              ),
+                              padding: const EdgeInsets.all(8),
+                              child: image.isEmpty
+                                  ? const Icon(Icons.image_outlined, color: AppColors.textMuted)
+                                  : CachedNetworkImage(
+                                      imageUrl: image,
+                                      fit: BoxFit.contain,
+                                      errorWidget: (_, __, ___) =>
+                                          const Icon(Icons.image_outlined, color: AppColors.textMuted),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '$sellers ${sellers == 1 ? 'seller' : 'sellers'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                          ),
+                          Text(
+                            'From ${_money.format(item.fromPrice)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
