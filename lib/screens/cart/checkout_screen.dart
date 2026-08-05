@@ -772,6 +772,39 @@ class _SellerPayBlock extends StatelessWidget {
             ),
             if (direct && canDirect) ...[
               const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFFE0C2)),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pay to seller account',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12.5,
+                        color: AppColors.primaryDark,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Make sure you have a trusted seller before you make payment directly. CityShop does not hold this money.',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.35,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
               const Text(
                 'SEND TO',
                 style: TextStyle(
