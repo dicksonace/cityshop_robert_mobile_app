@@ -803,6 +803,8 @@ class _ChatScreenState extends State<ChatScreen> {
         builder: (_) => ChatTransferScreen(
           conversationId: widget.conversationId,
           recipientName: conversation?.otherName ?? 'friend',
+          recipientMobile: conversation?.otherMobile,
+          recipientAvatar: conversation?.otherAvatar,
         ),
       ),
     );
