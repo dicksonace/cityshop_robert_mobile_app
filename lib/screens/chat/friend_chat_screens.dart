@@ -332,10 +332,9 @@ class _ChatTransferScreenState extends State<ChatTransferScreen> {
     Widget? child,
     String? label,
     Color? background,
-    Color? foreground,
   }) {
     return Material(
-      color: background ?? const Color(0xFFF3F4F6),
+      color: background ?? Colors.white,
       child: InkWell(
         onTap: onTap == null
             ? null
@@ -347,10 +346,10 @@ class _ChatTransferScreenState extends State<ChatTransferScreen> {
           child: child ??
               Text(
                 label ?? '',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w600,
-                  color: foreground ?? AppColors.textPrimary,
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF111111),
                 ),
               ),
         ),
@@ -369,250 +368,250 @@ class _ChatTransferScreenState extends State<ChatTransferScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const SizedBox.shrink(),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Transfer to ${widget.recipientName}',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              mobile.isNotEmpty
-                                  ? 'Mobile: $mobile'
-                                  : 'CityShop wallet · ${_money.format(available)} available',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            if (mobile.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  'Balance ${_money.format(available)}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.textMuted,
-                                  ),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Color(0xFF111111)),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 4, 24, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Transfer to ${widget.recipientName}',
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF111111),
+                                  height: 1.25,
                                 ),
                               ),
-                          ],
+                              const SizedBox(height: 6),
+                              Text(
+                                mobile.isNotEmpty
+                                    ? 'Mobile: $mobile'
+                                    : 'Balance: ${_money.format(available)}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF888888),
+                                  height: 1.2,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: avatar != null && avatar.isNotEmpty
-                              ? CachedNetworkImage(
-                                  imageUrl: ApiConfig.resolveMediaUrl(avatar),
-                                  fit: BoxFit.cover,
-                                  errorWidget: (_, __, ___) => _avatarFallback(),
-                                )
-                              : _avatarFallback(),
+                        const SizedBox(width: 12),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: avatar != null && avatar.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: ApiConfig.resolveMediaUrl(avatar),
+                                    fit: BoxFit.cover,
+                                    errorWidget: (_, __, ___) => _avatarFallback(),
+                                  )
+                                : _avatarFallback(),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 28),
-                  const Text(
-                    'Transfer amount',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'GH₵',
-                        style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
+                    const SizedBox(height: 36),
+                    const Text(
+                      'Transfer amount',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF888888),
                       ),
-                      const SizedBox(width: 10),
-                      Text(
-                        _amount,
-                        style: const TextStyle(
-                          fontSize: 42,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                          height: 1.1,
-                        ),
-                      ),
-                      Container(
-                        width: 2,
-                        height: 36,
-                        margin: const EdgeInsets.only(left: 2),
-                        color: AppColors.primary,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Divider(height: 1, color: Color(0xFFE5E7EB)),
-                  const SizedBox(height: 8),
-                  if (!showNote)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton(
-                        onPressed: () => setState(() => showNote = true),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: const Text(
-                          'Add Note',
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'GH₵',
                           style: TextStyle(
-                            color: Color(0xFF2563EB),
-                            fontWeight: FontWeight.w500,
+                            fontSize: 40,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF111111),
+                            height: 1,
                           ),
                         ),
-                      ),
-                    )
-                  else
-                    TextField(
-                      controller: _note,
-                      maxLength: 120,
-                      decoration: const InputDecoration(
-                        hintText: 'Add a note',
-                        border: InputBorder.none,
-                        counterText: '',
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          // WeChat-style keypad: numbers + backspace top-right + tall Transfer.
-          Container(
-            color: const Color(0xFFE5E7EB),
-            padding: EdgeInsets.only(bottom: bottomPad > 0 ? bottomPad : 0),
-            child: SizedBox(
-              height: 248,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: Column(
-                      children: [
-                        for (final row in const [
-                          ['1', '2', '3'],
-                          ['4', '5', '6'],
-                          ['7', '8', '9'],
-                          ['', '0', '.'],
-                        ])
-                          Expanded(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                for (final key in row)
-                                  Expanded(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(0.5),
-                                      child: key.isEmpty
-                                          ? const ColoredBox(color: Color(0xFFF3F4F6))
-                                          : _keyCell(
-                                              label: key,
-                                              onTap: () => _appendDigit(key),
-                                              background: Colors.white,
-                                            ),
-                                    ),
-                                  ),
-                              ],
-                            ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _amount,
+                          style: const TextStyle(
+                            fontSize: 40,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF111111),
+                            height: 1,
                           ),
+                        ),
+                        Container(
+                          width: 2,
+                          height: 34,
+                          margin: const EdgeInsets.only(left: 3),
+                          color: const Color(0xFF07C160),
+                        ),
                       ],
                     ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(0.5),
-                            child: _keyCell(
-                              onTap: _backspace,
-                              background: const Color(0xFFF3F4F6),
-                              child: const Icon(Icons.backspace_outlined, size: 22),
+                    const SizedBox(height: 14),
+                    Container(height: 0.5, color: const Color(0xFFE5E5E5)),
+                    const SizedBox(height: 10),
+                    if (!showNote)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: GestureDetector(
+                          onTap: () => setState(() => showNote = true),
+                          child: const Text(
+                            'Add Note',
+                            style: TextStyle(
+                              color: Color(0xFF576B95),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
                             ),
                           ),
                         ),
-                        Expanded(
-                          flex: 3,
-                          child: Padding(
-                            padding: const EdgeInsets.all(0.5),
-                            child: Material(
-                              color: canSend
-                                  ? const Color(0xFF07C160)
-                                  : const Color(0xFFA7F3D0),
-                              child: InkWell(
-                                onTap: canSend ? _send : null,
-                                child: Center(
-                                  child: sending
-                                      ? const SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.4,
-                                            color: Colors.white,
+                      )
+                    else
+                      TextField(
+                        controller: _note,
+                        autofocus: true,
+                        maxLength: 120,
+                        style: const TextStyle(fontSize: 15),
+                        decoration: const InputDecoration(
+                          hintText: 'Add a note',
+                          hintStyle: TextStyle(color: Color(0xFFB2B2B2)),
+                          border: InputBorder.none,
+                          isDense: true,
+                          counterText: '',
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    const Spacer(),
+                    if (mobile.isNotEmpty)
+                      Text(
+                        'Available ${_money.format(available)}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFFB2B2B2)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              color: const Color(0xFFD2D3D8),
+              padding: EdgeInsets.only(bottom: bottomPad),
+              child: SizedBox(
+                height: 256,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        children: [
+                          for (final row in const [
+                            ['1', '2', '3'],
+                            ['4', '5', '6'],
+                            ['7', '8', '9'],
+                            ['', '0', '.'],
+                          ])
+                            Expanded(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  for (final key in row)
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(0.4),
+                                        child: key.isEmpty
+                                            ? const ColoredBox(color: Color(0xFFD2D3D8))
+                                            : _keyCell(
+                                                label: key,
+                                                onTap: () => _appendDigit(key),
+                                              ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(0.4),
+                              child: _keyCell(
+                                onTap: _backspace,
+                                background: const Color(0xFFE8E9ED),
+                                child: const Icon(Icons.backspace_outlined, size: 22, color: Color(0xFF111111)),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Padding(
+                              padding: const EdgeInsets.all(0.4),
+                              child: Material(
+                                color: canSend
+                                    ? const Color(0xFF07C160)
+                                    : const Color(0xFF07C160).withValues(alpha: 0.35),
+                                child: InkWell(
+                                  onTap: canSend ? _send : null,
+                                  child: Center(
+                                    child: sending
+                                        ? const SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.4,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : const Text(
+                                            'Transfer',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 16,
+                                            ),
                                           ),
-                                        )
-                                      : Text(
-                                          'Transfer',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: canSend ? Colors.white : Colors.white70,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 15,
-                                          ),
-                                        ),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -622,14 +621,14 @@ class _ChatTransferScreenState extends State<ChatTransferScreen> {
         ? widget.recipientName.trim()[0].toUpperCase()
         : '?';
     return ColoredBox(
-      color: AppColors.ringOrange,
+      color: const Color(0xFF07C160),
       child: Center(
         child: Text(
           letter,
           style: const TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 20,
-            color: AppColors.primary,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            color: Colors.white,
           ),
         ),
       ),
