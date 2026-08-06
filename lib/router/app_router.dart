@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../screens/account/account_screens.dart';
 import '../screens/account/manual_deposit_screen.dart';
 import '../screens/account/notifications_screen.dart';
+import '../screens/account/payment_pin_screen.dart';
 import '../screens/account/wallet_orders_screens.dart';
 import '../screens/account/withdraw_screen.dart';
 import '../screens/auth/login_screen.dart';
@@ -14,6 +15,7 @@ import '../screens/cart/cart_screen.dart';
 import '../screens/cart/checkout_screen.dart';
 import '../screens/cart/direct_pay_draft_screen.dart';
 import '../screens/cart/direct_payment_screen.dart';
+import '../screens/chat/friend_chat_screens.dart';
 import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
 import '../screens/shop/shop_shell.dart';
@@ -70,6 +72,7 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/addresses', builder: (_, __) => const AddressesScreen()),
       GoRoute(path: '/profile/edit', builder: (_, __) => const ProfileEditScreen()),
       GoRoute(path: '/profile/password', builder: (_, __) => const ChangePasswordScreen()),
+      GoRoute(path: '/profile/payment-pin', builder: (_, __) => const PaymentPinScreen()),
       GoRoute(
         path: '/products/:slug',
         builder: (_, state) => ProductDetailScreen(slug: state.pathParameters['slug']!),
@@ -125,6 +128,10 @@ GoRouter createRouter(AppStore store) {
         builder: (_, state) => DirectPaymentScreen(
           orderId: int.parse(state.pathParameters['id']!),
         ),
+      ),
+      GoRoute(
+        path: '/messages/new',
+        builder: (_, __) => const NewChatScreen(),
       ),
       GoRoute(
         path: '/messages/:id',

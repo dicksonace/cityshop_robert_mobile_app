@@ -23,6 +23,7 @@ import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 import '../../widgets/tab_refresh.dart';
 import '../../widgets/video_viewer.dart';
+import 'friend_chat_screens.dart';
 
 final _timeFmt = DateFormat('h:mm a');
 final _dayFmt = DateFormat('EEE, MMM d');
@@ -84,10 +85,10 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
             children: [
               const Icon(Icons.chat_bubble_outline, size: 48, color: AppColors.accent),
               const SizedBox(height: 12),
-              const Text('Login to chat with sellers', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+              const Text('Login to open your chat room', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
               const SizedBox(height: 8),
               const Text(
-                'Ask about stock, delivery, or negotiate before you buy.',
+                'Message sellers, chat with friends, and send GH₵ transfers.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textSecondary),
               ),
@@ -138,16 +139,50 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Open a product and tap Chat to message the seller.',
+              'Search a CityShop mobile number to chat with friends, or open a product and tap Chat.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: () => context.push('/messages/new'),
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Find friend by mobile'),
+              ),
             ),
           ],
         ),
       );
     }
 
-    return RefreshIndicator(
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Chats',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Search mobile number',
+                onPressed: () => context.push('/messages/new'),
+                icon: const Icon(Icons.search),
+              ),
+              IconButton(
+                tooltip: 'New chat',
+                onPressed: () => context.push('/messages/new'),
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
       onRefresh: refreshNow,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -204,6 +239,9 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
           );
         },
       ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -241,6 +279,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool showAttachPanel = false;
   bool recordingVoice = false;
   int recordSeconds = 0;
+  ChatMessage? replyingTo;
   Timer? _poll;
   Timer? _recordTick;
   final _recorder = AudioRecorder();
@@ -410,14 +449,23 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _send([String? preset]) async {
     final text = (preset ?? _controller.text).trim();
     if (text.isEmpty || sending || uploadingMedia) return;
+    if (conversation?.blocked == true) return;
+    final replyId = replyingTo?.id;
     setState(() {
       sending = true;
       showAttachPanel = false;
     });
     try {
-      final msg = await context.read<AppStore>().sendMessage(widget.conversationId, text);
+      final msg = await context.read<AppStore>().sendMessage(
+            widget.conversationId,
+            text,
+            replyToId: replyId,
+          );
       if (preset == null) _controller.clear();
-      setState(() => messages = [...messages, msg]);
+      setState(() {
+        messages = [...messages, msg];
+        replyingTo = null;
+      });
       _jumpToEnd();
     } on ApiException catch (e) {
       if (mounted) {
@@ -425,6 +473,64 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } finally {
       if (mounted) setState(() => sending = false);
+    }
+  }
+
+  void _startReply(ChatMessage message) {
+    if (message.isDeleted || message.isEvent || message.isSignalling) return;
+    setState(() {
+      replyingTo = message;
+      showAttachPanel = false;
+    });
+    _focus.requestFocus();
+  }
+
+  Future<void> _openMessageActions(ChatMessage message) async {
+    if (message.isDeleted) return;
+    const deletable = {'text', 'image', 'video', 'voice', 'product'};
+    final canReply = !message.isEvent && conversation?.blocked != true;
+    final canDelete = message.canDelete ||
+        (message.mine && !message.isDeleted && deletable.contains(message.type));
+    if (!canReply && !canDelete) return;
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (canReply)
+                ListTile(
+                  leading: const Icon(Icons.reply_rounded, color: AppColors.accent),
+                  title: const Text('Reply', style: TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: message.isProduct
+                      ? Text(message.productName ?? 'Product')
+                      : null,
+                  onTap: () => Navigator.pop(ctx, 'reply'),
+                ),
+              if (canDelete)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: AppColors.danger),
+                  title: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w700)),
+                  onTap: () => Navigator.pop(ctx, 'delete'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted || action == null) return;
+    if (action == 'reply') {
+      _startReply(message);
+    } else if (action == 'delete') {
+      await _deleteMessage(message);
     }
   }
 
@@ -669,7 +775,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final mobile = conversation?.otherMobile?.trim();
     if (mobile == null || mobile.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seller phone number is not available')),
+        const SnackBar(content: Text('Phone number is not available')),
       );
       return;
     }
@@ -681,6 +787,72 @@ class _ChatScreenState extends State<ChatScreen> {
           SnackBar(content: Text('Could not dial $mobile')),
         );
       }
+    }
+  }
+
+  Future<void> _openTransfer() async {
+    if (conversation?.blocked == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unblock this user to send money')),
+      );
+      return;
+    }
+    setState(() => showAttachPanel = false);
+    final msg = await Navigator.of(context).push<ChatMessage>(
+      MaterialPageRoute(
+        builder: (_) => ChatTransferScreen(
+          conversationId: widget.conversationId,
+          recipientName: conversation?.otherName ?? 'friend',
+        ),
+      ),
+    );
+    if (!mounted || msg == null) return;
+    setState(() => messages = [...messages, msg]);
+    _jumpToEnd();
+  }
+
+  Future<void> _toggleBlock() async {
+    final otherId = conversation?.otherId;
+    if (otherId == null) return;
+    final currentlyBlocked = conversation?.iBlocked == true;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(currentlyBlocked ? 'Unblock user?' : 'Block user?'),
+        content: Text(
+          currentlyBlocked
+              ? 'You will be able to chat with ${conversation?.otherName ?? 'this user'} again.'
+              : 'They will not be able to message or transfer money to you.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(currentlyBlocked ? 'Unblock' : 'Block'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      if (currentlyBlocked) {
+        await context.read<AppStore>().unblockUser(otherId);
+      } else {
+        await context.read<AppStore>().blockUser(otherId);
+      }
+      if (!mounted) return;
+      setState(() {
+        conversation = conversation?.copyWith(
+          iBlocked: !currentlyBlocked,
+          blocked: !currentlyBlocked,
+        );
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(currentlyBlocked ? 'User unblocked' : 'User blocked')),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -719,9 +891,25 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           if ((conversation?.otherMobile ?? '').trim().isNotEmpty)
             IconButton(
-              tooltip: 'Call seller',
+              tooltip: 'Call',
               onPressed: _callSeller,
               icon: const Icon(Icons.call_rounded, color: AppColors.accent),
+            ),
+          if (conversation?.otherId != null)
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'block') {
+                  _toggleBlock();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'block',
+                  child: Text(
+                    conversation?.iBlocked == true ? 'Unblock' : 'Block',
+                  ),
+                ),
+              ],
             ),
         ],
       ),
@@ -802,17 +990,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                       maxWidth: MediaQuery.of(context).size.width * 0.78,
                                     ),
                                     child: GestureDetector(
-                                      onLongPress: m.isDeleted
-                                          ? null
-                                          : (m.canDelete ||
-                                                  (m.mine &&
-                                                      const {'text', 'image', 'video', 'voice', 'product'}
-                                                          .contains(m.type)))
-                                              ? () => _deleteMessage(m)
-                                              : null,
+                                      onLongPress: m.isDeleted ? null : () => _openMessageActions(m),
                                       child: Container(
                                       margin: const EdgeInsets.only(bottom: 8),
-                                      padding: m.isProduct
+                                      padding: m.isProduct || m.isTransfer
                                           ? EdgeInsets.zero
                                           : m.isMedia
                                               ? const EdgeInsets.all(4)
@@ -820,11 +1001,15 @@ class _ChatScreenState extends State<ChatScreen> {
                                       decoration: BoxDecoration(
                                         color: m.isDeleted
                                             ? Colors.grey.shade200
-                                            : m.isProduct
+                                            : m.isProduct || m.isTransfer
                                                 ? Colors.white
                                                 : (m.mine ? AppColors.accent : Colors.white),
-                                        border: m.isProduct
-                                            ? Border.all(color: const Color(0xFFFFE0C2))
+                                        border: m.isProduct || m.isTransfer
+                                            ? Border.all(
+                                                color: m.isTransfer
+                                                    ? const Color(0xFFBBF7D0)
+                                                    : const Color(0xFFFFE0C2),
+                                              )
                                             : null,
                                         borderRadius: BorderRadius.only(
                                           topLeft: const Radius.circular(16),
@@ -843,8 +1028,18 @@ class _ChatScreenState extends State<ChatScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.end,
                                         children: [
+                                          if (m.replyTo != null && !m.isDeleted)
+                                            _ReplyQuote(
+                                              reply: m.replyTo!,
+                                              mine: m.mine,
+                                              onOpenProduct: (slug) {
+                                                if (slug.isNotEmpty) context.push('/products/$slug');
+                                              },
+                                            ),
                                           if (m.isProduct)
                                             _ChatProductCard(message: m)
+                                          else if (m.isTransfer)
+                                            _ChatTransferCard(message: m)
                                           else if (m.isPhoto) ...[
                                             _ChatPhoto(
                                               url: m.imageUrl!,
@@ -904,9 +1099,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                             const SizedBox(height: 4),
                                             Padding(
                                               padding: EdgeInsets.only(
-                                                right: m.isMedia || m.isProduct ? 8 : 0,
-                                                bottom: m.isProduct ? 8 : 0,
-                                                left: m.isProduct ? 8 : 0,
+                                                right: m.isMedia || m.isProduct || m.isTransfer ? 8 : 0,
+                                                bottom: m.isProduct || m.isTransfer ? 8 : 0,
+                                                left: m.isProduct || m.isTransfer ? 8 : 0,
                                               ),
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
@@ -915,7 +1110,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                                     _timeLabel(m.createdAt!),
                                                     style: TextStyle(
                                                       fontSize: 10,
-                                                      color: m.isDeleted || m.isProduct
+                                                      color: m.isDeleted || m.isProduct || m.isTransfer
                                                           ? AppColors.textMuted
                                                           : (m.mine ? Colors.white70 : AppColors.textMuted),
                                                     ),
@@ -926,8 +1121,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                                       m.isRead ? Icons.done_all_rounded : Icons.done_rounded,
                                                       size: 14,
                                                       color: m.isRead
-                                                          ? (m.isProduct ? const Color(0xFF38BDF8) : const Color(0xFFBAE6FD))
-                                                          : (m.isProduct
+                                                          ? (m.isProduct || m.isTransfer
+                                                              ? const Color(0xFF38BDF8)
+                                                              : const Color(0xFFBAE6FD))
+                                                          : (m.isProduct || m.isTransfer
                                                               ? AppColors.textMuted
                                                               : Colors.white70),
                                                     ),
@@ -957,6 +1154,28 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (conversation?.blocked == true)
+                          Container(
+                            width: double.infinity,
+                            color: const Color(0xFFFEF2F2),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            child: Text(
+                              conversation?.iBlocked == true
+                                  ? 'You blocked this user. Unblock to chat or transfer.'
+                                  : 'Messaging is blocked with this user.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: AppColors.danger,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        if (replyingTo != null)
+                          _ReplyingStrip(
+                            message: replyingTo!,
+                            onCancel: () => setState(() => replyingTo = null),
+                          ),
                         if (pendingProduct != null)
                           _PendingProductStrip(
                             product: pendingProduct!,
@@ -995,7 +1214,11 @@ class _ChatScreenState extends State<ChatScreen> {
                             children: [
                               IconButton(
                                 tooltip: showAttachPanel ? 'Close' : 'Attach',
-                                onPressed: (sending || uploadingMedia || recordingVoice || sendingProduct)
+                                onPressed: (sending ||
+                                        uploadingMedia ||
+                                        recordingVoice ||
+                                        sendingProduct ||
+                                        conversation?.blocked == true)
                                     ? null
                                     : _toggleAttachPanel,
                                 style: IconButton.styleFrom(
@@ -1016,17 +1239,21 @@ class _ChatScreenState extends State<ChatScreen> {
                                   focusNode: _focus,
                                   minLines: 1,
                                   maxLines: 4,
-                                  enabled: !uploadingMedia && !recordingVoice,
+                                  enabled: !uploadingMedia &&
+                                      !recordingVoice &&
+                                      conversation?.blocked != true,
                                   textInputAction: TextInputAction.send,
                                   onTap: () {
                                     if (showAttachPanel) setState(() => showAttachPanel = false);
                                   },
                                   decoration: InputDecoration(
-                                    hintText: uploadingMedia
-                                        ? 'Sending…'
-                                        : recordingVoice
-                                            ? 'Recording voice…'
-                                            : 'Type a message…',
+                                    hintText: conversation?.blocked == true
+                                        ? 'Chat blocked'
+                                        : uploadingMedia
+                                            ? 'Sending…'
+                                            : recordingVoice
+                                                ? 'Recording voice…'
+                                                : 'Type a message…',
                                     filled: true,
                                     fillColor: AppColors.background,
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1048,7 +1275,12 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                               const SizedBox(width: 8),
                               IconButton.filled(
-                                onPressed: (sending || uploadingMedia || recordingVoice) ? null : _send,
+                                onPressed: (sending ||
+                                        uploadingMedia ||
+                                        recordingVoice ||
+                                        conversation?.blocked == true)
+                                    ? null
+                                    : _send,
                                 style: IconButton.styleFrom(
                                   backgroundColor: AppColors.accent,
                                   disabledBackgroundColor: AppColors.ringOrange,
@@ -1073,6 +1305,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             onVideo: _sendVideo,
                             onVoice: _startVoice,
                             onCall: _callSeller,
+                            onTransfer: _openTransfer,
                           ),
                       ],
                     ),
@@ -1111,6 +1344,196 @@ class _ChatScreenState extends State<ChatScreen> {
     final dt = DateTime.tryParse(iso)?.toLocal();
     if (dt == null) return '';
     return _timeFmt.format(dt);
+  }
+}
+
+/// Quoted product/text shown above a reply bubble.
+class _ReplyQuote extends StatelessWidget {
+  const _ReplyQuote({
+    required this.reply,
+    required this.mine,
+    required this.onOpenProduct,
+  });
+
+  final ChatReplyTo reply;
+  final bool mine;
+  final void Function(String slug) onOpenProduct;
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = ApiConfig.resolveMediaUrl(reply.productImage);
+    final product = reply.isProduct;
+
+    return GestureDetector(
+      onTap: product && (reply.productSlug ?? '').isNotEmpty
+          ? () => onOpenProduct(reply.productSlug!)
+          : null,
+      child: Container(
+        width: double.infinity,
+        margin: EdgeInsets.fromLTRB(product ? 8 : 0, product ? 8 : 0, product ? 8 : 0, 6),
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+        decoration: BoxDecoration(
+          color: mine ? Colors.white.withValues(alpha: 0.18) : const Color(0xFFFFF7ED),
+          borderRadius: BorderRadius.circular(10),
+          border: Border(
+            left: BorderSide(color: mine ? Colors.white70 : AppColors.accent, width: 3),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              reply.senderName,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: mine ? Colors.white : AppColors.accent,
+              ),
+            ),
+            const SizedBox(height: 4),
+            if (product)
+              Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: photo.isEmpty
+                          ? ColoredBox(
+                              color: AppColors.ringOrange,
+                              child: const Icon(Icons.shopping_bag_outlined, size: 18, color: AppColors.accent),
+                            )
+                          : CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          reply.productName ?? reply.body,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: mine ? Colors.white : AppColors.textPrimary,
+                          ),
+                        ),
+                        if (reply.productPrice != null)
+                          Text(
+                            _money.format(reply.productPrice),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: mine ? Colors.white70 : AppColors.accent,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            else
+              Text(
+                reply.body,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: mine ? Colors.white70 : AppColors.textSecondary,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReplyingStrip extends StatelessWidget {
+  const _ReplyingStrip({required this.message, required this.onCancel});
+
+  final ChatMessage message;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final photo = ApiConfig.resolveMediaUrl(message.productImage);
+    final label = message.isProduct
+        ? (message.productName ?? 'Product')
+        : message.isPhoto
+            ? (message.body.trim().isEmpty ? 'Photo' : message.body.trim())
+            : message.isVideo
+                ? 'Video'
+                : message.isVoice
+                    ? 'Voice message'
+                    : message.isTransfer
+                        ? 'Money transfer'
+                        : message.body;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFFF7ED),
+        border: Border(bottom: BorderSide(color: Color(0xFFFFE0C2))),
+      ),
+      child: Row(
+        children: [
+          Container(width: 3, height: 40, color: AppColors.accent),
+          const SizedBox(width: 10),
+          if (message.isProduct) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: photo.isEmpty
+                    ? const ColoredBox(
+                        color: Colors.white,
+                        child: Icon(Icons.shopping_bag_outlined, color: AppColors.accent),
+                      )
+                    : CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover),
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message.isProduct
+                      ? 'Replying to product'
+                      : 'Replying to message',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.accent),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  message.isProduct ? (message.productName ?? label) : label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+                if (message.isProduct && message.productPrice != null)
+                  Text(
+                    _money.format(message.productPrice),
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.accent),
+                  ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Cancel reply',
+            onPressed: onCancel,
+            icon: const Icon(Icons.close_rounded),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1347,6 +1770,78 @@ class _ChatProductCard extends StatelessWidget {
   }
 }
 
+/// Wallet transfer bubble — amount always shown in GHS.
+class _ChatTransferCard extends StatelessWidget {
+  const _ChatTransferCard({required this.message});
+
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = message.transferAmount;
+    final note = (message.transferNote ?? '').trim();
+    final ref = (message.transferReference ?? '').trim();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDCFCE7),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.swap_horiz_rounded, color: Color(0xFF16A34A)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      message.mine ? 'You transferred' : 'Transfer received',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      amount == null ? 'GH₵—' : _money.format(amount),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF15803D),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(note, style: const TextStyle(color: AppColors.textPrimary, height: 1.3)),
+          ],
+          if (ref.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Ref $ref',
+              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// Calls and other non-chat events sit in the middle of the thread.
 class _EventChip extends StatelessWidget {
   const _EventChip({required this.label, this.time});
@@ -1476,6 +1971,7 @@ class _AttachPanel extends StatelessWidget {
     required this.onVideo,
     required this.onVoice,
     required this.onCall,
+    required this.onTransfer,
   });
 
   final bool canCall;
@@ -1484,6 +1980,7 @@ class _AttachPanel extends StatelessWidget {
   final VoidCallback onVideo;
   final VoidCallback onVoice;
   final VoidCallback onCall;
+  final VoidCallback onTransfer;
 
   @override
   Widget build(BuildContext context) {
@@ -1493,6 +1990,7 @@ class _AttachPanel extends StatelessWidget {
       _AttachTileData('Video', Icons.videocam_outlined, onVideo),
       _AttachTileData('Voice', Icons.mic_none_rounded, onVoice),
       if (canCall) _AttachTileData('Call', Icons.call_outlined, onCall),
+      _AttachTileData('Transfer', Icons.swap_horiz_rounded, onTransfer),
     ];
 
     return Container(

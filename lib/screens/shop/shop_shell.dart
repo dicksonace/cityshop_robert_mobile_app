@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../api/api_client.dart';
 import '../../api/api_config.dart';
 import '../../models/models.dart';
+import '../../services/push_notifications.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
@@ -116,7 +117,7 @@ class _ShopShellState extends State<ShopShell> {
                 label: Text('${store.unreadMessages > 9 ? '9+' : store.unreadMessages}'),
                 child: Icon(Icons.chat_bubble_outline, color: _tab == 3 ? Colors.white : AppColors.textSecondary),
               ),
-              label: 'Message',
+              label: 'Chat',
             ),
             NavigationDestination(
               icon: Badge(
@@ -1214,7 +1215,7 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
 
   @override
   Widget build(BuildContext context) {
-    final user = widget.user ?? context.watch<AppStore>().user;
+    final user = context.watch<AppStore>().user ?? widget.user;
 
     if (user == null) {
       if (tabIsWarmingUp) return const FullPageLoader(label: 'Loading your account…');
@@ -1255,9 +1256,11 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
 
     final links = <(IconData, String, String, String)>[
       (Icons.notifications_outlined, 'Notifications', 'Orders, messages & updates', '/notifications'),
-      (Icons.person_outline, 'Profile settings', 'Name & email', '/profile/edit'),
+      (Icons.notifications_active_outlined, 'Allow phone alerts', 'Turn on popup notifications', '__enable_push__'),
+      (Icons.person_outline, 'Profile settings', 'Name, email & photo', '/profile/edit'),
       (Icons.location_on_outlined, 'Addresses', 'Saved delivery addresses', '/addresses'),
       (Icons.favorite_border, 'Wishlist', 'Saved products', '/wishlist'),
+      (Icons.pin_outlined, 'Payment PIN', '4-digit code for wallet & transfers', '/profile/payment-pin'),
       (Icons.lock_outline, 'Change password', 'Account security', '/profile/password'),
       (Icons.shopping_cart_outlined, 'My cart', 'Review items before checkout', '/cart'),
     ];
@@ -1277,13 +1280,10 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
           ),
           child: Row(
             children: [
-              CircleAvatar(
+              BuyerProfileAvatar(
+                name: user.name,
+                avatar: user.avatar,
                 radius: 28,
-                backgroundColor: AppColors.accent,
-                child: Text(
-                  user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
-                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -1354,7 +1354,29 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
                       const Icon(Icons.chevron_right, color: AppColors.textMuted),
                     ],
                   ),
-                  onTap: () => context.push(item.$4),
+                  onTap: () async {
+                    if (item.$4 == '__enable_push__') {
+                      final granted = await PushNotifications.instance.requestPermission(
+                        openSettingsIfDenied: true,
+                      );
+                      if (!context.mounted) return;
+                      if (granted) {
+                        await PushNotifications.instance.syncForLoggedInUser();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Phone notifications enabled')),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Allow notifications in phone settings to get popups'),
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                    context.push(item.$4);
+                  },
                 ),
             ],
           ),
@@ -1367,12 +1389,13 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
             backgroundColor: Colors.white,
           ),
           onPressed: () async {
-            await context.read<AppStore>().logout();
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Logged out')),
-              );
-            }
+            final store = context.read<AppStore>();
+            final messenger = ScaffoldMessenger.of(context);
+            await PushNotifications.instance.clearForLogout();
+            await store.logout();
+            messenger.showSnackBar(
+              const SnackBar(content: Text('Logged out')),
+            );
           },
           icon: const Icon(Icons.logout),
           label: const Text('Log out'),

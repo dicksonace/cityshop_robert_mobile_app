@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +10,7 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/payment_pin_sheet.dart';
 import 'paystack_payment_screen.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
@@ -66,7 +68,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _initSellerPayments(p);
       setState(() {
         preview = p;
-        addressId = p.addresses.where((a) => a.isDefault).firstOrNull?.id ??
+        addressId =
+            p.addresses.where((a) => a.isDefault).firstOrNull?.id ??
             p.addresses.firstOrNull?.id;
         if (paymentMethod == 'cash' && _storesWithoutCash(p).isNotEmpty) {
           paymentMethod = 'momo';
@@ -115,9 +118,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (orders is! List) return [];
     return orders
         .whereType<Map>()
-        .where((o) =>
-            (o['payment_channel']?.toString().toLowerCase() == 'direct') &&
-            (o['payment_status']?.toString().toLowerCase() != 'paid'))
+        .where(
+          (o) =>
+              (o['payment_channel']?.toString().toLowerCase() == 'direct') &&
+              (o['payment_status']?.toString().toLowerCase() != 'paid'),
+        )
         .map((o) => (o['id'] as num?)?.toInt())
         .whereType<int>()
         .toList();
@@ -135,21 +140,40 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       for (final entry in sellerChannels.entries) {
         if (entry.value == 'direct' && sellerMethodIds[entry.key] == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Choose a seller payment account for direct pay')),
+            const SnackBar(
+              content: Text('Choose a seller payment account for direct pay'),
+            ),
           );
           return;
         }
       }
     }
 
-    setState(() => placing = true);
     final store = context.read<AppStore>();
+    String? paymentPin;
+    if (paymentMethod == 'wallet') {
+      if (!(store.user?.hasPaymentPin ?? false)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Set a payment PIN first in Profile → Payment PIN')),
+        );
+        return;
+      }
+      paymentPin = await promptPaymentPin(
+        context,
+        title: 'Confirm wallet payment',
+        subtitle: 'Enter your 4-digit payment PIN to pay from your wallet',
+      );
+      if (paymentPin == null || !mounted) return;
+    }
+
+    setState(() => placing = true);
     try {
       final sellerPayments = _sellerPaymentsPayload();
       final result = await store.placeCheckout(
         addressId: addressId!,
         paymentMethod: paymentMethod,
         sellerPayments: sellerPayments.isEmpty ? null : sellerPayments,
+        paymentPin: paymentPin,
       );
       final next = result['next'] as String? ?? 'orders';
       final checkout = result['checkout'];
@@ -161,7 +185,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       // Deferred Paystack: no order until payment succeeds.
       if ((paymentMethod == 'momo' || paymentMethod == 'card') &&
           next == 'paystack' &&
-          (preview?.paystackConfigured ?? result['paystack_configured'] == true)) {
+          (preview?.paystackConfigured ??
+              result['paystack_configured'] == true)) {
         try {
           final pay = await store.initializeDraftPaystack();
           if (!mounted) return;
@@ -180,7 +205,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             if (!mounted) return;
             if (paid == true) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Payment successful. Your order is placed.')),
+                const SnackBar(
+                  content: Text('Payment successful. Your order is placed.'),
+                ),
               );
               await store.loadCart();
               if (!mounted) return;
@@ -189,19 +216,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             }
             // Cancelled / closed — cart kept, no order created.
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Payment cancelled. No order was created.')),
+              const SnackBar(
+                content: Text('Payment cancelled. No order was created.'),
+              ),
             );
             return;
           }
         } on ApiException catch (e) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(e.message)));
           }
           return;
         }
       }
 
-      final needsPaystack = (paymentMethod == 'momo' || paymentMethod == 'card') &&
+      final needsPaystack =
+          (paymentMethod == 'momo' || paymentMethod == 'card') &&
           (next == 'paystack_or_direct' || next == 'paystack') &&
           checkoutId != null &&
           (preview?.paystackConfigured ?? false) &&
@@ -237,7 +269,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           // No marketplace amount (all direct) — continue to direct pay.
           if (!e.message.toLowerCase().contains('no marketplace')) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(e.message)));
             }
           }
         }
@@ -256,16 +290,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
           ),
         );
-        context.go('/checkout/direct-pay', extra: {
-          'packages': packages is List ? packages : const [],
-          'shipping': shipping is Map ? shipping : null,
-        });
+        context.go(
+          '/checkout/direct-pay',
+          extra: {
+            'packages': packages is List ? packages : const [],
+            'shipping': shipping is Map ? shipping : null,
+          },
+        );
         return;
       }
 
       if (directIds.isNotEmpty || next == 'direct_payment') {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message']?.toString() ?? 'Complete direct seller payment')),
+          SnackBar(
+            content: Text(
+              result['message']?.toString() ?? 'Complete direct seller payment',
+            ),
+          ),
         );
         final firstDirect = directIds.isNotEmpty ? directIds.first : null;
         if (firstDirect != null) {
@@ -275,12 +316,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result['message']?.toString() ?? 'Order placed')),
+        SnackBar(
+          content: Text(result['message']?.toString() ?? 'Order placed'),
+        ),
       );
       context.go('/shop');
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => placing = false);
     }
@@ -301,7 +346,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           label: const Text('Add a new address'),
         ),
         children: [
-          const Text('Deliver to', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+          const Text(
+            'Deliver to',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+          ),
           const SizedBox(height: 10),
           for (final a in addresses)
             _AddressPickRow(
@@ -330,29 +378,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       body: loading
           ? const FullPageLoader(label: 'Preparing checkout…')
           : error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 12),
-                        OutlinedButton(onPressed: _load, child: const Text('Retry')),
-                      ],
-                    ),
-                  ),
-                )
-              : Column(
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(child: _form(p!)),
-                    _PayBar(
-                      total: p.grandTotal,
-                      placing: placing,
-                      onPressed: placing ? null : _place,
+                    Text(error!, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: _load,
+                      child: const Text('Retry'),
                     ),
                   ],
                 ),
+              ),
+            )
+          : Column(
+              children: [
+                Expanded(child: _form(p!)),
+                _PayBar(
+                  total: p.grandTotal,
+                  placing: placing,
+                  onPressed: placing ? null : _place,
+                ),
+              ],
+            ),
     );
   }
 
@@ -371,7 +422,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         else
           _AddressCard(
             address: selected,
-            onChange: p.addresses.length > 1 ? () => _pickAddress(p.addresses) : _openAddresses,
+            onChange: p.addresses.length > 1
+                ? () => _pickAddress(p.addresses)
+                : _openAddresses,
             changeLabel: p.addresses.length > 1 ? 'Change' : 'Edit',
           ),
         const SizedBox(height: 14),
@@ -382,7 +435,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               _PayRow(
                 icon: Icons.credit_card_rounded,
                 title: 'Mobile Money / Card',
-                subtitle: p.paystackConfigured ? 'Paystack secure payment' : 'Unavailable right now',
+                subtitle: p.paystackConfigured
+                    ? 'Paystack secure payment'
+                    : 'Unavailable right now',
                 selected: paymentMethod == 'momo',
                 warn: !p.paystackConfigured,
                 onTap: () => setState(() => paymentMethod = 'momo'),
@@ -416,8 +471,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           for (final group in p.sellerGroups)
             _SellerPayBlock(
               group: group,
-              channel: sellerChannels[(group['seller_id'] as num?)?.toInt() ?? 0] ?? 'marketplace',
-              methodId: sellerMethodIds[(group['seller_id'] as num?)?.toInt() ?? 0],
+              channel:
+                  sellerChannels[(group['seller_id'] as num?)?.toInt() ?? 0] ??
+                  'marketplace',
+              methodId:
+                  sellerMethodIds[(group['seller_id'] as num?)?.toInt() ?? 0],
               onChannelChanged: (channel) {
                 final id = (group['seller_id'] as num?)?.toInt();
                 if (id == null) return;
@@ -425,9 +483,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   sellerChannels[id] = channel;
                   if (channel == 'direct') {
                     final methods = (group['payment_methods'] is List)
-                        ? (group['payment_methods'] as List).whereType<Map>().toList()
+                        ? (group['payment_methods'] as List)
+                              .whereType<Map>()
+                              .toList()
                         : <Map>[];
-                    sellerMethodIds[id] ??= (methods.firstOrNull?['id'] as num?)?.toInt();
+                    sellerMethodIds[id] ??= (methods.firstOrNull?['id'] as num?)
+                        ?.toInt();
                   }
                 });
               },
@@ -503,7 +564,8 @@ class _RowDivider extends StatelessWidget {
   const _RowDivider();
 
   @override
-  Widget build(BuildContext context) => const Divider(height: 1, thickness: 1, color: AppColors.border);
+  Widget build(BuildContext context) =>
+      const Divider(height: 1, thickness: 1, color: AppColors.border);
 }
 
 class _AddressCard extends StatelessWidget {
@@ -531,7 +593,11 @@ class _AddressCard extends StatelessWidget {
               color: AppColors.ringOrange,
               borderRadius: BorderRadius.circular(9),
             ),
-            child: const Icon(Icons.location_on_rounded, size: 17, color: AppColors.accent),
+            child: const Icon(
+              Icons.location_on_rounded,
+              size: 17,
+              color: AppColors.accent,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -542,18 +608,28 @@ class _AddressCard extends StatelessWidget {
                   address.fullName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13.5,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '${address.addressLine}, ${address.city}, ${address.region}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary, height: 1.3),
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.textSecondary,
+                    height: 1.3,
+                  ),
                 ),
                 Text(
                   address.phone,
-                  style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ],
             ),
@@ -568,7 +644,10 @@ class _AddressCard extends StatelessWidget {
             ),
             child: Text(
               changeLabel,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 12.5,
+              ),
             ),
           ),
         ],
@@ -593,7 +672,11 @@ class _AddAddressCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           child: Row(
             children: [
-              const Icon(Icons.add_location_alt_outlined, size: 20, color: AppColors.accent),
+              const Icon(
+                Icons.add_location_alt_outlined,
+                size: 20,
+                color: AppColors.accent,
+              ),
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
@@ -601,7 +684,11 @@ class _AddAddressCard extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
                 ),
               ),
-              const Icon(Icons.chevron_right, size: 20, color: AppColors.textMuted),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: AppColors.textMuted,
+              ),
             ],
           ),
         ),
@@ -648,14 +735,21 @@ class _AddressPickRow extends StatelessWidget {
                     children: [
                       Text(
                         address.fullName,
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         '${address.addressLine}, ${address.city}, ${address.region} · ${address.phone}',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary, height: 1.3),
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: AppColors.textSecondary,
+                          height: 1.3,
+                        ),
                       ),
                     ],
                   ),
@@ -677,7 +771,11 @@ class _AddressPickRow extends StatelessWidget {
 
 /// Total plus the call to action, always in reach at the bottom of the screen.
 class _PayBar extends StatelessWidget {
-  const _PayBar({required this.total, required this.placing, required this.onPressed});
+  const _PayBar({
+    required this.total,
+    required this.placing,
+    required this.onPressed,
+  });
 
   final double total;
   final bool placing;
@@ -686,7 +784,12 @@ class _PayBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(14, 10, 14, 10 + MediaQuery.viewPaddingOf(context).bottom),
+      padding: EdgeInsets.fromLTRB(
+        14,
+        10,
+        14,
+        10 + MediaQuery.viewPaddingOf(context).bottom,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
@@ -699,11 +802,19 @@ class _PayBar extends StatelessWidget {
             children: [
               const Text(
                 'Total',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMuted,
+                ),
               ),
               Text(
                 _money.format(total),
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.accent),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.accent,
+                ),
               ),
             ],
           ),
@@ -717,7 +828,10 @@ class _PayBar extends StatelessWidget {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
                     )
                   : const Text('Place order'),
             ),
@@ -748,15 +862,28 @@ class _SellerPayBlock extends StatelessWidget {
     final sellerName = '${group['seller_name'] ?? 'Seller'}';
     final acceptMarketplace = group['accept_marketplace_payments'] != false;
     final acceptDirect = group['accept_direct_payments'] == true;
-    final methods = (group['payment_methods'] is List)
-        ? (group['payment_methods'] as List).whereType<Map>().toList()
-        : <Map>[];
+    final List<Map<String, dynamic>> methods =
+        (group['payment_methods'] is List)
+        ? (group['payment_methods'] as List)
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
+        : <Map<String, dynamic>>[];
     final canDirect = acceptDirect && methods.isNotEmpty;
     if (!canDirect && acceptMarketplace) {
       return const SizedBox.shrink();
     }
 
     final direct = channel == 'direct';
+    final selectedMethod = () {
+      if (methods.isEmpty) return null;
+      if (methodId != null) {
+        for (final m in methods) {
+          if ((m['id'] as num?)?.toInt() == methodId) return m;
+        }
+      }
+      return methods.first;
+    }();
 
     return Padding(
       padding: const EdgeInsets.only(top: 14),
@@ -772,18 +899,26 @@ class _SellerPayBlock extends StatelessWidget {
                     'Paying $sellerName',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13.5,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.ringOrange,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    _money.format((group['package_total'] as num?)?.toDouble() ?? 0),
+                    _money.format(
+                      (group['package_total'] as num?)?.toDouble() ?? 0,
+                    ),
                     style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w800,
@@ -799,19 +934,28 @@ class _SellerPayBlock extends StatelessWidget {
                 left: 'Via CityShop',
                 right: 'Pay seller',
                 rightSelected: direct,
-                onChanged: (toDirect) => onChannelChanged(toDirect ? 'direct' : 'marketplace'),
+                onChanged: (toDirect) =>
+                    onChannelChanged(toDirect ? 'direct' : 'marketplace'),
               )
             else
               Text(
-                canDirect ? 'This seller takes direct payment only' : 'Paid securely through CityShop',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                canDirect
+                    ? 'This seller takes direct payment only'
+                    : 'Paid securely through CityShop',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             const SizedBox(height: 6),
             Text(
               direct
                   ? 'Send the money yourself, then upload the proof'
                   : 'Held by CityShop until you get the item',
-              style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textSecondary,
+              ),
             ),
             if (direct && canDirect) ...[
               const SizedBox(height: 10),
@@ -860,10 +1004,14 @@ class _SellerPayBlock extends StatelessWidget {
               const SizedBox(height: 6),
               for (final m in methods)
                 _AccountRow(
-                  label: '${m['display_label'] ?? m['label'] ?? 'Account'}',
+                  method: m,
                   selected: (m['id'] as num).toInt() == methodId,
                   onTap: () => onMethodChanged((m['id'] as num).toInt()),
                 ),
+              if (selectedMethod != null) ...[
+                const SizedBox(height: 6),
+                _DirectPayDetailsCard(method: selectedMethod),
+              ],
             ],
           ],
         ),
@@ -940,11 +1088,45 @@ class _Segmented extends StatelessWidget {
 }
 
 class _AccountRow extends StatelessWidget {
-  const _AccountRow({required this.label, required this.selected, required this.onTap});
+  const _AccountRow({
+    required this.method,
+    required this.selected,
+    required this.onTap,
+  });
 
-  final String label;
+  final Map<String, dynamic> method;
   final bool selected;
   final VoidCallback onTap;
+
+  bool get _isBank {
+    final type = (method['type'] as String?)?.toLowerCase() ?? '';
+    final bankName = (method['bank_name'] as String?)?.trim() ?? '';
+    return type.contains('bank') || bankName.isNotEmpty;
+  }
+
+  String get _title {
+    if (_isBank) {
+      final bank = (method['bank_name'] as String?)?.trim();
+      return (bank == null || bank.isEmpty) ? 'Bank account' : bank;
+    }
+    final network = (method['network'] as String?)?.trim();
+    final display = (method['display_label'] as String?)?.trim();
+    final label = (method['label'] as String?)?.trim();
+    return network?.isNotEmpty == true
+        ? '${network!} Mobile Money'
+        : (display?.isNotEmpty == true
+              ? display!
+              : (label?.isNotEmpty == true ? label! : 'Mobile Money'));
+  }
+
+  String get _subtitle {
+    final number = (method['account_number'] as String?)?.trim() ?? '';
+    final name = (method['account_name'] as String?)?.trim() ?? '';
+    if (number.isEmpty && name.isEmpty) return 'Account';
+    if (number.isEmpty) return name;
+    if (name.isEmpty) return number;
+    return '$number • $name';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -964,10 +1146,32 @@ class _AccountRow extends StatelessWidget {
           ),
           child: Row(
             children: [
+              _AccountBadge(isBank: _isBank),
+              const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      _subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Icon(
@@ -978,6 +1182,143 @@ class _AccountRow extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AccountBadge extends StatelessWidget {
+  const _AccountBadge({required this.isBank});
+
+  final bool isBank;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(
+        color: isBank ? const Color(0xFF1F2937) : const Color(0xFFFFF3C4),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        isBank ? Icons.account_balance_rounded : Icons.payments_rounded,
+        size: 15,
+        color: isBank ? Colors.white : const Color(0xFFB45309),
+      ),
+    );
+  }
+}
+
+class _DirectPayDetailsCard extends StatelessWidget {
+  const _DirectPayDetailsCard({required this.method});
+
+  final Map<String, dynamic> method;
+
+  bool get _isBank {
+    final type = (method['type'] as String?)?.toLowerCase() ?? '';
+    final bankName = (method['bank_name'] as String?)?.trim() ?? '';
+    return type.contains('bank') || bankName.isNotEmpty;
+  }
+
+  String get _networkTitle {
+    if (_isBank) return 'Bank transfer';
+    final network = (method['network'] as String?)?.trim();
+    return network?.isNotEmpty == true
+        ? '$network Mobile Money'
+        : 'Mobile Money';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accountNumber = (method['account_number'] as String?)?.trim() ?? '';
+    final accountName = (method['account_name'] as String?)?.trim() ?? '';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'PAY TO',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.55,
+              color: _isBank ? AppColors.textMuted : AppColors.accent,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            _networkTitle,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  accountNumber.isEmpty
+                      ? 'Account number unavailable'
+                      : accountNumber,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              if (accountNumber.isNotEmpty)
+                TextButton(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: accountNumber));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Account number copied')),
+                      );
+                    }
+                  },
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 32),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    backgroundColor: const Color(0xFF111827),
+                    foregroundColor: Colors.white,
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
+                  ),
+                  child: const Text('COPY'),
+                ),
+            ],
+          ),
+          if (accountName.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              accountName.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 10.5,
+                letterSpacing: 0.3,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          const SizedBox(height: 6),
+          const Text(
+            'After payment, submit proof in your order so the seller can confirm.',
+            style: TextStyle(
+              fontSize: 10.5,
+              color: AppColors.textMuted,
+              height: 1.35,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1019,13 +1360,17 @@ class _PayRow extends StatelessWidget {
                   width: 30,
                   height: 30,
                   decoration: BoxDecoration(
-                    color: selected ? AppColors.ringOrange : AppColors.background,
+                    color: selected
+                        ? AppColors.ringOrange
+                        : AppColors.background,
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Icon(
                     icon,
                     size: 17,
-                    color: selected ? AppColors.accent : AppColors.textSecondary,
+                    color: selected
+                        ? AppColors.accent
+                        : AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1035,7 +1380,10 @@ class _PayRow extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                        ),
                       ),
                       const SizedBox(height: 1),
                       Text(
@@ -1044,7 +1392,9 @@ class _PayRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: warn ? AppColors.danger : AppColors.textSecondary,
+                          color: warn
+                              ? AppColors.danger
+                              : AppColors.textSecondary,
                         ),
                       ),
                     ],

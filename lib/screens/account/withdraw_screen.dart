@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/momo_widgets.dart';
+import '../../widgets/payment_pin_sheet.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 final _stamp = DateFormat('d MMM yyyy, h:mm a');
@@ -116,13 +117,27 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     final confirmed = await _review(amount, number, name);
     if (confirmed != true || !mounted) return;
 
+    final store = context.read<AppStore>();
+    if (!(store.user?.hasPaymentPin ?? false)) {
+      _toast('Set a payment PIN first in Profile → Payment PIN');
+      return;
+    }
+
+    final pin = await promptPaymentPin(
+      context,
+      title: 'Confirm withdrawal',
+      subtitle: 'Enter your 4-digit payment PIN to withdraw ${_money.format(amount)}',
+    );
+    if (pin == null || !mounted) return;
+
     setState(() => submitting = true);
     try {
-      await context.read<AppStore>().requestWithdrawal(
+      await store.requestWithdrawal(
             amount: amount,
             momoNumber: number,
             accountName: name,
             network: network,
+            paymentPin: pin,
           );
       if (!mounted) return;
       amountCtrl.clear();

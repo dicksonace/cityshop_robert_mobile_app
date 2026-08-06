@@ -350,12 +350,40 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AppStore>().user;
     return Scaffold(
       appBar: AppBar(title: const Text('Profile settings')),
       body: ListView(
         // Keep Save changes clear of the system navigation bar.
         padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
         children: [
+          Row(
+            children: [
+              BuyerProfileAvatar(
+                name: user?.name ?? name.text,
+                avatar: user?.avatar,
+                radius: 36,
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Profile picture',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Tap the photo to upload from camera or gallery.',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
           TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
           const SizedBox(height: 10),
           TextField(controller: email, decoration: const InputDecoration(labelText: 'Email')),

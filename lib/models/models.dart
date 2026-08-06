@@ -341,6 +341,7 @@ class AppUser {
     this.region,
     this.city,
     this.avatar,
+    this.hasPaymentPin = false,
   });
 
   final int id;
@@ -351,6 +352,7 @@ class AppUser {
   final String? region;
   final String? city;
   final String? avatar;
+  final bool hasPaymentPin;
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
     return AppUser(
@@ -362,6 +364,7 @@ class AppUser {
       region: json['region'] as String?,
       city: json['city'] as String?,
       avatar: json['avatar'] as String?,
+      hasPaymentPin: json['has_payment_pin'] == true,
     );
   }
 }
@@ -892,6 +895,8 @@ class ConversationModel {
     this.latestType,
     this.unreadCount = 0,
     this.lastMessageAt,
+    this.blocked = false,
+    this.iBlocked = false,
   });
 
   final int id;
@@ -909,6 +914,8 @@ class ConversationModel {
   final String? latestType;
   final int unreadCount;
   final String? lastMessageAt;
+  final bool blocked;
+  final bool iBlocked;
 
   /// What the conversation list shows when the last message carries no text.
   String get preview {
@@ -923,6 +930,8 @@ class ConversationModel {
         return 'Voice message';
       case 'product':
         return 'Product';
+      case 'transfer':
+        return 'Money transfer';
       case 'call_log':
         return 'Voice call';
       case null:
@@ -940,8 +949,8 @@ class ConversationModel {
       id: json['id'] as int,
       otherId: other is Map ? other['id'] as int? : null,
       otherName: other is Map
-          ? (other['store_name'] as String? ?? other['name'] as String? ?? 'Seller')
-          : 'Seller',
+          ? (other['store_name'] as String? ?? other['name'] as String? ?? 'User')
+          : 'User',
       otherAvatar: other is Map ? other['avatar'] as String? : null,
       storeName: other is Map ? other['store_name'] as String? : null,
       otherMobile: other is Map ? (other['mobile'] as String? ?? other['phone'] as String?) : null,
@@ -954,6 +963,42 @@ class ConversationModel {
       latestType: latest is Map ? latest['type'] as String? : null,
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
       lastMessageAt: json['last_message_at'] as String?,
+      blocked: json['blocked'] == true,
+      iBlocked: json['i_blocked'] == true,
+    );
+  }
+
+  ConversationModel copyWith({
+    bool? blocked,
+    bool? iBlocked,
+    int? productId,
+    String? productName,
+    String? productSlug,
+    String? productImage,
+    double? productPrice,
+    String? latestBody,
+    String? latestType,
+    String? lastMessageAt,
+    int? unreadCount,
+  }) {
+    return ConversationModel(
+      id: id,
+      otherName: otherName,
+      otherId: otherId,
+      otherAvatar: otherAvatar,
+      storeName: storeName,
+      otherMobile: otherMobile,
+      productId: productId ?? this.productId,
+      productName: productName ?? this.productName,
+      productSlug: productSlug ?? this.productSlug,
+      productImage: productImage ?? this.productImage,
+      productPrice: productPrice ?? this.productPrice,
+      latestBody: latestBody ?? this.latestBody,
+      latestType: latestType ?? this.latestType,
+      unreadCount: unreadCount ?? this.unreadCount,
+      lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+      blocked: blocked ?? this.blocked,
+      iBlocked: iBlocked ?? this.iBlocked,
     );
   }
 }
@@ -985,6 +1030,49 @@ class AttachProduct {
   }
 }
 
+/// Quoted message shown above a reply bubble (especially product cards).
+class ChatReplyTo {
+  const ChatReplyTo({
+    required this.id,
+    required this.body,
+    required this.senderName,
+    this.type,
+    this.productId,
+    this.productName,
+    this.productSlug,
+    this.productImage,
+    this.productPrice,
+  });
+
+  final int id;
+  final String body;
+  final String senderName;
+  final String? type;
+  final int? productId;
+  final String? productName;
+  final String? productSlug;
+  final String? productImage;
+  final double? productPrice;
+
+  bool get isProduct => type == 'product';
+
+  factory ChatReplyTo.fromJson(Map<String, dynamic> json) {
+    final productRaw = json['product'];
+    final product = productRaw is Map ? Map<String, dynamic>.from(productRaw) : null;
+    return ChatReplyTo(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      body: json['body'] as String? ?? '',
+      senderName: json['sender_name'] as String? ?? 'User',
+      type: json['type'] as String?,
+      productId: product?['id'] is num ? (product!['id'] as num).toInt() : null,
+      productName: product?['name'] as String?,
+      productSlug: (product?['slug'] as String?)?.trim(),
+      productImage: (product?['image_url'] as String?)?.trim(),
+      productPrice: (product?['price'] as num?)?.toDouble(),
+    );
+  }
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -1002,6 +1090,11 @@ class ChatMessage {
     this.productSlug,
     this.productImage,
     this.productPrice,
+    this.transferAmount,
+    this.transferCurrency,
+    this.transferNote,
+    this.transferReference,
+    this.replyTo,
     this.readAt,
     this.isDeleted = false,
     this.canDelete = false,
@@ -1022,6 +1115,11 @@ class ChatMessage {
   final String? productSlug;
   final String? productImage;
   final double? productPrice;
+  final double? transferAmount;
+  final String? transferCurrency;
+  final String? transferNote;
+  final String? transferReference;
+  final ChatReplyTo? replyTo;
   final String? readAt;
   final bool isDeleted;
   final bool canDelete;
@@ -1038,6 +1136,8 @@ class ChatMessage {
   bool get isVoice => type == 'voice' && (voiceUrl ?? '').isNotEmpty && !isDeleted;
 
   bool get isProduct => type == 'product' && !isDeleted;
+
+  bool get isTransfer => type == 'transfer' && !isDeleted;
 
   bool get isMedia => isPhoto || isVideo || isVoice;
 
@@ -1088,6 +1188,12 @@ class ChatMessage {
             (meta is Map ? meta['product'] : null));
     final product = productRaw is Map ? Map<String, dynamic>.from(productRaw) : null;
 
+    final transferRaw = deleted
+        ? null
+        : ((json['transfer'] is Map ? json['transfer'] : null) ??
+            (meta is Map ? meta['transfer'] : null));
+    final transfer = transferRaw is Map ? Map<String, dynamic>.from(transferRaw) : null;
+
     return ChatMessage(
       id: json['id'] as int,
       body: deleted ? '' : (json['body'] as String? ?? ''),
@@ -1112,6 +1218,17 @@ class ChatMessage {
       productSlug: (product?['slug'] as String?)?.trim(),
       productImage: (product?['image_url'] as String?)?.trim(),
       productPrice: (product?['price'] as num?)?.toDouble(),
+      transferAmount: (transfer?['amount'] as num?)?.toDouble(),
+      transferCurrency: transfer?['currency'] as String? ?? 'GHS',
+      transferNote: transfer?['note'] as String?,
+      transferReference: transfer?['reference'] as String?,
+      replyTo: () {
+        if (deleted) return null;
+        final raw = (json['reply_to'] is Map ? json['reply_to'] : null) ??
+            (meta is Map ? meta['reply_to'] : null);
+        if (raw is! Map) return null;
+        return ChatReplyTo.fromJson(Map<String, dynamic>.from(raw));
+      }(),
       readAt: json['read_at'] as String?,
       isDeleted: deleted,
       canDelete: json['can_delete'] == true,
@@ -1141,6 +1258,11 @@ class ChatMessage {
       productSlug: productSlug,
       productImage: productImage,
       productPrice: productPrice,
+      transferAmount: transferAmount,
+      transferCurrency: transferCurrency,
+      transferNote: transferNote,
+      transferReference: transferReference,
+      replyTo: replyTo,
       readAt: readAt ?? this.readAt,
       isDeleted: isDeleted ?? this.isDeleted,
       canDelete: canDelete ?? this.canDelete,

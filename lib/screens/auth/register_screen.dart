@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
+import '../../services/push_notifications.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
@@ -44,6 +45,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             password: _password.text,
             passwordConfirmation: _confirm.text,
           );
+      await PushNotifications.instance.syncForLoggedInUser(requestIfNeeded: true);
       if (!mounted) return;
       context.go('/shop');
     } on ApiException catch (e) {

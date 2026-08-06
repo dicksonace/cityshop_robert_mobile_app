@@ -601,7 +601,7 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
   VideoPlayerController? _videoController;
   bool _videoReady = false;
   bool _videoFailed = false;
-  bool _muted = true;
+  bool _muted = false;
 
   List<_GalleryItem> get _items {
     final items = <_GalleryItem>[];

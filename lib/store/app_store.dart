@@ -313,6 +313,26 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> registerDeviceToken({
+    required String token,
+    required String platform,
+    String? deviceName,
+  }) async {
+    await _api.post('/device-tokens', data: {
+      'token': token,
+      'platform': platform,
+      'device_name': (deviceName != null && deviceName.isNotEmpty)
+          ? deviceName
+          : ApiConfig.deviceName,
+    });
+  }
+
+  Future<void> unregisterDeviceToken(String token) async {
+    await _api.delete('/device-tokens', data: {
+      'token': token,
+    });
+  }
+
   Future<void> register({
     required String name,
     required String email,
@@ -389,6 +409,38 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> uploadAvatar(String filePath, {String? filename, String? contentType}) async {
+    final name = (filename != null && filename.trim().isNotEmpty)
+        ? filename.trim()
+        : filePath.split(RegExp(r'[\\/]')).last;
+    final res = await _api.postMultipart(
+      '/profile/avatar',
+      fields: const {},
+      fileField: 'avatar',
+      filePath: filePath,
+      filename: name.isEmpty ? 'avatar.jpg' : name,
+      contentType: contentType,
+    );
+    final userJson = res.data is Map ? res.data['user'] : null;
+    if (userJson is Map) {
+      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+    } else {
+      await refreshMe();
+    }
+    notifyListeners();
+  }
+
+  Future<void> removeAvatar() async {
+    final res = await _api.delete('/profile/avatar');
+    final userJson = res.data is Map ? res.data['user'] : null;
+    if (userJson is Map) {
+      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+    } else {
+      await refreshMe();
+    }
+    notifyListeners();
+  }
+
   Future<void> changePassword({
     required String currentPassword,
     required String password,
@@ -399,6 +451,70 @@ class AppStore extends ChangeNotifier {
       'password': password,
       'password_confirmation': passwordConfirmation,
     });
+  }
+
+  Future<void> setPaymentPin({
+    required String pin,
+    required String pinConfirmation,
+  }) async {
+    final res = await _api.post('/profile/payment-pin', data: {
+      'pin': pin,
+      'pin_confirmation': pinConfirmation,
+    });
+    final userJson = res.data is Map ? res.data['user'] : null;
+    if (userJson is Map) {
+      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      notifyListeners();
+    } else {
+      await refreshMe();
+    }
+  }
+
+  Future<void> changePaymentPin({
+    required String currentPin,
+    required String pin,
+    required String pinConfirmation,
+  }) async {
+    final res = await _api.put('/profile/payment-pin', data: {
+      'current_pin': currentPin,
+      'pin': pin,
+      'pin_confirmation': pinConfirmation,
+    });
+    final userJson = res.data is Map ? res.data['user'] : null;
+    if (userJson is Map) {
+      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      notifyListeners();
+    } else {
+      await refreshMe();
+    }
+  }
+
+  /// Returns a masked email hint when a reset code is emailed.
+  Future<String?> forgotPaymentPin() async {
+    final res = await _api.post('/profile/payment-pin/forgot');
+    if (res.data is Map) {
+      return res.data['email_hint'] as String?;
+    }
+    return null;
+  }
+
+  Future<void> resetPaymentPin({
+    required String code,
+    required String pin,
+    required String pinConfirmation,
+  }) async {
+    final res = await _api.post('/profile/payment-pin/reset', data: {
+      'code': code,
+      'pin': pin,
+      'pin_confirmation': pinConfirmation,
+    });
+    final userJson = res.data is Map ? res.data['user'] : null;
+    if (userJson is Map) {
+      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      notifyListeners();
+    } else {
+      await refreshMe();
+    }
   }
 
   void _applyCart(dynamic body) {
@@ -588,12 +704,14 @@ class AppStore extends ChangeNotifier {
     required String momoNumber,
     required String accountName,
     required String network,
+    required String paymentPin,
   }) async {
     final res = await _api.post('/wallet/withdraw', data: {
       'amount': amount,
       'momo_number': momoNumber,
       'account_name': accountName,
       'network': network,
+      'payment_pin': paymentPin,
     });
     final body = Map<String, dynamic>.from(res.data as Map);
     final walletJson = body['wallet'];
@@ -731,9 +849,12 @@ class AppStore extends ChangeNotifier {
       openConversation({
     required int sellerId,
     int? productId,
+    int? userId,
   }) async {
+    final peerId = userId ?? sellerId;
     final res = await _api.post('/messages', data: {
-      'seller_id': sellerId,
+      if (userId != null) 'user_id': userId,
+      if (userId == null) 'seller_id': peerId,
       if (productId != null) 'product_id': productId,
     });
     final convJson = res.data['conversation'];
@@ -755,6 +876,42 @@ class AppStore extends ChangeNotifier {
     return (conversation: conversation, messages: messages, attachProduct: attachProduct);
   }
 
+  Future<Map<String, dynamic>?> lookupUserByMobile(String mobile) async {
+    final res = await _api.get('/users/lookup', query: {'mobile': mobile.trim()});
+    final userJson = res.data is Map ? res.data['user'] : null;
+    if (userJson is Map) {
+      return Map<String, dynamic>.from(userJson);
+    }
+    return null;
+  }
+
+  Future<ChatMessage> sendTransferMessage(
+    int conversationId, {
+    required double amount,
+    String? note,
+    required String paymentPin,
+  }) async {
+    final res = await _api.post('/messages/$conversationId/transfer', data: {
+      'amount': amount,
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+      'payment_pin': paymentPin,
+    });
+    final walletJson = res.data is Map ? res.data['wallet'] : null;
+    if (walletJson is Map && wallet != null) {
+      wallet = wallet!.copyWith(
+        availableBalance: (walletJson['available_balance'] as num?)?.toDouble(),
+      );
+      notifyListeners();
+    } else {
+      await loadWallet();
+    }
+    final msg = res.data['message'];
+    return ChatMessage.fromJson(
+      Map<String, dynamic>.from(msg as Map),
+      myUserId: user?.id ?? 0,
+    );
+  }
+
   Future<({ConversationModel conversation, List<ChatMessage> messages})> loadConversation(
     int id,
   ) async {
@@ -774,8 +931,23 @@ class AppStore extends ChangeNotifier {
     return (conversation: conversation, messages: messages);
   }
 
-  Future<ChatMessage> sendMessage(int conversationId, String body) async {
-    final res = await _api.post('/messages/$conversationId/send', data: {'body': body});
+  Future<void> blockUser(int userId) async {
+    await _api.post('/blocks', data: {'user_id': userId});
+  }
+
+  Future<void> unblockUser(int userId) async {
+    await _api.delete('/blocks/$userId');
+  }
+
+  Future<ChatMessage> sendMessage(
+    int conversationId,
+    String body, {
+    int? replyToId,
+  }) async {
+    final res = await _api.post('/messages/$conversationId/send', data: {
+      'body': body,
+      if (replyToId != null) 'reply_to_id': replyToId,
+    });
     final msg = res.data['message'];
     return ChatMessage.fromJson(
       Map<String, dynamic>.from(msg as Map),
@@ -975,11 +1147,13 @@ class AppStore extends ChangeNotifier {
     required int addressId,
     required String paymentMethod,
     Map<String, dynamic>? sellerPayments,
+    String? paymentPin,
   }) async {
     final res = await _api.post('/checkout', data: {
       'address_id': addressId,
       'payment_method': paymentMethod,
       if (sellerPayments != null && sellerPayments.isNotEmpty) 'seller_payments': sellerPayments,
+      if (paymentPin != null && paymentPin.isNotEmpty) 'payment_pin': paymentPin,
     });
     final data = Map<String, dynamic>.from(res.data as Map);
     // Keep cart until payment/proof is submitted (draft flows).
@@ -1095,8 +1269,10 @@ class AppStore extends ChangeNotifier {
     return body;
   }
 
-  Future<void> payCheckoutWithWallet(int checkoutId) async {
-    await _api.post('/checkouts/$checkoutId/pay/wallet');
+  Future<void> payCheckoutWithWallet(int checkoutId, {required String paymentPin}) async {
+    await _api.post('/checkouts/$checkoutId/pay/wallet', data: {
+      'payment_pin': paymentPin,
+    });
     await loadCart();
     await loadWallet();
   }

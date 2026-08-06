@@ -116,9 +116,15 @@ class ApiClient {
     }
   }
 
-  Future<Response<dynamic>> delete(String path) async {
+  Future<Response<dynamic>> delete(String path, {Object? data}) async {
     try {
-      return await _dio.delete(path);
+      return await _dio.delete(
+        path,
+        data: data,
+        options: data == null || data is FormData
+            ? null
+            : Options(contentType: Headers.jsonContentType),
+      );
     } on DioException catch (e) {
       throw _mapError(e);
     }
