@@ -1060,6 +1060,21 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  Future<Map<String, dynamic>> sendCallSignal(
+    int conversationId,
+    String type, {
+    String body = '',
+    Map<String, dynamic>? metadata,
+  }) async {
+    final res = await _api.post('/messages/$conversationId/signal', data: {
+      'type': type,
+      'body': body,
+      if (metadata != null) 'metadata': metadata,
+    });
+    final data = res.data;
+    return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+  }
+
   Future<({List<ChatMessage> messages, List<int> readMessageIds})> pollMessages(
     int conversationId,
     int afterId,

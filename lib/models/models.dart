@@ -1078,12 +1078,14 @@ class ChatMessage {
     required this.id,
     required this.body,
     required this.mine,
+    this.senderId,
     this.type = 'text',
     this.createdAt,
     this.imageUrl,
     this.videoUrl,
     this.voiceUrl,
     this.durationSeconds,
+    this.metadata,
     this.callLog,
     this.productId,
     this.productName,
@@ -1103,12 +1105,14 @@ class ChatMessage {
   final int id;
   final String body;
   final bool mine;
+  final int? senderId;
   final String type;
   final String? createdAt;
   final String? imageUrl;
   final String? videoUrl;
   final String? voiceUrl;
   final int? durationSeconds;
+  final Map<String, dynamic>? metadata;
   final Map<String, dynamic>? callLog;
   final int? productId;
   final String? productName;
@@ -1151,15 +1155,17 @@ class ChatMessage {
 
     final status = (callLog?['status'] as String? ?? '').toLowerCase();
     final seconds = (callLog?['duration_seconds'] as num?)?.toInt() ?? 0;
+    final isVideo = (callLog?['call_kind'] as String?) == 'video';
+    final kind = isVideo ? 'Video call' : 'Voice call';
     if (status == 'missed' || status == 'declined' || status == 'unanswered') {
-      return status == 'declined' ? 'Call declined' : 'Missed call';
+      return status == 'declined' ? 'Call declined' : 'Missed ${isVideo ? 'video ' : ''}call';
     }
-    if (seconds <= 0) return 'Voice call';
+    if (seconds <= 0) return kind;
 
     final minutes = seconds ~/ 60;
     final rest = seconds % 60;
     final duration = minutes > 0 ? '${minutes}m ${rest}s' : '${rest}s';
-    return 'Voice call · $duration';
+    return '$kind · $duration';
   }
 
   String get durationLabel {
@@ -1198,6 +1204,7 @@ class ChatMessage {
       id: json['id'] as int,
       body: deleted ? '' : (json['body'] as String? ?? ''),
       mine: (json['sender_id'] as int?) == myUserId || json['is_mine'] == true,
+      senderId: (json['sender_id'] as num?)?.toInt(),
       type: json['type'] as String? ?? 'text',
       createdAt: json['created_at'] as String?,
       imageUrl: media('image_url'),
@@ -1209,6 +1216,7 @@ class ChatMessage {
         if (raw is String) return int.tryParse(raw);
         return null;
       }(),
+      metadata: meta is Map ? Map<String, dynamic>.from(meta) : null,
       callLog: () {
         final log = (meta is Map ? meta['call_log'] : null) ?? json['call_log'];
         return log is Map ? Map<String, dynamic>.from(log) : null;
@@ -1246,12 +1254,14 @@ class ChatMessage {
       id: id,
       body: body ?? this.body,
       mine: mine,
+      senderId: senderId,
       type: type,
       createdAt: createdAt,
       imageUrl: imageUrl ?? this.imageUrl,
       videoUrl: videoUrl,
       voiceUrl: voiceUrl,
       durationSeconds: durationSeconds,
+      metadata: metadata,
       callLog: callLog,
       productId: productId,
       productName: productName,

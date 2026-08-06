@@ -17,8 +17,10 @@ import '../../api/api_client.dart';
 import '../../api/api_config.dart';
 import '../../api/chat_realtime.dart';
 import '../../models/models.dart';
+import '../../services/chat_call_service.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/chat_call_overlay.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 import '../../widgets/tab_refresh.dart';
@@ -285,6 +287,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _recorder = AudioRecorder();
   ConversationRealtime? _realtime;
   bool _realtimeLive = false;
+  ChatCallService? _call;
 
   @override
   void initState() {
@@ -298,6 +301,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _poll?.cancel();
     _recordTick?.cancel();
     unawaited(_realtime?.dispose() ?? Future<void>.value());
+    unawaited(_call?.disposeService() ?? Future<void>.value());
     _recorder.dispose();
     _controller.dispose();
     _scroll.dispose();
@@ -310,6 +314,20 @@ class _ChatScreenState extends State<ChatScreen> {
       final store = context.read<AppStore>();
       final result = await store.loadConversation(widget.conversationId);
       if (!mounted) return;
+      final myId = store.user?.id ?? 0;
+      _call ??= ChatCallService(
+        store: store,
+        conversationId: widget.conversationId,
+        myUserId: myId,
+        myName: store.user?.name ?? 'You',
+        onCallLog: (msg) {
+          if (!mounted) return;
+          if (messages.any((m) => m.id == msg.id)) return;
+          setState(() => messages = [...messages, msg]);
+          _jumpToEnd();
+        },
+      );
+      _call!.peerName = result.conversation.otherName;
       setState(() {
         conversation = result.conversation;
         messages = result.messages;
@@ -341,8 +359,11 @@ class _ChatScreenState extends State<ChatScreen> {
       onMessage: (msg) {
         if (!mounted) return;
         if (messages.any((m) => m.id == msg.id)) return;
+        if (msg.isSignalling) {
+          unawaited(_call?.handleMessage(msg) ?? Future<void>.value());
+        }
         setState(() => messages = [...messages, msg]);
-        _jumpToEnd();
+        if (!msg.isSignalling) _jumpToEnd();
       },
     );
 
@@ -369,28 +390,37 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _pollNew() async {
     if (!mounted) return;
     try {
-      final afterId = messages.where((m) => !m.isSignalling).fold<int>(
-            0,
-            (max, m) => m.id > max ? m.id : max,
-          );
+      final afterId = messages.fold<int>(
+        0,
+        (max, m) => m.id > max ? m.id : max,
+      );
       final polled = await context.read<AppStore>().pollMessages(
             widget.conversationId,
             afterId,
           );
       if (!mounted) return;
       final readSet = polled.readMessageIds.toSet();
-      var changed = polled.messages.isNotEmpty;
+      final existing = messages.map((m) => m.id).toSet();
+      final fresh = <ChatMessage>[];
+      for (final msg in polled.messages) {
+        if (existing.contains(msg.id)) continue;
+        fresh.add(msg);
+        if (msg.isSignalling) {
+          unawaited(_call?.handleMessage(msg) ?? Future<void>.value());
+        }
+      }
+      var changed = fresh.isNotEmpty;
       final merged = [
         ...messages.map((m) {
           if (!m.mine || m.isRead || !readSet.contains(m.id)) return m;
           changed = true;
           return m.copyWith(readAt: DateTime.now().toIso8601String());
         }),
-        ...polled.messages,
+        ...fresh,
       ];
       if (!changed) return;
       setState(() => messages = merged);
-      if (polled.messages.isNotEmpty) _jumpToEnd();
+      if (fresh.any((m) => !m.isSignalling)) _jumpToEnd();
     } catch (_) {}
   }
 
@@ -771,7 +801,55 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Future<void> _callSeller() async {
+  Future<void> _startInAppCall(ChatCallKind kind) async {
+    final call = _call;
+    if (call == null) return;
+    if (conversation?.blocked == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unblock this user to call')),
+      );
+      return;
+    }
+    setState(() => showAttachPanel = false);
+    call.peerName = conversation?.otherName ?? 'Chat';
+    try {
+      await call.startCall(kind);
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is StateError ? e.message : 'Could not start call')),
+      );
+    }
+  }
+
+  Future<void> _acceptInAppCall() async {
+    try {
+      await _call?.acceptCall();
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is StateError ? e.message : 'Could not join call')),
+      );
+    }
+  }
+
+  Future<void> _endInAppCall() async {
+    final call = _call;
+    if (call == null) return;
+    final reason = call.state == ChatCallState.active
+        ? ChatCallEndReason.completed
+        : call.state == ChatCallState.calling
+            ? ChatCallEndReason.missed
+            : call.state == ChatCallState.incoming
+                ? ChatCallEndReason.declined
+                : ChatCallEndReason.cancelled;
+    await call.endCall(reason);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _callSellerPhone() async {
     final mobile = conversation?.otherMobile?.trim();
     if (mobile == null || mobile.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -891,20 +969,31 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
-          if ((conversation?.otherMobile ?? '').trim().isNotEmpty)
-            IconButton(
-              tooltip: 'Call',
-              onPressed: _callSeller,
-              icon: const Icon(Icons.call_rounded, color: AppColors.accent),
-            ),
+          IconButton(
+            tooltip: 'Audio call',
+            onPressed: () => unawaited(_startInAppCall(ChatCallKind.voice)),
+            icon: const Icon(Icons.call_rounded, color: AppColors.accent),
+          ),
+          IconButton(
+            tooltip: 'Video call',
+            onPressed: () => unawaited(_startInAppCall(ChatCallKind.video)),
+            icon: const Icon(Icons.videocam_rounded, color: Color(0xFF0284C7)),
+          ),
           if (conversation?.otherId != null)
             PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'block') {
                   _toggleBlock();
+                } else if (value == 'phone') {
+                  unawaited(_callSellerPhone());
                 }
               },
               itemBuilder: (context) => [
+                if ((conversation?.otherMobile ?? '').trim().isNotEmpty)
+                  const PopupMenuItem(
+                    value: 'phone',
+                    child: Text('Call phone'),
+                  ),
                 PopupMenuItem(
                   value: 'block',
                   child: Text(
@@ -917,7 +1006,9 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: loading
           ? const FullPageLoader(label: 'Opening chat…')
-          : Column(
+          : Stack(
+              children: [
+                Column(
               children: [
                 if (conversation?.productName != null)
                   _ProductContextCard(conversation: conversation!),
@@ -1301,18 +1392,38 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         if (showAttachPanel)
                           _AttachPanel(
-                            canCall: (conversation?.otherMobile ?? '').trim().isNotEmpty,
+                            canCall: true,
                             onCamera: () => _sendPhoto(ImageSource.camera),
                             onAlbum: () => _sendPhoto(ImageSource.gallery),
                             onVideo: _sendVideo,
                             onVoice: _startVoice,
-                            onCall: _callSeller,
+                            onAudioCall: () => unawaited(_startInAppCall(ChatCallKind.voice)),
+                            onVideoCall: () => unawaited(_startInAppCall(ChatCallKind.video)),
                             onTransfer: _openTransfer,
                           ),
                       ],
                     ),
                   ),
                 ),
+              ],
+            ),
+                if (_call != null)
+                  ListenableBuilder(
+                    listenable: _call!,
+                    builder: (context, _) {
+                      if (_call!.state == ChatCallState.idle) {
+                        return const SizedBox.shrink();
+                      }
+                      return Positioned.fill(
+                        child: ChatCallOverlay(
+                          call: _call!,
+                          peerName: conversation?.otherName ?? 'Chat',
+                          onAccept: () => unawaited(_acceptInAppCall()),
+                          onEnd: () => unawaited(_endInAppCall()),
+                        ),
+                      );
+                    },
+                  ),
               ],
             ),
     );
@@ -1972,7 +2083,8 @@ class _AttachPanel extends StatelessWidget {
     required this.onAlbum,
     required this.onVideo,
     required this.onVoice,
-    required this.onCall,
+    required this.onAudioCall,
+    required this.onVideoCall,
     required this.onTransfer,
   });
 
@@ -1981,7 +2093,8 @@ class _AttachPanel extends StatelessWidget {
   final VoidCallback onAlbum;
   final VoidCallback onVideo;
   final VoidCallback onVoice;
-  final VoidCallback onCall;
+  final VoidCallback onAudioCall;
+  final VoidCallback onVideoCall;
   final VoidCallback onTransfer;
 
   @override
@@ -1991,7 +2104,10 @@ class _AttachPanel extends StatelessWidget {
       _AttachTileData('Album', Icons.photo_library_outlined, onAlbum),
       _AttachTileData('Video', Icons.videocam_outlined, onVideo),
       _AttachTileData('Voice', Icons.mic_none_rounded, onVoice),
-      if (canCall) _AttachTileData('Call', Icons.call_outlined, onCall),
+      if (canCall) ...[
+        _AttachTileData('Audio', Icons.call_outlined, onAudioCall),
+        _AttachTileData('Video call', Icons.video_call_outlined, onVideoCall),
+      ],
       _AttachTileData('Transfer', Icons.swap_horiz_rounded, onTransfer),
     ];
 
