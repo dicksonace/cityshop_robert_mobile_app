@@ -887,6 +887,7 @@ class ConversationModel {
     this.storeName,
     this.storeSlug,
     this.otherMobile,
+    this.isSeller = false,
     this.productId,
     this.productName,
     this.productSlug,
@@ -907,6 +908,7 @@ class ConversationModel {
   final String? storeName;
   final String? storeSlug;
   final String? otherMobile;
+  final bool isSeller;
   final int? productId;
   final String? productName;
   final String? productSlug;
@@ -963,6 +965,11 @@ class ConversationModel {
                   : null))
           : null,
       otherMobile: other is Map ? (other['mobile'] as String? ?? other['phone'] as String?) : null,
+      isSeller: other is Map &&
+          (other['is_seller'] == true ||
+              other['store_slug'] != null ||
+              (other['seller_profile'] is Map &&
+                  ((other['seller_profile'] as Map)['slug'] as String?)?.trim().isNotEmpty == true)),
       productId: product is Map ? product['id'] as int? : null,
       productName: product is Map ? product['name'] as String? : null,
       productSlug: product is Map ? (product['slug'] as String?)?.trim() : null,
@@ -998,6 +1005,7 @@ class ConversationModel {
       storeName: storeName,
       storeSlug: storeSlug,
       otherMobile: otherMobile,
+      isSeller: isSeller,
       productId: productId ?? this.productId,
       productName: productName ?? this.productName,
       productSlug: productSlug ?? this.productSlug,

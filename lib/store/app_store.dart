@@ -1051,6 +1051,38 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  Future<void> deleteConversation(int conversationId) async {
+    await _api.delete('/messages/$conversationId');
+  }
+
+  Future<List<ChatMessage>> searchMessages(int conversationId, String query) async {
+    final res = await _api.get('/messages/$conversationId/search', query: {'q': query});
+    final msgs = res.data is Map ? res.data['messages'] : null;
+    return msgs is List
+        ? msgs
+            .whereType<Map>()
+            .map((e) => ChatMessage.fromJson(
+                  Map<String, dynamic>.from(e),
+                  myUserId: user?.id ?? 0,
+                ))
+            .toList()
+        : <ChatMessage>[];
+  }
+
+  Future<void> reportSeller({
+    required int sellerId,
+    required String reason,
+    String? details,
+    int? productId,
+  }) async {
+    await _api.post('/sellers/report', data: {
+      'seller_id': sellerId,
+      'reason': reason,
+      if (details != null && details.trim().isNotEmpty) 'details': details.trim(),
+      if (productId != null) 'product_id': productId,
+    });
+  }
+
   Future<ChatMessage> deleteMessage(int conversationId, int messageId) async {
     final res = await _api.delete('/messages/$conversationId/messages/$messageId');
     final msg = res.data['message'];

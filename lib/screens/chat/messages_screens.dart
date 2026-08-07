@@ -25,6 +25,7 @@ import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 import '../../widgets/tab_refresh.dart';
 import '../../widgets/video_viewer.dart';
+import 'chat_settings_screen.dart';
 import 'friend_chat_screens.dart';
 
 final _timeFmt = DateFormat('h:mm a');
@@ -849,6 +850,24 @@ class _ChatScreenState extends State<ChatScreen> {
     if (mounted) setState(() {});
   }
 
+  void _openChatSettings() {
+    final c = conversation;
+    if (c == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatSettingsScreen(
+          conversationId: widget.conversationId,
+          peerName: c.otherName,
+          peerAvatar: c.otherAvatar,
+          peerId: c.otherId,
+          storeSlug: c.storeSlug,
+          isSeller: c.isSeller || (c.storeSlug ?? '').trim().isNotEmpty,
+          productId: c.productId,
+        ),
+      ),
+    );
+  }
+
   Future<void> _callSellerPhone() async {
     final mobile = conversation?.otherMobile?.trim();
     if (mobile == null || mobile.isEmpty) {
@@ -950,22 +969,17 @@ class _ChatScreenState extends State<ChatScreen> {
       backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
         titleSpacing: 0,
-        title: Row(
-          children: [
-            _ConversationAvatar(
-              name: title,
-              avatar: conversation?.otherAvatar,
-              radius: 18,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  final slug = conversation?.storeSlug?.trim();
-                  if (slug != null && slug.isNotEmpty) {
-                    context.push('/stores/$slug');
-                  }
-                },
+        title: GestureDetector(
+          onTap: _openChatSettings,
+          child: Row(
+            children: [
+              _ConversationAvatar(
+                name: title,
+                avatar: conversation?.otherAvatar,
+                radius: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
                 child: Text(
                   title,
                   maxLines: 1,
@@ -973,8 +987,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           if ((conversation?.storeSlug ?? '').trim().isNotEmpty)
@@ -1005,9 +1019,15 @@ class _ChatScreenState extends State<ChatScreen> {
                   if (slug != null && slug.isNotEmpty) {
                     context.push('/stores/$slug');
                   }
+                } else if (value == 'settings') {
+                  _openChatSettings();
                 }
               },
               itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'settings',
+                  child: Text('Chat settings'),
+                ),
                 if ((conversation?.storeSlug ?? '').trim().isNotEmpty)
                   const PopupMenuItem(
                     value: 'store',
@@ -1025,6 +1045,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
               ],
+            )
+          else
+            IconButton(
+              tooltip: 'Chat settings',
+              onPressed: _openChatSettings,
+              icon: const Icon(Icons.more_horiz_rounded),
             ),
         ],
       ),
