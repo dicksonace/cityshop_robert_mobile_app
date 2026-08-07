@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -18,6 +19,7 @@ import '../../api/api_config.dart';
 import '../../api/chat_realtime.dart';
 import '../../models/models.dart';
 import '../../services/chat_call_service.dart';
+import '../../services/document_picker.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_sheet.dart';
@@ -684,6 +686,38 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _sendFile() async {
+    setState(() => showAttachPanel = false);
+    PickedDocument? picked;
+    try {
+      picked = await DocumentPicker.pick();
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Could not open files')),
+      );
+      return;
+    }
+    if (picked == null || !mounted) return;
+    if ((picked.size ?? 0) > 20 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('File must be 20 MB or smaller')),
+      );
+      return;
+    }
+    final caption = _controller.text.trim();
+    await _appendMedia(() async {
+      final msg = await context.read<AppStore>().sendFileMessage(
+            widget.conversationId,
+            picked!.path,
+            caption: caption.isEmpty ? null : caption,
+            filename: picked.name.isNotEmpty ? picked.name : 'file',
+          );
+      if (caption.isNotEmpty && mounted) _controller.clear();
+      return msg;
+    });
+  }
+
   Future<void> _startVoice() async {
     if (recordingVoice || uploadingMedia) return;
     try {
@@ -1137,7 +1171,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                       onLongPress: m.isDeleted ? null : () => _openMessageActions(m),
                                       child: Container(
                                       margin: const EdgeInsets.only(bottom: 8),
-                                      padding: m.isProduct || m.isTransfer
+                                      padding: m.isProduct || m.isTransfer || m.isFile
                                           ? EdgeInsets.zero
                                           : m.isMedia
                                               ? const EdgeInsets.all(4)
@@ -1145,14 +1179,16 @@ class _ChatScreenState extends State<ChatScreen> {
                                       decoration: BoxDecoration(
                                         color: m.isDeleted
                                             ? Colors.grey.shade200
-                                            : m.isProduct || m.isTransfer
+                                            : m.isProduct || m.isTransfer || m.isFile
                                                 ? Colors.white
                                                 : (m.mine ? AppColors.accent : Colors.white),
-                                        border: m.isProduct || m.isTransfer
+                                        border: m.isProduct || m.isTransfer || m.isFile
                                             ? Border.all(
                                                 color: m.isTransfer
                                                     ? const Color(0xFFBBF7D0)
-                                                    : const Color(0xFFFFE0C2),
+                                                    : m.isFile
+                                                        ? const Color(0xFFBFDBFE)
+                                                        : const Color(0xFFFFE0C2),
                                               )
                                             : null,
                                         borderRadius: BorderRadius.only(
@@ -1184,6 +1220,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                             _ChatProductCard(message: m)
                                           else if (m.isTransfer)
                                             _ChatTransferCard(message: m)
+                                          else if (m.isFile)
+                                            _ChatFileCard(message: m)
                                           else if (m.isPhoto) ...[
                                             _ChatPhoto(
                                               url: m.imageUrl!,
@@ -1243,9 +1281,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                             const SizedBox(height: 4),
                                             Padding(
                                               padding: EdgeInsets.only(
-                                                right: m.isMedia || m.isProduct || m.isTransfer ? 8 : 0,
-                                                bottom: m.isProduct || m.isTransfer ? 8 : 0,
-                                                left: m.isProduct || m.isTransfer ? 8 : 0,
+                                                right: m.isMedia || m.isProduct || m.isTransfer || m.isFile ? 8 : 0,
+                                                bottom: m.isProduct || m.isTransfer || m.isFile ? 8 : 0,
+                                                left: m.isProduct || m.isTransfer || m.isFile ? 8 : 0,
                                               ),
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
@@ -1254,7 +1292,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                                     _timeLabel(m.createdAt!),
                                                     style: TextStyle(
                                                       fontSize: 10,
-                                                      color: m.isDeleted || m.isProduct || m.isTransfer
+                                                      color: m.isDeleted ||
+                                                              m.isProduct ||
+                                                              m.isTransfer ||
+                                                              m.isFile
                                                           ? AppColors.textMuted
                                                           : (m.mine ? Colors.white70 : AppColors.textMuted),
                                                     ),
@@ -1265,10 +1306,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                                       m.isRead ? Icons.done_all_rounded : Icons.done_rounded,
                                                       size: 14,
                                                       color: m.isRead
-                                                          ? (m.isProduct || m.isTransfer
+                                                          ? (m.isProduct || m.isTransfer || m.isFile
                                                               ? const Color(0xFF38BDF8)
                                                               : const Color(0xFFBAE6FD))
-                                                          : (m.isProduct || m.isTransfer
+                                                          : (m.isProduct || m.isTransfer || m.isFile
                                                               ? AppColors.textMuted
                                                               : Colors.white70),
                                                     ),
@@ -1451,6 +1492,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             onAudioCall: () => unawaited(_startInAppCall(ChatCallKind.voice)),
                             onVideoCall: () => unawaited(_startInAppCall(ChatCallKind.video)),
                             onTransfer: _openTransfer,
+                            onFiles: _sendFile,
                           ),
                       ],
                     ),
@@ -1636,7 +1678,9 @@ class _ReplyingStrip extends StatelessWidget {
                     ? 'Voice message'
                     : message.isTransfer
                         ? 'Money transfer'
-                        : message.body;
+                        : message.isFile
+                            ? (message.fileName ?? 'File')
+                            : message.body;
 
     return Container(
       width: double.infinity,
@@ -1926,6 +1970,88 @@ class _ChatProductCard extends StatelessWidget {
                   ],
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Document / file attachment bubble.
+class _ChatFileCard extends StatelessWidget {
+  const _ChatFileCard({required this.message});
+
+  final ChatMessage message;
+
+  String get _sizeLabel {
+    final bytes = message.fileSize ?? 0;
+    if (bytes <= 0) return '';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  Future<void> _open(BuildContext context) async {
+    final url = message.fileUrl;
+    if (url == null || url.isEmpty) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open that file')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (message.fileName ?? message.body).trim();
+    final size = _sizeLabel;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _open(context),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDBEAFE),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.insert_drive_file_rounded, color: Color(0xFF2563EB)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name.isEmpty ? 'File' : name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      size.isEmpty ? 'Tap to open' : '$size · Tap to open',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.download_rounded, color: AppColors.accent, size: 22),
             ],
           ),
         ),
@@ -2283,6 +2409,7 @@ class _AttachPanel extends StatelessWidget {
     required this.onAudioCall,
     required this.onVideoCall,
     required this.onTransfer,
+    required this.onFiles,
   });
 
   final bool canCall;
@@ -2293,6 +2420,7 @@ class _AttachPanel extends StatelessWidget {
   final VoidCallback onAudioCall;
   final VoidCallback onVideoCall;
   final VoidCallback onTransfer;
+  final VoidCallback onFiles;
 
   @override
   Widget build(BuildContext context) {
@@ -2306,6 +2434,7 @@ class _AttachPanel extends StatelessWidget {
         _AttachTileData('Video call', Icons.video_call_outlined, onVideoCall),
       ],
       _AttachTileData('Transfer', Icons.swap_horiz_rounded, onTransfer),
+      _AttachTileData('Files', Icons.folder_outlined, onFiles),
     ];
 
     return Container(

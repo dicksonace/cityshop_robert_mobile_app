@@ -936,6 +936,8 @@ class ConversationModel {
         return 'Product';
       case 'transfer':
         return 'Money transfer';
+      case 'file':
+        return 'File';
       case 'call_log':
         return 'Voice call';
       case null:
@@ -1116,6 +1118,10 @@ class ChatMessage {
     this.transferReference,
     this.transferFromName,
     this.transferToName,
+    this.fileUrl,
+    this.fileName,
+    this.fileSize,
+    this.fileMime,
     this.replyTo,
     this.readAt,
     this.isDeleted = false,
@@ -1145,6 +1151,10 @@ class ChatMessage {
   final String? transferReference;
   final String? transferFromName;
   final String? transferToName;
+  final String? fileUrl;
+  final String? fileName;
+  final int? fileSize;
+  final String? fileMime;
   final ChatReplyTo? replyTo;
   final String? readAt;
   final bool isDeleted;
@@ -1164,6 +1174,8 @@ class ChatMessage {
   bool get isProduct => type == 'product' && !isDeleted;
 
   bool get isTransfer => type == 'transfer' && !isDeleted;
+
+  bool get isFile => type == 'file' && (fileUrl ?? '').isNotEmpty && !isDeleted;
 
   bool get isMedia => isPhoto || isVideo || isVoice;
 
@@ -1264,6 +1276,24 @@ class ChatMessage {
       transferReference: transfer?['reference'] as String?,
       transferFromName: (transfer?['from_name'] as String?)?.trim(),
       transferToName: (transfer?['to_name'] as String?)?.trim(),
+      fileUrl: media('file_url'),
+      fileName: () {
+        if (deleted) return null;
+        final fromMeta = meta is Map ? meta['file_name'] as String? : null;
+        return fromMeta ?? json['file_name'] as String?;
+      }(),
+      fileSize: () {
+        if (deleted) return null;
+        final raw = (meta is Map ? meta['file_size'] : null) ?? json['file_size'];
+        if (raw is num) return raw.toInt();
+        if (raw is String) return int.tryParse(raw);
+        return null;
+      }(),
+      fileMime: () {
+        if (deleted) return null;
+        final fromMeta = meta is Map ? meta['file_mime'] as String? : null;
+        return fromMeta ?? json['file_mime'] as String?;
+      }(),
       replyTo: () {
         if (deleted) return null;
         final raw = (json['reply_to'] is Map ? json['reply_to'] : null) ??
@@ -1308,6 +1338,10 @@ class ChatMessage {
       transferReference: transferReference,
       transferFromName: transferFromName,
       transferToName: transferToName,
+      fileUrl: fileUrl,
+      fileName: fileName,
+      fileSize: fileSize,
+      fileMime: fileMime,
       replyTo: replyTo,
       readAt: readAt ?? this.readAt,
       isDeleted: isDeleted ?? this.isDeleted,

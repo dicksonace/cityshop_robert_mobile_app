@@ -1012,6 +1012,28 @@ class AppStore extends ChangeNotifier {
     );
   }
 
+  Future<ChatMessage> sendFileMessage(
+    int conversationId,
+    String filePath, {
+    String? caption,
+    String filename = 'file',
+  }) async {
+    final res = await _api.postMultipart(
+      '/messages/$conversationId/file',
+      fields: {
+        if (caption != null && caption.trim().isNotEmpty) 'caption': caption.trim(),
+      },
+      fileField: 'file',
+      filePath: filePath,
+      filename: filename,
+    );
+    final msg = res.data['message'];
+    return ChatMessage.fromJson(
+      Map<String, dynamic>.from(msg as Map),
+      myUserId: user?.id ?? 0,
+    );
+  }
+
   Future<ChatMessage> sendVoiceMessage(
     int conversationId,
     String filePath, {
