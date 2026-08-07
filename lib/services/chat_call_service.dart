@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../models/models.dart';
 import '../store/app_store.dart';
+import 'call_ringtone.dart';
 
 enum ChatCallState { idle, calling, incoming, active }
 
@@ -44,6 +45,7 @@ class ChatCallService extends ChangeNotifier {
   String peerName = '';
   DateTime? _startedAt;
   bool _renderersReady = false;
+  final _ringtone = CallRingtone();
 
   Future<void> init() async {
     if (_renderersReady) return;
@@ -54,6 +56,7 @@ class ChatCallService extends ChangeNotifier {
 
   Future<void> disposeService() async {
     await _cleanup();
+    await _ringtone.dispose();
     await localRenderer.dispose();
     await remoteRenderer.dispose();
   }
@@ -75,6 +78,7 @@ class ChatCallService extends ChangeNotifier {
   }
 
   Future<void> _cleanup() async {
+    await _ringtone.stop();
     await _pc?.close();
     _pc = null;
     await _localStream?.dispose();
@@ -164,6 +168,7 @@ class ChatCallService extends ChangeNotifier {
       );
       state = ChatCallState.calling;
       notifyListeners();
+      unawaited(_ringtone.startOutgoing());
     } catch (e) {
       await _cleanup();
       rethrow;
@@ -179,6 +184,7 @@ class ChatCallService extends ChangeNotifier {
     }
 
     try {
+      await _ringtone.stop();
       _localStream = await navigator.mediaDevices.getUserMedia({
         'audio': true,
         'video': kind == ChatCallKind.video,
@@ -275,12 +281,14 @@ class ChatCallService extends ChangeNotifier {
       }
       state = ChatCallState.incoming;
       notifyListeners();
+      unawaited(_ringtone.startIncoming());
       return;
     }
 
     if (_pc == null) return;
 
     if (msg.type == 'call_answer' && meta['sdp'] is Map) {
+      await _ringtone.stop();
       final sdp = Map<String, dynamic>.from(meta['sdp'] as Map);
       await _pc!.setRemoteDescription(
         RTCSessionDescription(sdp['sdp'] as String?, sdp['type'] as String?),
