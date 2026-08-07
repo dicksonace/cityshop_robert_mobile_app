@@ -141,7 +141,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
           );
       if (!mounted) return;
       amountCtrl.clear();
-      _toast('Withdrawal requested. Payouts are usually sent within 1 hour.');
+      _toast('Withdrawal requested. Payouts are usually sent within 15 minutes.');
       await _load();
     } on ApiException catch (e) {
       if (mounted) _toast(e.message);
@@ -215,7 +215,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                 ),
                 const SizedBox(height: 2),
                 const Text(
-                  'Usually paid within 1 hour after admin approval.',
+                  'Usually paid within 15 minutes after admin approval.',
                   style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],
@@ -270,7 +270,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
             const _Notice(
               icon: Icons.hourglass_top_rounded,
               title: 'Withdrawal in processing',
-              body: 'Your earlier request is still being paid out (usually within 1 hour). '
+              body: 'Your earlier request is still being paid out (usually within 15 minutes). '
                   'You can submit another withdrawal with your remaining balance.',
             ),
             const SizedBox(height: 16),
