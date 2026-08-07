@@ -92,7 +92,9 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   }
 
   void _withdrawAll() {
-    setState(() => amountCtrl.text = overview.availableBalance.toStringAsFixed(2));
+    final fee = overview.feeFor(payoutType);
+    final max = (overview.availableBalance - fee).clamp(0, overview.availableBalance);
+    setState(() => amountCtrl.text = max.toStringAsFixed(2));
   }
 
   void _setPayoutType(String type) {
@@ -133,8 +135,14 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       _toast('Minimum withdrawal is ${_money.format(overview.minimum)}');
       return;
     }
-    if (amount > overview.availableBalance) {
-      _toast('You can withdraw at most ${_money.format(overview.availableBalance)}');
+    final fee = overview.feeFor(payoutType);
+    final total = amount + fee;
+    if (total > overview.availableBalance) {
+      _toast(
+        fee > 0
+            ? 'Needs ${_money.format(total)} (incl. ${_money.format(fee)} fee). Available ${_money.format(overview.availableBalance)}'
+            : 'You can withdraw at most ${_money.format(overview.availableBalance)}',
+      );
       return;
     }
 
@@ -244,6 +252,17 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   _money.format(amount),
                   style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 26),
                 ),
+                if (overview.feeFor(payoutType) > 0) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Withdrawal fee ${_money.format(overview.feeFor(payoutType))}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                  Text(
+                    'Total deducted ${_money.format(amount + overview.feeFor(payoutType))}',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ],
                 const SizedBox(height: 2),
                 const Text(
                   'Usually processed within 15 minutes and sometimes instant.',
@@ -419,8 +438,13 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                     labelText: 'Amount (GH₵)',
-                    helperText: 'Minimum ${_money.format(overview.minimum)}'
-                        ' · Available ${_money.format(overview.availableBalance)}',
+                    helperText: () {
+                      final fee = overview.feeFor(payoutType);
+                      final base = 'Minimum ${_money.format(overview.minimum)}'
+                          ' · Available ${_money.format(overview.availableBalance)}';
+                      if (fee <= 0) return base;
+                      return '$base · ${_isBank ? 'Bank' : 'MoMo'} fee ${_money.format(fee)}';
+                    }(),
                     border: const OutlineInputBorder(),
                   ),
                 ),

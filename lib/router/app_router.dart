@@ -8,6 +8,7 @@ import '../screens/account/notifications_screen.dart';
 import '../screens/account/payment_pin_screen.dart';
 import '../screens/account/wallet_orders_screens.dart';
 import '../screens/account/withdraw_screen.dart';
+import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/auth/splash_screen.dart';
@@ -19,6 +20,7 @@ import '../screens/chat/friend_chat_screens.dart';
 import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
 import '../screens/shop/shop_shell.dart';
+import '../screens/wallet/qr_pay_screens.dart';
 import '../screens/store/seller_store_screen.dart';
 import '../store/app_store.dart';
 import '../models/models.dart';
@@ -58,6 +60,12 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
       GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
       GoRoute(
+        path: '/forgot-password',
+        builder: (_, state) => ForgotPasswordScreen(
+          initialLogin: state.extra is String ? state.extra as String : '',
+        ),
+      ),
+      GoRoute(
         path: '/shop',
         builder: (_, state) => ShopShell(
           initialTab: _shellTabs[state.uri.queryParameters['tab']] ?? 0,
@@ -69,6 +77,23 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
       GoRoute(path: '/wallet/manual-deposit', builder: (_, __) => const ManualDepositScreen()),
       GoRoute(path: '/wallet/withdraw', builder: (_, __) => const WithdrawScreen()),
+      GoRoute(path: '/qr', builder: (_, __) => const QrPayHubScreen()),
+      GoRoute(path: '/qr/scan', builder: (_, __) => const QrScanScreen()),
+      GoRoute(path: '/qr/receive', builder: (_, __) => const QrReceiveScreen()),
+      GoRoute(
+        path: '/qr/pay',
+        builder: (_, state) {
+          final extra = state.extra;
+          if (extra is Map) {
+            final payload = extra['payload'] as String? ?? '';
+            final resolved = extra['resolved'] is Map
+                ? Map<String, dynamic>.from(extra['resolved'] as Map)
+                : <String, dynamic>{};
+            return QrPayScreen(payload: payload, resolved: resolved);
+          }
+          return const QrPayHubScreen();
+        },
+      ),
       GoRoute(path: '/addresses', builder: (_, __) => const AddressesScreen()),
       GoRoute(path: '/profile/edit', builder: (_, __) => const ProfileEditScreen()),
       GoRoute(path: '/profile/password', builder: (_, __) => const ChangePasswordScreen()),

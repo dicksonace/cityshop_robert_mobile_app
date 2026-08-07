@@ -350,7 +350,11 @@ class _ChatScreenState extends State<ChatScreen> {
           setState(() => messages = [...messages, msg]);
           _jumpToEnd();
         },
-      );
+      )..addListener(() {
+          if (!mounted) return;
+          setState(() {});
+          _startPoll();
+        });
       _call!.peerName = result.conversation.otherName;
       setState(() {
         conversation = result.conversation;
@@ -407,7 +411,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _startPoll() {
     _poll?.cancel();
-    final seconds = _realtimeLive ? 15 : 4;
+    final inCall = _call != null && _call!.state != ChatCallState.idle;
+    // ICE no longer broadcasts (avoids killing the server) — poll often while in a call.
+    final seconds = inCall ? 1 : (_realtimeLive ? 15 : 4);
     _poll = Timer.periodic(Duration(seconds: seconds), (_) => _pollNew());
   }
 

@@ -145,6 +145,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       onChanged: (v) => setState(() => _remember = v ?? true),
                     ),
                     const Text('Remember me', style: TextStyle(fontSize: 13)),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => context.push(
+                        '/forgot-password',
+                        extra: _login.text.trim(),
+                      ),
+                      child: const Text(
+                        'Forgot password?',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.accent,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),

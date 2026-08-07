@@ -338,6 +338,34 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<Map<String, dynamic>> forgotPassword({required String login}) async {
+    final res = await _api.post('/auth/forgot-password', data: {'login': login});
+    final data = res.data;
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return {'message': 'If that account exists, a reset code was sent.'};
+  }
+
+  Future<String> resetPassword({
+    required String login,
+    required String code,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    final res = await _api.post('/auth/reset-password', data: {
+      'login': login,
+      'code': code,
+      'password': password,
+      'password_confirmation': passwordConfirmation,
+    });
+    final data = res.data;
+    if (data is Map && data['message'] is String) {
+      return data['message'] as String;
+    }
+    return 'Password updated. You can log in with your new password.';
+  }
+
   Future<void> registerDeviceToken({
     required String token,
     required String platform,
@@ -705,6 +733,56 @@ class AppStore extends ChangeNotifier {
       wallet = WalletInfo.fromJson(Map<String, dynamic>.from(data));
     }
     notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> loadQrReceiveCode({double? amount}) async {
+    final res = await _api.get('/wallet/qr/receive', query: {
+      if (amount != null) 'amount': amount,
+    });
+    final data = res.data is Map ? res.data['data'] : null;
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    throw ApiException('Could not load your receive QR.');
+  }
+
+  Future<Map<String, dynamic>> resolveQrPayment(String payload) async {
+    final res = await _api.post('/wallet/qr/resolve', data: {'payload': payload});
+    final data = res.data is Map ? res.data['data'] : null;
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    throw ApiException('Could not read that QR code.');
+  }
+
+  Future<Map<String, dynamic>> payWithQr({
+    required String payload,
+    required double amount,
+    required String paymentPin,
+    String? note,
+  }) async {
+    final res = await _api.post('/wallet/qr/pay', data: {
+      'payload': payload,
+      'amount': amount,
+      'payment_pin': paymentPin,
+      if (note != null && note.isNotEmpty) 'note': note,
+    });
+    final body = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    final walletJson = body['wallet'];
+    if (walletJson is Map && wallet != null) {
+      wallet = wallet!.copyWith(
+        availableBalance: (walletJson['available_balance'] as num?)?.toDouble(),
+        pendingBalance: (walletJson['pending_balance'] as num?)?.toDouble(),
+      );
+    } else {
+      await loadWallet();
+    }
+    notifyListeners();
+    final data = body['data'];
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return body;
   }
 
   /// One page of the wallet ledger. Paging stays with the screen so the list

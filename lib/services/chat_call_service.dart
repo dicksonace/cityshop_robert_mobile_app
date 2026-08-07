@@ -53,6 +53,9 @@ class ChatCallService extends ChangeNotifier {
   final Set<int> _processedIds = {};
   final ListQueue<RTCIceCandidate> _pendingRemoteIce = ListQueue();
   final ListQueue<ChatMessage> _signalQueue = ListQueue();
+  final List<Map<String, dynamic>> _pendingIceOut = [];
+  Timer? _iceFlushTimer;
+  bool _iceFlushInFlight = false;
   bool _drainingSignals = false;
   int? _callerId;
   String _callerName = '';
@@ -74,6 +77,9 @@ class ChatCallService extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     _session++;
+    _iceFlushTimer?.cancel();
+    _iceFlushTimer = null;
+    _pendingIceOut.clear();
     _signalQueue.clear();
     await _ringtone.stop();
     await _tearDownMedia();
@@ -110,6 +116,9 @@ class ChatCallService extends ChangeNotifier {
   }
 
   Future<void> _tearDownMedia() async {
+    _iceFlushTimer?.cancel();
+    _iceFlushTimer = null;
+    _pendingIceOut.clear();
     _pendingRemoteIce.clear();
     _pendingOffer = null;
     _pendingOfferReceivedAt = null;
@@ -217,20 +226,51 @@ class ChatCallService extends ChangeNotifier {
     pc.onIceCandidate = (candidate) {
       if (!_alive(session)) return;
       if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
-      unawaited(
-        _sendSignal(
-          'call_ice',
-          metadata: {
-            'candidate': {
-              'candidate': candidate.candidate,
-              'sdpMid': candidate.sdpMid,
-              'sdpMLineIndex': candidate.sdpMLineIndex,
-            },
-          },
-        ),
-      );
+      // Batch ICE — one POST per candidate floods PHP-FPM and can take the site down.
+      _pendingIceOut.add({
+        'candidate': candidate.candidate,
+        'sdpMid': candidate.sdpMid,
+        'sdpMLineIndex': candidate.sdpMLineIndex,
+      });
+      _iceFlushTimer ??= Timer(const Duration(milliseconds: 400), () {
+        unawaited(_flushOutgoingIce());
+      });
     };
     return pc;
+  }
+
+  Future<void> _flushOutgoingIce() async {
+    _iceFlushTimer?.cancel();
+    _iceFlushTimer = null;
+    if (_disposed || _pendingIceOut.isEmpty || _iceFlushInFlight) {
+      if (!_disposed && _pendingIceOut.isNotEmpty && !_iceFlushInFlight) {
+        _iceFlushTimer = Timer(const Duration(milliseconds: 200), () {
+          unawaited(_flushOutgoingIce());
+        });
+      }
+      return;
+    }
+
+    _iceFlushInFlight = true;
+    final batch = List<Map<String, dynamic>>.from(_pendingIceOut);
+    _pendingIceOut.clear();
+    try {
+      await _sendSignal(
+        'call_ice',
+        metadata: batch.length == 1
+            ? {'candidate': batch.first}
+            : {'candidates': batch},
+      );
+    } catch (_) {
+      // Drop this batch; peers renegotiate/poll for later candidates.
+    } finally {
+      _iceFlushInFlight = false;
+      if (!_disposed && _pendingIceOut.isNotEmpty) {
+        _iceFlushTimer = Timer(const Duration(milliseconds: 200), () {
+          unawaited(_flushOutgoingIce());
+        });
+      }
+    }
   }
 
   Future<void> _flushPendingIce() async {
@@ -589,25 +629,35 @@ class ChatCallService extends ChangeNotifier {
     }
 
     if (msg.type == 'call_ice') {
-      final c = _asStringKeyedMap(meta['candidate']);
-      if (c == null) return;
-      final ice = RTCIceCandidate(
-        c['candidate']?.toString(),
-        c['sdpMid']?.toString(),
-        (c['sdpMLineIndex'] as num?)?.toInt(),
-      );
-      if (_pc == null) {
-        if (state == ChatCallState.incoming || state == ChatCallState.calling) {
-          _pendingRemoteIce.add(ice);
-          if (_pendingRemoteIce.length > 80) {
-            _pendingRemoteIce.removeFirst();
-          }
+      final candidates = <Map<String, dynamic>>[];
+      final single = _asStringKeyedMap(meta['candidate']);
+      if (single != null) candidates.add(single);
+      final many = meta['candidates'];
+      if (many is List) {
+        for (final row in many) {
+          final mapped = _asStringKeyedMap(row);
+          if (mapped != null) candidates.add(mapped);
         }
-        return;
       }
-      try {
-        await _pc!.addCandidate(ice);
-      } catch (_) {}
+      for (final c in candidates) {
+        final ice = RTCIceCandidate(
+          c['candidate']?.toString(),
+          c['sdpMid']?.toString(),
+          (c['sdpMLineIndex'] as num?)?.toInt(),
+        );
+        if (_pc == null) {
+          if (state == ChatCallState.incoming || state == ChatCallState.calling) {
+            _pendingRemoteIce.add(ice);
+            if (_pendingRemoteIce.length > 80) {
+              _pendingRemoteIce.removeFirst();
+            }
+          }
+          continue;
+        }
+        try {
+          await _pc!.addCandidate(ice);
+        } catch (_) {}
+      }
       return;
     }
 

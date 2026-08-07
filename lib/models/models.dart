@@ -611,6 +611,9 @@ class WithdrawalOverview {
     this.defaultMomoNumber,
     this.defaultAccountName,
     this.banks = const [],
+    this.feeEnabled = true,
+    this.feeAmount = 10,
+    this.feeAppliesTo = 'bank',
   });
 
   final List<WithdrawalItem> items;
@@ -620,13 +623,25 @@ class WithdrawalOverview {
   final String? defaultMomoNumber;
   final String? defaultAccountName;
   final List<GhanaBank> banks;
+  final bool feeEnabled;
+  final double feeAmount;
+  final String feeAppliesTo;
 
   bool get canWithdraw => availableBalance >= minimum;
+
+  double feeFor(String payoutType) {
+    if (!feeEnabled || feeAppliesTo == 'none' || feeAmount <= 0) return 0;
+    final type = payoutType == 'bank' ? 'bank' : 'momo';
+    if (feeAppliesTo == 'all' || feeAppliesTo == type) return feeAmount;
+    return 0;
+  }
 
   factory WithdrawalOverview.fromJson(Map<String, dynamic> json) {
     final data = json['data'];
     final summary = json['summary'] is Map ? Map<String, dynamic>.from(json['summary'] as Map) : const {};
     final bankRows = summary['banks'];
+    final feeRaw = summary['withdrawal_fee'];
+    final fee = feeRaw is Map ? Map<String, dynamic>.from(feeRaw) : const <String, dynamic>{};
     return WithdrawalOverview(
       items: data is List
           ? data
@@ -648,6 +663,9 @@ class WithdrawalOverview {
               );
             }).where((b) => b.id.isNotEmpty).toList()
           : const [],
+      feeEnabled: fee['enabled'] != false,
+      feeAmount: (fee['amount'] as num?)?.toDouble() ?? 10,
+      feeAppliesTo: fee['applies_to'] as String? ?? 'bank',
     );
   }
 }
