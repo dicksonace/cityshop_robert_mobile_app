@@ -723,7 +723,7 @@ class AppStore extends ChangeNotifier {
     return WithdrawalOverview.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
-  /// Requests a MoMo payout. The balance drops straight away, so refresh the
+  /// Requests a MoMo or bank payout. The balance drops straight away, so refresh the
   /// wallet the screens read from.
   Future<WithdrawalItem> requestWithdrawal({
     required double amount,
@@ -731,9 +731,11 @@ class AppStore extends ChangeNotifier {
     required String accountName,
     required String network,
     required String paymentPin,
+    String payoutType = 'momo',
   }) async {
     final res = await _api.post('/wallet/withdraw', data: {
       'amount': amount,
+      'payout_type': payoutType,
       'momo_number': momoNumber,
       'account_name': accountName,
       'network': network,

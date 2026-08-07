@@ -1,3 +1,5 @@
+import '../data/ghana_banks.dart';
+
 class ShopCategory {
   const ShopCategory({
     required this.id,
@@ -558,6 +560,7 @@ class WithdrawalItem {
     required this.networkLabel,
     required this.status,
     required this.statusLabel,
+    this.payoutType = 'momo',
     this.rejectionReason,
     this.createdAt,
     this.processedAt,
@@ -569,6 +572,7 @@ class WithdrawalItem {
   final String accountName;
   final String network;
   final String networkLabel;
+  final String payoutType;
   final String status;
   final String statusLabel;
   final String? rejectionReason;
@@ -587,6 +591,7 @@ class WithdrawalItem {
       accountName: json['account_name'] as String? ?? '',
       network: json['network'] as String? ?? '',
       networkLabel: json['network_label'] as String? ?? '',
+      payoutType: json['payout_type'] as String? ?? 'momo',
       status: json['status'] as String? ?? 'pending',
       statusLabel: json['status_label'] as String? ?? 'Processing',
       rejectionReason: json['rejection_reason'] as String?,
@@ -605,6 +610,7 @@ class WithdrawalOverview {
     this.hasPending = false,
     this.defaultMomoNumber,
     this.defaultAccountName,
+    this.banks = const [],
   });
 
   final List<WithdrawalItem> items;
@@ -613,12 +619,14 @@ class WithdrawalOverview {
   final bool hasPending;
   final String? defaultMomoNumber;
   final String? defaultAccountName;
+  final List<GhanaBank> banks;
 
   bool get canWithdraw => availableBalance >= minimum;
 
   factory WithdrawalOverview.fromJson(Map<String, dynamic> json) {
     final data = json['data'];
     final summary = json['summary'] is Map ? Map<String, dynamic>.from(json['summary'] as Map) : const {};
+    final bankRows = summary['banks'];
     return WithdrawalOverview(
       items: data is List
           ? data
@@ -631,6 +639,15 @@ class WithdrawalOverview {
       hasPending: summary['has_pending'] == true,
       defaultMomoNumber: summary['default_momo_number'] as String?,
       defaultAccountName: summary['default_account_name'] as String?,
+      banks: bankRows is List
+          ? bankRows.whereType<Map>().map((row) {
+              final map = Map<String, dynamic>.from(row);
+              return GhanaBank(
+                map['id'] as String? ?? '',
+                map['label'] as String? ?? '',
+              );
+            }).where((b) => b.id.isNotEmpty).toList()
+          : const [],
     );
   }
 }

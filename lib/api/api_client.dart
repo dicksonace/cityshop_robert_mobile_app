@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http_parser/http_parser.dart';
@@ -6,10 +8,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api_config.dart';
 
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode});
+  ApiException(this.message, {this.statusCode, this.isNetwork = false});
 
   final String message;
   final int? statusCode;
+
+  /// True for timeouts / unreachable host — not necessarily that the phone
+  /// has no Wi‑Fi or mobile data.
+  final bool isNetwork;
 
   @override
   String toString() => message;
@@ -24,8 +30,10 @@ class ApiClient {
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
-        connectTimeout: const Duration(seconds: 20),
-        receiveTimeout: const Duration(seconds: 30),
+        // Ghana mobile networks often need a longer handshake than the default.
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 45),
+        sendTimeout: const Duration(seconds: 45),
         headers: {
           'Accept': 'application/json',
         },
@@ -98,77 +106,65 @@ class ApiClient {
   Future<Response<dynamic>> get(
     String path, {
     Map<String, dynamic>? query,
-  }) async {
-    try {
-      return await _dio.get(path, queryParameters: query);
-    } on DioException catch (e) {
-      throw _mapError(e);
-    }
+  }) {
+    return _withRetry(() => _dio.get(path, queryParameters: query));
   }
 
   Future<Response<dynamic>> post(
     String path, {
     Object? data,
-  }) async {
-    try {
-      return await _dio.post(
+  }) {
+    return _withRetry(
+      () => _dio.post(
         path,
         data: data,
         options: data == null || data is FormData
             ? null
             : Options(contentType: Headers.jsonContentType),
-      );
-    } on DioException catch (e) {
-      throw _mapError(e);
-    }
+      ),
+    );
   }
 
   Future<Response<dynamic>> patch(
     String path, {
     Object? data,
-  }) async {
-    try {
-      return await _dio.patch(
+  }) {
+    return _withRetry(
+      () => _dio.patch(
         path,
         data: data,
         options: data == null || data is FormData
             ? null
             : Options(contentType: Headers.jsonContentType),
-      );
-    } on DioException catch (e) {
-      throw _mapError(e);
-    }
+      ),
+    );
   }
 
   Future<Response<dynamic>> put(
     String path, {
     Object? data,
-  }) async {
-    try {
-      return await _dio.put(
+  }) {
+    return _withRetry(
+      () => _dio.put(
         path,
         data: data,
         options: data == null || data is FormData
             ? null
             : Options(contentType: Headers.jsonContentType),
-      );
-    } on DioException catch (e) {
-      throw _mapError(e);
-    }
+      ),
+    );
   }
 
-  Future<Response<dynamic>> delete(String path, {Object? data}) async {
-    try {
-      return await _dio.delete(
+  Future<Response<dynamic>> delete(String path, {Object? data}) {
+    return _withRetry(
+      () => _dio.delete(
         path,
         data: data,
         options: data == null || data is FormData
             ? null
             : Options(contentType: Headers.jsonContentType),
-      );
-    } on DioException catch (e) {
-      throw _mapError(e);
-    }
+      ),
+    );
   }
 
   Future<Response<dynamic>> postMultipart(
@@ -178,26 +174,62 @@ class ApiClient {
     required String filePath,
     String filename = 'upload.jpg',
     String? contentType,
+  }) {
+    return _withRetry(
+      () async {
+        final form = FormData.fromMap({
+          ...fields,
+          fileField: await MultipartFile.fromFile(
+            filePath,
+            filename: filename,
+            contentType: contentType == null ? null : _parseMediaType(contentType),
+          ),
+        });
+        return _dio.post(
+          path,
+          data: form,
+          options: Options(
+            sendTimeout: const Duration(seconds: 120),
+            receiveTimeout: const Duration(seconds: 120),
+          ),
+        );
+      },
+      maxAttempts: 2,
+    );
+  }
+
+  /// Retries brief network blips (common on mobile data) before surfacing an error.
+  Future<Response<dynamic>> _withRetry(
+    Future<Response<dynamic>> Function() run, {
+    int maxAttempts = 3,
   }) async {
-    try {
-      final form = FormData.fromMap({
-        ...fields,
-        fileField: await MultipartFile.fromFile(
-          filePath,
-          filename: filename,
-          contentType: contentType == null ? null : _parseMediaType(contentType),
-        ),
-      });
-      return await _dio.post(
-        path,
-        data: form,
-        options: Options(
-          sendTimeout: const Duration(seconds: 90),
-          receiveTimeout: const Duration(seconds: 90),
-        ),
-      );
-    } on DioException catch (e) {
-      throw _mapError(e);
+    DioException? last;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await run();
+      } on DioException catch (e) {
+        last = e;
+        final canRetry = _isTransient(e) && attempt < maxAttempts;
+        if (!canRetry) throw _mapError(e);
+        await Future<void>.delayed(Duration(milliseconds: 350 * attempt));
+      }
+    }
+    throw _mapError(last!);
+  }
+
+  /// Safe to retry: never got a usable HTTP response from the server.
+  bool _isTransient(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.connectionError:
+        return true;
+      case DioExceptionType.badResponse:
+        final code = e.response?.statusCode ?? 0;
+        return code == 502 || code == 503 || code == 504;
+      default:
+        return false;
     }
   }
 
@@ -210,6 +242,8 @@ class ApiClient {
   ApiException _mapError(DioException e) {
     final data = e.response?.data;
     String message = 'Something went wrong. Please try again.';
+    var isNetwork = false;
+
     if (data is Map) {
       if (data['message'] is String) {
         message = data['message'] as String;
@@ -218,9 +252,21 @@ class ApiClient {
         final first = errors.values.expand((v) => v is List ? v : [v]).firstOrNull;
         if (first != null) message = first.toString();
       }
+    } else if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.receiveTimeout) {
+      isNetwork = true;
+      message = 'Connection is slow. Please try again.';
     } else if (e.type == DioExceptionType.connectionError) {
-      message = 'No internet connection.';
+      isNetwork = true;
+      // Phone often still has Wi‑Fi/data — CityShop just wasn't reachable this time.
+      message = 'Couldn’t reach CityShop. Check your network and try again.';
     }
-    return ApiException(message, statusCode: e.response?.statusCode);
+
+    return ApiException(
+      message,
+      statusCode: e.response?.statusCode,
+      isNetwork: isNetwork,
+    );
   }
 }

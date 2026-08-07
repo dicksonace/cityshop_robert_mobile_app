@@ -70,9 +70,14 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
       await store.refreshNotificationCounts();
       error = null;
     } on ApiException catch (e) {
-      error = e.message;
+      // Background polls must not wipe the inbox when the network blips.
+      if (!background || store.conversations.isEmpty) {
+        error = e.message;
+      }
     } catch (e) {
-      error = e.toString();
+      if (!background || store.conversations.isEmpty) {
+        error = e.toString();
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -106,8 +111,10 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
         ),
       );
     }
-    if (loading) return const FullPageLoader(label: 'Loading messages…');
-    if (error != null) {
+    if (loading && store.conversations.isEmpty) {
+      return const FullPageLoader(label: 'Loading messages…');
+    }
+    if (error != null && store.conversations.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

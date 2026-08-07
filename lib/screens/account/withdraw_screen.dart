@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
+import '../../data/ghana_banks.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -15,8 +16,7 @@ import '../../widgets/payment_pin_sheet.dart';
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 final _stamp = DateFormat('d MMM yyyy, h:mm a');
 
-/// Cash out to mobile money, mirroring the web wallet's withdrawal flow: pick a
-/// network, confirm the MoMo details, then review before the request goes in.
+/// Cash out to MoMo or a Ghana bank account.
 class WithdrawScreen extends StatefulWidget {
   const WithdrawScreen({super.key});
 
@@ -30,11 +30,14 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   String? error;
   WithdrawalOverview overview = const WithdrawalOverview();
 
+  String payoutType = 'momo';
   String network = 'mtn';
   final numberCtrl = TextEditingController();
   final nameCtrl = TextEditingController();
   final amountCtrl = TextEditingController();
   bool _prefilled = false;
+
+  bool get _isBank => payoutType == 'bank';
 
   @override
   void initState() {
@@ -91,18 +94,38 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     setState(() => amountCtrl.text = overview.availableBalance.toStringAsFixed(2));
   }
 
+  void _setPayoutType(String type) {
+    if (type == payoutType) return;
+    setState(() {
+      payoutType = type;
+      network = type == 'bank' ? (ghanaBanks.isNotEmpty ? ghanaBanks.first.id : 'gcb') : 'mtn';
+      // Don't carry a MoMo phone into the bank account field (or the reverse).
+      numberCtrl.text = type == 'momo' ? (overview.defaultMomoNumber ?? '') : '';
+    });
+  }
+
   /// Validates locally, shows the review sheet, then sends the request.
   Future<void> _submit() async {
     final amount = double.tryParse(amountCtrl.text.trim());
     final number = numberCtrl.text.trim();
     final name = nameCtrl.text.trim();
+    final banks = overview.banks.isNotEmpty ? overview.banks : ghanaBanks;
+    // Guard against a stale MoMo network id when Bank is selected.
+    final selectedNetwork = _isBank
+        ? (isGhanaBank(network) ? network : banks.first.id)
+        : network;
 
-    if (number.replaceAll(RegExp(r'\D'), '').length < 9) {
+    if (_isBank) {
+      if (number.replaceAll(RegExp(r'\D'), '').length < 6) {
+        _toast('Enter a valid bank account number');
+        return;
+      }
+    } else if (number.replaceAll(RegExp(r'\D'), '').length < 9) {
       _toast('Enter the MoMo number that should receive the money');
       return;
     }
     if (name.isEmpty) {
-      _toast('Enter the name on the MoMo account');
+      _toast(_isBank ? 'Enter the name on the bank account' : 'Enter the name on the MoMo account');
       return;
     }
     if (amount == null || amount < overview.minimum) {
@@ -112,6 +135,10 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     if (amount > overview.availableBalance) {
       _toast('You can withdraw at most ${_money.format(overview.availableBalance)}');
       return;
+    }
+
+    if (selectedNetwork != network) {
+      setState(() => network = selectedNetwork);
     }
 
     final confirmed = await _review(amount, number, name);
@@ -133,15 +160,16 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     setState(() => submitting = true);
     try {
       await store.requestWithdrawal(
-            amount: amount,
-            momoNumber: number,
-            accountName: name,
-            network: network,
-            paymentPin: pin,
-          );
+        amount: amount,
+        momoNumber: number,
+        accountName: name,
+        network: selectedNetwork,
+        payoutType: payoutType,
+        paymentPin: pin,
+      );
       if (!mounted) return;
       amountCtrl.clear();
-      _toast('Withdrawal requested. Payouts are usually sent within 15 minutes.');
+      _toast('Withdrawal requested. Usually processed within 15 minutes and sometimes instant.');
       await _load();
     } on ApiException catch (e) {
       if (mounted) _toast(e.message);
@@ -165,7 +193,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
-              'Request withdrawal to MoMo',
+              'Request withdrawal',
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
             ),
           ),
@@ -173,9 +201,11 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
         children: [
           const Text('Check your payout details', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
           const SizedBox(height: 4),
-          const Text(
-            'Money goes to this MoMo account. Wrong details can delay your payout.',
-            style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+          Text(
+            _isBank
+                ? 'Money goes to this bank account. Wrong details can delay your payout.'
+                : 'Money goes to this MoMo account. Wrong details can delay your payout.',
+            style: const TextStyle(color: AppColors.textSecondary, height: 1.35),
           ),
           const SizedBox(height: 16),
           Container(
@@ -190,14 +220,14 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
               children: [
                 Row(
                   children: [
-                    MomoNetworkLogo(network: network, size: 38),
+                    _PayoutMark(network: network, isBank: _isBank),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            momoNetworkLabel(network),
+                            payoutNetworkLabel(network),
                             style: const TextStyle(fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(height: 2),
@@ -215,7 +245,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                 ),
                 const SizedBox(height: 2),
                 const Text(
-                  'Usually paid within 15 minutes after admin approval.',
+                  'Usually processed within 15 minutes and sometimes instant.',
                   style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],
@@ -255,6 +285,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
   Widget _body(BuildContext context) {
     final tooSmall = overview.availableBalance < overview.minimum;
+    final banks = overview.banks.isNotEmpty ? overview.banks : ghanaBanks;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -286,24 +317,72 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
             _Card(
               children: [
                 const Text(
-                  '1. Choose your network',
+                  '1. How should we pay you?',
                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'MTN MoMo is the most common. Pick the network of the number below.',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
-                ),
                 const SizedBox(height: 12),
-                for (final item in momoNetworks) ...[
-                  _NetworkTile(
-                    network: item,
-                    selected: network == item.id,
-                    onTap: () => setState(() => network = item.id),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _TypeChip(
+                        label: 'Mobile Money',
+                        selected: !_isBank,
+                        onTap: () => _setPayoutType('momo'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _TypeChip(
+                        label: 'Bank',
+                        selected: _isBank,
+                        onTap: () => _setPayoutType('bank'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                if (!_isBank) ...[
+                  const Text(
+                    'Choose your network',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'MTN MoMo is the most common. Pick the network of the number below.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
+                  ),
+                  const SizedBox(height: 12),
+                  for (final item in momoNetworks) ...[
+                    _NetworkTile(
+                      network: item,
+                      selected: network == item.id,
+                      onTap: () => setState(() => network = item.id),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ] else ...[
+                  const Text(
+                    'Choose your bank',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('bank-$network'),
+                    initialValue: banks.any((b) => b.id == network) ? network : banks.first.id,
+                    decoration: const InputDecoration(
+                      labelText: 'Bank',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final bank in banks)
+                        DropdownMenuItem(value: bank.id, child: Text(bank.label)),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) setState(() => network = value);
+                    },
+                  ),
                 ],
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 const Text(
                   '2. Where should the money go?',
                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
@@ -311,22 +390,26 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: numberCtrl,
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9 +]'))],
-                  decoration: const InputDecoration(
-                    labelText: 'MoMo number',
-                    hintText: '0XX XXX XXXX',
-                    border: OutlineInputBorder(),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(_isBank ? r'[0-9]' : r'[0-9 +]')),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: _isBank ? 'Account number' : 'MoMo number',
+                    hintText: _isBank ? 'Bank account number' : '0XX XXX XXXX',
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: nameCtrl,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Account name',
-                    hintText: 'Name registered on the MoMo number',
-                    border: OutlineInputBorder(),
+                    hintText: _isBank
+                        ? 'Name registered on the bank account'
+                        : 'Name registered on the MoMo number',
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -373,6 +456,69 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
             ],
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _PayoutMark extends StatelessWidget {
+  const _PayoutMark({required this.network, required this.isBank});
+
+  final String network;
+  final bool isBank;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isBank && !isGhanaBank(network)) {
+      return MomoNetworkLogo(network: network, size: 38);
+    }
+    return Container(
+      width: 38,
+      height: 38,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E3A5F),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: const Icon(Icons.account_balance_rounded, color: Colors.white, size: 20),
+    );
+  }
+}
+
+class _TypeChip extends StatelessWidget {
+  const _TypeChip({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? const Color(0xFFFFF7ED) : Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? AppColors.accent : const Color(0xFFE5E7EB),
+              width: selected ? 2 : 1.4,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              color: selected ? AppColors.accent : AppColors.textSecondary,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -578,6 +724,7 @@ class _WithdrawalRow extends StatelessWidget {
       _ => (const Color(0xFFFFFBEB), const Color(0xFFB45309)),
     };
     final stamp = DateTime.tryParse(item.processedAt ?? item.createdAt ?? '')?.toLocal();
+    final isBank = item.payoutType == 'bank' || isGhanaBank(item.network);
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -591,7 +738,7 @@ class _WithdrawalRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              MomoNetworkLogo(network: item.network, size: 34),
+              _PayoutMark(network: item.network, isBank: isBank),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

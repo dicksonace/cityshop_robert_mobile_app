@@ -63,9 +63,13 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
       error = null;
       await _loadTransactions(reset: true, background: background);
     } on ApiException catch (e) {
-      error = e.message;
+      if (!background || store.wallet == null) {
+        error = e.message;
+      }
     } catch (e) {
-      error = e.toString();
+      if (!background || store.wallet == null) {
+        error = e.toString();
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -253,8 +257,10 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
       if (tabIsWarmingUp) return const FullPageLoader(label: 'Loading wallet…');
       return _Guest(onLogin: () => context.push('/login'));
     }
-    if (loading) return const FullPageLoader(label: 'Loading wallet…');
-    if (error != null) {
+    if (loading && store.wallet == null) {
+      return const FullPageLoader(label: 'Loading wallet…');
+    }
+    if (error != null && store.wallet == null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -787,9 +793,13 @@ class _OrdersTabState extends State<OrdersTab> with AutoRefreshTab {
       await store.refreshNotificationCounts();
       error = null;
     } on ApiException catch (e) {
-      error = e.message;
+      if (!background || store.orders.isEmpty) {
+        error = e.message;
+      }
     } catch (e) {
-      error = e.toString();
+      if (!background || store.orders.isEmpty) {
+        error = e.toString();
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -898,8 +908,10 @@ class _OrdersTabState extends State<OrdersTab> with AutoRefreshTab {
       if (tabIsWarmingUp) return const FullPageLoader(label: 'Loading orders…');
       return _Guest(onLogin: () => context.push('/login'));
     }
-    if (loading) return const FullPageLoader(label: 'Loading orders…');
-    if (error != null) {
+    if (loading && store.orders.isEmpty) {
+      return const FullPageLoader(label: 'Loading orders…');
+    }
+    if (error != null && store.orders.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
