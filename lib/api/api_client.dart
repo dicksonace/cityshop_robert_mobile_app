@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_config.dart';
 
@@ -34,7 +35,7 @@ class ApiClient {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token = await _storage.read(key: ApiConfig.tokenKey);
+          final token = await getToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -45,14 +46,54 @@ class ApiClient {
   }
 
   late final Dio _dio;
-  final _storage = const FlutterSecureStorage();
 
-  Future<void> saveToken(String token) =>
-      _storage.write(key: ApiConfig.tokenKey, value: token);
+  /// `resetOnError: false` is critical: after a phone reboot Android Keystore
+  /// can briefly fail to decrypt, and the package default (true) wipes the
+  /// login token — user appears logged out until they sign in again.
+  final _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(resetOnError: false),
+  );
 
-  Future<void> clearToken() => _storage.delete(key: ApiConfig.tokenKey);
+  static const _prefsTokenKey = 'cityshop_auth_token_backup';
 
-  Future<String?> getToken() => _storage.read(key: ApiConfig.tokenKey);
+  Future<void> saveToken(String token) async {
+    try {
+      await _storage.write(key: ApiConfig.tokenKey, value: token);
+    } catch (_) {}
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsTokenKey, token);
+  }
+
+  Future<void> clearToken() async {
+    try {
+      await _storage.delete(key: ApiConfig.tokenKey);
+    } catch (_) {}
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsTokenKey);
+  }
+
+  Future<String?> getToken() async {
+    try {
+      final secure = await _storage.read(key: ApiConfig.tokenKey);
+      if (secure != null && secure.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        if (prefs.getString(_prefsTokenKey) != secure) {
+          await prefs.setString(_prefsTokenKey, secure);
+        }
+        return secure;
+      }
+    } catch (_) {}
+
+    final prefs = await SharedPreferences.getInstance();
+    final backup = prefs.getString(_prefsTokenKey);
+    if (backup != null && backup.isNotEmpty) {
+      try {
+        await _storage.write(key: ApiConfig.tokenKey, value: backup);
+      } catch (_) {}
+      return backup;
+    }
+    return null;
+  }
 
   Future<Response<dynamic>> get(
     String path, {
@@ -147,7 +188,6 @@ class ApiClient {
           contentType: contentType == null ? null : _parseMediaType(contentType),
         ),
       });
-      // Leave contentType unset so Dio can add multipart/form-data; boundary=...
       return await _dio.post(
         path,
         data: form,

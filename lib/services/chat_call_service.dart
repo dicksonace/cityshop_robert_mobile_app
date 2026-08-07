@@ -279,17 +279,34 @@ class ChatCallService extends ChangeNotifier {
       _callerName = myName;
       kind = callKind;
 
+      // Paint the calling UI before touching native WebRTC so a hung mic
+      // doesn't look like a dead tap — and so we can hang up / recover.
+      state = ChatCallState.calling;
+      notifyListeners();
+      unawaited(_ringtone.startOutgoing());
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+
       try {
-        await _ringtone.stop();
-        // Video surfaces only — never for voice.
         if (callKind == ChatCallKind.video) {
-          await _ensureVideoRenderers();
+          await _ensureVideoRenderers().timeout(const Duration(seconds: 8));
         }
-        _localStream = await _openLocalMedia(callKind);
+        _localStream = await _openLocalMedia(callKind).timeout(
+          const Duration(seconds: 12),
+          onTimeout: () {
+            throw StateError(
+              'Microphone is busy or not responding. Close other apps and try again.',
+            );
+          },
+        );
+        if (_disposed || state != ChatCallState.calling) {
+          await _stopTracks(_localStream);
+          _localStream = null;
+          return;
+        }
         if (callKind == ChatCallKind.video) {
           localRenderer?.srcObject = _localStream;
         }
-        _pc = await _createPeer();
+        _pc = await _createPeer().timeout(const Duration(seconds: 8));
         for (final track in _localStream!.getTracks()) {
           await _pc!.addTrack(track, _localStream!);
         }
@@ -303,11 +320,14 @@ class ChatCallService extends ChangeNotifier {
             'sdp': {'type': offer.type, 'sdp': offer.sdp},
           },
         );
-        state = ChatCallState.calling;
-        notifyListeners();
-        unawaited(_ringtone.startOutgoing());
       } catch (e) {
         await _cleanup();
+        if (e is StateError) rethrow;
+        if (e is TimeoutException) {
+          throw StateError(
+            'Could not start call — microphone timed out. Try again.',
+          );
+        }
         rethrow;
       }
     });

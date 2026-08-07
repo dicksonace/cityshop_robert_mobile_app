@@ -57,18 +57,29 @@ class AppStore extends ChangeNotifier {
     try {
       final token = await _api.getToken();
       if (token != null && token.isNotEmpty) {
-        await refreshMe();
-        await Future.wait([
-          loadCart(),
-          loadWishlist(),
-          refreshNotificationCounts(),
-        ]);
+        try {
+          await refreshMe();
+          await Future.wait([
+            loadCart(),
+            loadWishlist(),
+            refreshNotificationCounts(),
+          ]);
+        } on ApiException catch (e) {
+          // Only log out when the server rejects the session — never on
+          // network blips right after a phone reboot / power-on.
+          if (e.statusCode == 401 || e.statusCode == 403) {
+            await _api.clearToken();
+            user = null;
+          }
+        } catch (_) {
+          // Keep the saved token; shop can still load as guest UI + retry later.
+        }
       }
-      await loadShop();
-    } catch (_) {
-      await _api.clearToken();
-      user = null;
-      await loadShop();
+      try {
+        await loadShop();
+      } catch (_) {
+        shopError = 'Something went wrong. Please try again.';
+      }
     } finally {
       booting = false;
       notifyListeners();
