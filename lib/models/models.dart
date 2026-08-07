@@ -885,6 +885,7 @@ class ConversationModel {
     this.otherId,
     this.otherAvatar,
     this.storeName,
+    this.storeSlug,
     this.otherMobile,
     this.productId,
     this.productName,
@@ -904,6 +905,7 @@ class ConversationModel {
   final String otherName;
   final String? otherAvatar;
   final String? storeName;
+  final String? storeSlug;
   final String? otherMobile;
   final int? productId;
   final String? productName;
@@ -953,6 +955,13 @@ class ConversationModel {
           : 'User',
       otherAvatar: other is Map ? other['avatar'] as String? : null,
       storeName: other is Map ? other['store_name'] as String? : null,
+      storeSlug: other is Map
+          ? ((other['store_slug'] as String?)?.trim().isNotEmpty == true
+              ? (other['store_slug'] as String).trim()
+              : (other['seller_profile'] is Map
+                  ? ((other['seller_profile'] as Map)['slug'] as String?)?.trim()
+                  : null))
+          : null,
       otherMobile: other is Map ? (other['mobile'] as String? ?? other['phone'] as String?) : null,
       productId: product is Map ? product['id'] as int? : null,
       productName: product is Map ? product['name'] as String? : null,
@@ -987,6 +996,7 @@ class ConversationModel {
       otherId: otherId,
       otherAvatar: otherAvatar,
       storeName: storeName,
+      storeSlug: storeSlug,
       otherMobile: otherMobile,
       productId: productId ?? this.productId,
       productName: productName ?? this.productName,

@@ -959,16 +959,30 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+              child: GestureDetector(
+                onTap: () {
+                  final slug = conversation?.storeSlug?.trim();
+                  if (slug != null && slug.isNotEmpty) {
+                    context.push('/stores/$slug');
+                  }
+                },
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                ),
               ),
             ),
           ],
         ),
         actions: [
+          if ((conversation?.storeSlug ?? '').trim().isNotEmpty)
+            IconButton(
+              tooltip: 'Store',
+              onPressed: () => context.push('/stores/${conversation!.storeSlug!.trim()}'),
+              icon: const Icon(Icons.storefront_outlined, color: AppColors.accent),
+            ),
           IconButton(
             tooltip: 'Audio call',
             onPressed: () => unawaited(_startInAppCall(ChatCallKind.voice)),
@@ -986,9 +1000,19 @@ class _ChatScreenState extends State<ChatScreen> {
                   _toggleBlock();
                 } else if (value == 'phone') {
                   unawaited(_callSellerPhone());
+                } else if (value == 'store') {
+                  final slug = conversation?.storeSlug?.trim();
+                  if (slug != null && slug.isNotEmpty) {
+                    context.push('/stores/$slug');
+                  }
                 }
               },
               itemBuilder: (context) => [
+                if ((conversation?.storeSlug ?? '').trim().isNotEmpty)
+                  const PopupMenuItem(
+                    value: 'store',
+                    child: Text('View store'),
+                  ),
                 if ((conversation?.otherMobile ?? '').trim().isNotEmpty)
                   const PopupMenuItem(
                     value: 'phone',
