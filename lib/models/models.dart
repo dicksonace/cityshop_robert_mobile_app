@@ -912,6 +912,7 @@ class ConversationModel {
     this.productPrice,
     this.latestBody,
     this.latestType,
+    this.latestSenderId,
     this.unreadCount = 0,
     this.lastMessageAt,
     this.blocked = false,
@@ -933,14 +934,18 @@ class ConversationModel {
   final double? productPrice;
   final String? latestBody;
   final String? latestType;
+  final int? latestSenderId;
   final int unreadCount;
   final String? lastMessageAt;
   final bool blocked;
   final bool iBlocked;
 
   /// What the conversation list shows when the last message carries no text.
-  String get preview {
+  String previewFor(int? viewerId) {
     final body = latestBody?.trim() ?? '';
+    if (latestType == 'transfer') {
+      return _transferPreview(body, viewerId);
+    }
     if (body.isNotEmpty) return body;
     switch (latestType) {
       case 'image':
@@ -951,8 +956,6 @@ class ConversationModel {
         return 'Voice message';
       case 'product':
         return 'Product';
-      case 'transfer':
-        return 'Money transfer';
       case 'file':
         return 'File';
       case 'call_log':
@@ -962,6 +965,26 @@ class ConversationModel {
       default:
         return 'Start the conversation';
     }
+  }
+
+  /// Back-compat for tests / call sites that don't know the viewer.
+  String get preview => previewFor(null);
+
+  String _transferPreview(String body, int? viewerId) {
+    final isReceiver =
+        viewerId != null && latestSenderId != null && latestSenderId != viewerId;
+
+    if (isReceiver) {
+      if (body.isEmpty) return 'Transferred to you';
+      if (body.startsWith('Transferred to you')) return body;
+      if (body.startsWith('Transferred ')) {
+        return 'Transferred to you ${body.substring('Transferred '.length)}';
+      }
+      return 'Transferred to you';
+    }
+
+    if (body.isEmpty) return 'Money transfer';
+    return body;
   }
 
   factory ConversationModel.fromJson(Map<String, dynamic> json) {
@@ -996,6 +1019,7 @@ class ConversationModel {
       productPrice: product is Map ? (product['price'] as num?)?.toDouble() : null,
       latestBody: latest is Map ? latest['body'] as String? : null,
       latestType: latest is Map ? latest['type'] as String? : null,
+      latestSenderId: latest is Map ? (latest['sender_id'] as num?)?.toInt() : null,
       unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
       lastMessageAt: json['last_message_at'] as String?,
       blocked: json['blocked'] == true,
@@ -1013,6 +1037,7 @@ class ConversationModel {
     double? productPrice,
     String? latestBody,
     String? latestType,
+    int? latestSenderId,
     String? lastMessageAt,
     int? unreadCount,
   }) {
@@ -1032,6 +1057,7 @@ class ConversationModel {
       productPrice: productPrice ?? this.productPrice,
       latestBody: latestBody ?? this.latestBody,
       latestType: latestType ?? this.latestType,
+      latestSenderId: latestSenderId ?? this.latestSenderId,
       unreadCount: unreadCount ?? this.unreadCount,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       blocked: blocked ?? this.blocked,

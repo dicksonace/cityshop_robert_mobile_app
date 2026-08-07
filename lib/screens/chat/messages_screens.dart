@@ -222,7 +222,7 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
                 ],
                 const SizedBox(height: 2),
                 Text(
-                  c.preview,
+                  c.previewFor(store.user?.id),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: AppColors.textSecondary),
@@ -2094,9 +2094,7 @@ class _ChatTransferCard extends StatelessWidget {
 
   String get _headline {
     if (message.mine) return 'You transferred';
-    final from = (message.transferFromName ?? '').trim();
-    if (from.isNotEmpty) return '$from transferred';
-    return 'Transfer received';
+    return 'Transferred to you';
   }
 
   Future<void> _openReceipt(BuildContext context) async {
