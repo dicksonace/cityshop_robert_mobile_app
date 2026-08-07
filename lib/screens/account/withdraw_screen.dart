@@ -9,6 +9,7 @@ import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_sheet.dart';
+import '../../widgets/bank_picker_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/momo_widgets.dart';
 import '../../widgets/payment_pin_sheet.dart';
@@ -365,21 +366,16 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                     'Choose your bank',
                     style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                   ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Tap to open the bank list, then pick with the circle on the left.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
+                  ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('bank-$network'),
-                    initialValue: banks.any((b) => b.id == network) ? network : banks.first.id,
-                    decoration: const InputDecoration(
-                      labelText: 'Bank',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      for (final bank in banks)
-                        DropdownMenuItem(value: bank.id, child: Text(bank.label)),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => network = value);
-                    },
+                  BankSelectField(
+                    banks: banks,
+                    selectedId: banks.any((b) => b.id == network) ? network : banks.first.id,
+                    onSelected: (bank) => setState(() => network = bank.id),
                   ),
                 ],
                 const SizedBox(height: 16),
