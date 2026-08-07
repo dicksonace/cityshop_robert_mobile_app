@@ -14,6 +14,7 @@ import '../../utils/order_receipt_printer.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/tab_refresh.dart';
+import '../../widgets/wallet_receipt_sheet.dart';
 import '../cart/paystack_payment_screen.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
@@ -434,91 +435,112 @@ class _WalletTransactionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final credit = tx.isCredit;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.border)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => showWalletReceiptSheet(context, tx: tx),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: AppColors.border)),
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF3F4F6),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            tx.typeLabel,
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        if ((tx.reference ?? '').isNotEmpty)
-                          Text(
-                            tx.reference!,
-                            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                          ),
-                      ],
-                    ),
-                    if (tx.description.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        tx.description,
-                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                      ),
-                    ],
-                    if (_when.isNotEmpty)
-                      Text(_when, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                '${credit ? '+' : ''}${_money.format(tx.amount)}',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: credit ? const Color(0xFF16A34A) : AppColors.danger,
-                ),
-              ),
-            ],
-          ),
-          if (tx.balanceBefore != null || tx.balanceAfter != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: _BalanceCell(label: 'Before balance', value: tx.balanceBefore),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3F4F6),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                tx.typeLabel,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            if ((tx.reference ?? '').isNotEmpty)
+                              Text(
+                                tx.reference!,
+                                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                              ),
+                          ],
+                        ),
+                        if (tx.description.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            tx.description,
+                            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          ),
+                        ],
+                        if (_when.isNotEmpty)
+                          Text(_when, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                      ],
+                    ),
                   ),
-                  Expanded(
-                    child: _BalanceCell(
-                      label: 'After balance',
-                      value: tx.balanceAfter,
-                      alignEnd: true,
+                  const SizedBox(width: 10),
+                  Text(
+                    '${credit ? '+' : ''}${_money.format(tx.amount)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: credit ? const Color(0xFF16A34A) : AppColors.danger,
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ],
+              if (tx.balanceBefore != null || tx.balanceAfter != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF9FAFB),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _BalanceCell(label: 'Before balance', value: tx.balanceBefore),
+                      ),
+                      Expanded(
+                        child: _BalanceCell(
+                          label: 'After balance',
+                          value: tx.balanceAfter,
+                          alignEnd: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Text(
+                    'View receipt',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.accent),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -28,6 +28,7 @@ import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 import '../../widgets/tab_refresh.dart';
 import '../../widgets/video_viewer.dart';
+import '../../widgets/wallet_receipt_sheet.dart';
 import 'chat_settings_screen.dart';
 import 'friend_chat_screens.dart';
 
@@ -2073,13 +2074,27 @@ class _ChatTransferCard extends StatelessWidget {
     return 'Transfer received';
   }
 
-  void _openReceipt(BuildContext context) {
+  Future<void> _openReceipt(BuildContext context) async {
     final amount = message.transferAmount;
     final note = (message.transferNote ?? '').trim();
     final ref = (message.transferReference ?? '').trim();
     final from = (message.transferFromName ?? '').trim();
     final to = (message.transferToName ?? '').trim();
 
+    // Prefer the wallet ledger receipt (before/after balance) when available.
+    if (ref.isNotEmpty) {
+      try {
+        final tx = await context.read<AppStore>().fetchWalletTransactionByReference(ref);
+        if (tx != null && context.mounted) {
+          await showWalletReceiptSheet(context, tx: tx);
+          return;
+        }
+      } catch (_) {
+        // Fall through to the chat transfer receipt.
+      }
+    }
+
+    if (!context.mounted) return;
     showAppSheet<void>(
       context: context,
       builder: (_) => SheetShell(
@@ -2114,10 +2129,10 @@ class _ChatTransferCard extends StatelessWidget {
           Center(
             child: Text(
               amount == null ? 'GH₵—' : _money.format(amount),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w900,
-                color: Color(0xFF15803D),
+                color: message.mine ? AppColors.danger : const Color(0xFF15803D),
               ),
             ),
           ),
@@ -2187,10 +2202,10 @@ class _ChatTransferCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           amount == null ? 'GH₵—' : _money.format(amount),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w900,
-                            color: Color(0xFF15803D),
+                            color: message.mine ? AppColors.danger : const Color(0xFF15803D),
                           ),
                         ),
                       ],

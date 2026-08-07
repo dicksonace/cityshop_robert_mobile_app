@@ -692,6 +692,21 @@ class AppStore extends ChangeNotifier {
     return WalletTransactionPage.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
+  Future<WalletTransactionItem?> fetchWalletTransactionByReference(String reference) async {
+    final ref = reference.trim();
+    if (ref.isEmpty) return null;
+    try {
+      final res = await _api.get('/wallet/transactions/by-reference/${Uri.encodeComponent(ref)}');
+      final data = res.data is Map ? res.data['transaction'] : null;
+      if (data is Map) {
+        return WalletTransactionItem.fromJson(Map<String, dynamic>.from(data));
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
   Future<WithdrawalOverview> loadWithdrawals() async {
     final res = await _api.get('/wallet/withdrawals');
     return WithdrawalOverview.fromJson(Map<String, dynamic>.from(res.data as Map));
