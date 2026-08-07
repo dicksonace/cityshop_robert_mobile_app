@@ -216,6 +216,7 @@ class ChatCallService extends ChangeNotifier {
   Future<void> endCall([ChatCallEndReason? reason]) async {
     if (state == ChatCallState.idle) return;
 
+    // Caller hanging up while still ringing is "cancelled" (Call ended), not missed.
     final status = reason != null
         ? reason.name
         : state == ChatCallState.active
@@ -223,7 +224,7 @@ class ChatCallService extends ChangeNotifier {
             : state == ChatCallState.incoming
                 ? 'declined'
                 : state == ChatCallState.calling
-                    ? 'missed'
+                    ? 'cancelled'
                     : 'cancelled';
 
     final duration = state == ChatCallState.active && _startedAt != null

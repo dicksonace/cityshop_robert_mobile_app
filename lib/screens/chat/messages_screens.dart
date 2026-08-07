@@ -842,7 +842,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final reason = call.state == ChatCallState.active
         ? ChatCallEndReason.completed
         : call.state == ChatCallState.calling
-            ? ChatCallEndReason.missed
+            ? ChatCallEndReason.cancelled
             : call.state == ChatCallState.incoming
                 ? ChatCallEndReason.declined
                 : ChatCallEndReason.cancelled;

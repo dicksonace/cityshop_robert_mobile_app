@@ -1167,7 +1167,7 @@ class ChatMessage {
 
   bool get isRead => readAt != null && readAt!.isNotEmpty;
 
-  /// "Voice call · 1m 20s", "Missed call", ...
+  /// "Voice call · 1m 20s", "Call ended", "Missed call", ...
   String get eventLabel {
     if (type != 'call_log') return body.isEmpty ? 'Update' : body;
 
@@ -1175,9 +1175,14 @@ class ChatMessage {
     final seconds = (callLog?['duration_seconds'] as num?)?.toInt() ?? 0;
     final isVideo = (callLog?['call_kind'] as String?) == 'video';
     final kind = isVideo ? 'Video call' : 'Voice call';
-    if (status == 'missed' || status == 'declined' || status == 'unanswered') {
-      return status == 'declined' ? 'Call declined' : 'Missed ${isVideo ? 'video ' : ''}call';
+    final missedKind = 'Missed ${isVideo ? 'video ' : ''}call';
+    // `mine` ⇒ we are the sender of the log (= who ended / hung up).
+    if (status == 'declined') return 'Call declined';
+    if (status == 'cancelled') return mine ? 'Call ended' : missedKind;
+    if (status == 'missed' || status == 'unanswered') {
+      return mine ? 'No answer' : missedKind;
     }
+    if (status == 'completed' && seconds <= 0) return 'Call ended';
     if (seconds <= 0) return kind;
 
     final minutes = seconds ~/ 60;

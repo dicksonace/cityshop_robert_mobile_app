@@ -279,13 +279,19 @@ void main() {
     });
 
     test('labels a call by how it ended', () {
-      String label(Map<String, dynamic>? log) =>
-          parse(_message(1, type: 'call_log', body: 'Voice call', callLog: log)).eventLabel;
+      String label(Map<String, dynamic>? log, {int myUserId = 1, int senderId = 1}) =>
+          ChatMessage.fromJson(
+            _message(1, type: 'call_log', body: 'Voice call', callLog: log, senderId: senderId),
+            myUserId: myUserId,
+          ).eventLabel;
 
       expect(label({'status': 'ended', 'duration_seconds': 125}), 'Voice call · 2m 5s');
       expect(label({'status': 'ended', 'duration_seconds': 8}), 'Voice call · 8s');
-      expect(label({'status': 'ended', 'duration_seconds': 0}), 'Voice call');
-      expect(label({'status': 'missed'}), 'Missed call');
+      expect(label({'status': 'completed', 'duration_seconds': 0}), 'Call ended');
+      expect(label({'status': 'cancelled'}, myUserId: 1, senderId: 1), 'Call ended');
+      expect(label({'status': 'cancelled'}, myUserId: 2, senderId: 1), 'Missed call');
+      expect(label({'status': 'missed'}, myUserId: 1, senderId: 1), 'No answer');
+      expect(label({'status': 'missed'}, myUserId: 2, senderId: 1), 'Missed call');
       expect(label({'status': 'declined'}), 'Call declined');
       expect(label(null), 'Voice call');
     });
