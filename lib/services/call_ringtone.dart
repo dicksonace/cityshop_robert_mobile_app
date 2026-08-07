@@ -1,41 +1,51 @@
-import 'package:audioplayers/audioplayers.dart';
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 
-/// Loops ringback / ringtone assets during call setup.
+/// Incoming/outgoing ring without holding a looping AudioPlayer.
+///
+/// Looping `audioplayers` + WebRTC `getUserMedia` was wedging Android's audio
+/// HAL so the app froze until a phone reboot (including stuck on splash).
 class CallRingtone {
   CallRingtone();
 
-  final AudioPlayer _player = AudioPlayer();
+  Timer? _timer;
+  bool _active = false;
 
-  Future<void> startOutgoing() => _start('assets/sounds/call_ringback.wav', volume: 0.55);
+  Future<void> startOutgoing() => _start(heavy: false);
 
-  Future<void> startIncoming() async {
-    HapticFeedback.heavyImpact();
-    await _start('assets/sounds/call_ringtone.wav', volume: 0.85);
-  }
+  Future<void> startIncoming() => _start(heavy: true);
 
-  Future<void> _start(String asset, {required double volume}) async {
+  Future<void> _start({required bool heavy}) async {
     await stop();
-    try {
-      await _player.setReleaseMode(ReleaseMode.loop);
-      await _player.setVolume(volume);
-      await _player.play(AssetSource(asset.replaceFirst('assets/', '')));
-    } catch (_) {
-      // Missing asset / platform audio issue — silent fail.
+    _active = true;
+    if (heavy) {
+      HapticFeedback.heavyImpact();
+    } else {
+      HapticFeedback.selectionClick();
     }
+    try {
+      await SystemSound.play(SystemSoundType.alert);
+    } catch (_) {}
+
+    _timer = Timer.periodic(const Duration(milliseconds: 2200), (_) async {
+      if (!_active) return;
+      if (heavy) {
+        HapticFeedback.mediumImpact();
+      } else {
+        HapticFeedback.selectionClick();
+      }
+      try {
+        await SystemSound.play(SystemSoundType.alert);
+      } catch (_) {}
+    });
   }
 
   Future<void> stop() async {
-    try {
-      await _player.stop();
-    } catch (_) {}
-    try {
-      await _player.release();
-    } catch (_) {}
+    _active = false;
+    _timer?.cancel();
+    _timer = null;
   }
 
-  Future<void> dispose() async {
-    await stop();
-    await _player.dispose();
-  }
+  Future<void> dispose() => stop();
 }

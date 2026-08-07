@@ -61,6 +61,8 @@ class ChatCallOverlay extends StatelessWidget {
                   Expanded(
                     child: isVideo &&
                             call.renderersReady &&
+                            call.localRenderer != null &&
+                            call.remoteRenderer != null &&
                             (call.state == ChatCallState.active || call.state == ChatCallState.calling)
                         ? Stack(
                             fit: StackFit.expand,
@@ -68,7 +70,7 @@ class ChatCallOverlay extends StatelessWidget {
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(16),
                                 child: RTCVideoView(
-                                  call.remoteRenderer,
+                                  call.remoteRenderer!,
                                   objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                                 ),
                               ),
@@ -80,7 +82,7 @@ class ChatCallOverlay extends StatelessWidget {
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
                                   child: RTCVideoView(
-                                    call.localRenderer,
+                                    call.localRenderer!,
                                     mirror: true,
                                     objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
                                   ),

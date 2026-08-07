@@ -74,10 +74,18 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final store = context.read<AppStore>();
-      await Future.wait([
-        store.init(),
-        Future<void>.delayed(const Duration(milliseconds: 2400)),
-      ]);
+      try {
+        await Future.any([
+          Future.wait([
+            store.init(),
+            Future<void>.delayed(const Duration(milliseconds: 2400)),
+          ]),
+          // If a previous call wedged native audio/camera, init can hang forever.
+          Future<void>.delayed(const Duration(seconds: 10)),
+        ]);
+      } catch (_) {
+        // Continue to shop even if bootstrap fails.
+      }
       if (!mounted) return;
       setState(() => _ready = true);
       await Future<void>.delayed(const Duration(milliseconds: 450));

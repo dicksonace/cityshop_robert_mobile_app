@@ -44,8 +44,10 @@ class ChatCallService extends ChangeNotifier {
   ChatCallState state = ChatCallState.idle;
   ChatCallKind kind = ChatCallKind.voice;
 
-  final RTCVideoRenderer localRenderer = RTCVideoRenderer();
-  final RTCVideoRenderer remoteRenderer = RTCVideoRenderer();
+  /// Video-only. Never create/init these for voice — Android camera surfaces
+  /// from RTCVideoRenderer were wedging the HAL and freezing the whole app.
+  RTCVideoRenderer? localRenderer;
+  RTCVideoRenderer? remoteRenderer;
 
   RTCPeerConnection? _pc;
   MediaStream? _localStream;
@@ -80,10 +82,12 @@ class ChatCallService extends ChangeNotifier {
     return completer.future;
   }
 
-  Future<void> initRenderers() async {
+  Future<void> _ensureVideoRenderers() async {
     if (_disposed || _renderersReady) return;
-    await localRenderer.initialize();
-    await remoteRenderer.initialize();
+    localRenderer ??= RTCVideoRenderer();
+    remoteRenderer ??= RTCVideoRenderer();
+    await localRenderer!.initialize();
+    await remoteRenderer!.initialize();
     _renderersReady = true;
   }
 
@@ -148,17 +152,20 @@ class ChatCallService extends ChangeNotifier {
     await _stopTracks(local);
 
     try {
-      localRenderer.srcObject = null;
-      remoteRenderer.srcObject = null;
+      localRenderer?.srcObject = null;
+      remoteRenderer?.srcObject = null;
     } catch (_) {}
 
-    if (disposeRenderers && _renderersReady) {
+    // Always release video surfaces after a call — keeping them alive wedges Android.
+    if (_renderersReady || localRenderer != null || remoteRenderer != null) {
       try {
-        await localRenderer.dispose();
+        await localRenderer?.dispose();
       } catch (_) {}
       try {
-        await remoteRenderer.dispose();
+        await remoteRenderer?.dispose();
       } catch (_) {}
+      localRenderer = null;
+      remoteRenderer = null;
       _renderersReady = false;
     }
 
@@ -181,15 +188,31 @@ class ChatCallService extends ChangeNotifier {
     return true;
   }
 
+  Future<MediaStream> _openLocalMedia(ChatCallKind callKind) {
+    return navigator.mediaDevices.getUserMedia({
+      'audio': true,
+      'video': callKind == ChatCallKind.video
+          ? {
+              'facingMode': 'user',
+              'width': {'ideal': 640},
+              'height': {'ideal': 480},
+            }
+          : false,
+    });
+  }
+
   Future<RTCPeerConnection> _createPeer() async {
     final pc = await createPeerConnection({
       'iceServers': [
         {'urls': 'stun:stun.l.google.com:19302'},
       ],
+      'sdpSemantics': 'unified-plan',
     });
     pc.onTrack = (event) {
       if (_disposed || event.streams.isEmpty) return;
-      remoteRenderer.srcObject = event.streams.first;
+      if (_renderersReady) {
+        remoteRenderer?.srcObject = event.streams.first;
+      }
       notifyListeners();
     };
     pc.onIceCandidate = (candidate) {
@@ -244,7 +267,6 @@ class ChatCallService extends ChangeNotifier {
   Future<void> startCall(ChatCallKind callKind) {
     return _runExclusive(() async {
       if (_disposed || state != ChatCallState.idle) return;
-      await initRenderers();
       if (!await _ensurePermissions(callKind)) {
         throw StateError(
           callKind == ChatCallKind.video
@@ -259,12 +281,14 @@ class ChatCallService extends ChangeNotifier {
 
       try {
         await _ringtone.stop();
-        await Future<void>.delayed(const Duration(milliseconds: 250));
-        _localStream = await navigator.mediaDevices.getUserMedia({
-          'audio': true,
-          'video': callKind == ChatCallKind.video,
-        });
-        localRenderer.srcObject = _localStream;
+        // Video surfaces only — never for voice.
+        if (callKind == ChatCallKind.video) {
+          await _ensureVideoRenderers();
+        }
+        _localStream = await _openLocalMedia(callKind);
+        if (callKind == ChatCallKind.video) {
+          localRenderer?.srcObject = _localStream;
+        }
         _pc = await _createPeer();
         for (final track in _localStream!.getTracks()) {
           await _pc!.addTrack(track, _localStream!);
@@ -304,7 +328,6 @@ class ChatCallService extends ChangeNotifier {
 
       _accepting = true;
       _remoteHangup = false;
-      await initRenderers();
       if (!await _ensurePermissions(kind)) {
         _accepting = false;
         throw StateError(
@@ -316,23 +339,24 @@ class ChatCallService extends ChangeNotifier {
 
       try {
         await _ringtone.stop();
-        // Give audioplayers time to release focus before WebRTC grabs the mic.
-        await Future<void>.delayed(const Duration(milliseconds: 350));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
         if (_disposed || _remoteHangup || _pendingOffer == null) {
           throw StateError('Caller hung up before you could join.');
         }
 
-        _localStream = await navigator.mediaDevices.getUserMedia({
-          'audio': true,
-          'video': kind == ChatCallKind.video,
-        });
+        if (kind == ChatCallKind.video) {
+          await _ensureVideoRenderers();
+        }
+        _localStream = await _openLocalMedia(kind);
         if (_disposed || _remoteHangup || _pendingOffer == null) {
           await _stopTracks(_localStream);
           _localStream = null;
           throw StateError('Caller hung up before you could join.');
         }
 
-        localRenderer.srcObject = _localStream;
+        if (kind == ChatCallKind.video) {
+          localRenderer?.srcObject = _localStream;
+        }
         _pc = await _createPeer();
         for (final track in _localStream!.getTracks()) {
           await _pc!.addTrack(track, _localStream!);
