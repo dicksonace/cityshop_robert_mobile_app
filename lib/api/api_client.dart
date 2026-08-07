@@ -31,9 +31,9 @@ class ApiClient {
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
         // Ghana mobile networks often need a longer handshake than the default.
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 45),
-        sendTimeout: const Duration(seconds: 45),
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 35),
+        sendTimeout: const Duration(seconds: 35),
         headers: {
           'Accept': 'application/json',
         },
@@ -82,37 +82,66 @@ class ApiClient {
 
   Future<String?> getToken() async {
     try {
-      final secure = await _storage.read(key: ApiConfig.tokenKey);
-      if (secure != null && secure.isNotEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        if (prefs.getString(_prefsTokenKey) != secure) {
-          await prefs.setString(_prefsTokenKey, secure);
-        }
-        return secure;
+      return await _readToken().timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      // Keystore can hang after reboot — prefer the SharedPreferences backup.
+      try {
+        final prefs = await SharedPreferences.getInstance()
+            .timeout(const Duration(seconds: 2));
+        return prefs.getString(_prefsTokenKey);
+      } catch (_) {
+        return null;
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _readToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final backup = prefs.getString(_prefsTokenKey);
+      if (backup != null && backup.isNotEmpty) {
+        // Prefer the fast backup so boot is never blocked on Keystore.
+        unawaited(_syncSecureToken(backup));
+        return backup;
       }
     } catch (_) {}
 
-    final prefs = await SharedPreferences.getInstance();
-    final backup = prefs.getString(_prefsTokenKey);
-    if (backup != null && backup.isNotEmpty) {
-      try {
-        await _storage.write(key: ApiConfig.tokenKey, value: backup);
-      } catch (_) {}
-      return backup;
-    }
+    try {
+      final secure = await _storage.read(key: ApiConfig.tokenKey);
+      if (secure != null && secure.isNotEmpty) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_prefsTokenKey, secure);
+        } catch (_) {}
+        return secure;
+      }
+    } catch (_) {}
     return null;
+  }
+
+  Future<void> _syncSecureToken(String token) async {
+    try {
+      await _storage.write(key: ApiConfig.tokenKey, value: token);
+    } catch (_) {}
   }
 
   Future<Response<dynamic>> get(
     String path, {
     Map<String, dynamic>? query,
+    int maxAttempts = 2,
   }) {
-    return _withRetry(() => _dio.get(path, queryParameters: query));
+    return _withRetry(
+      () => _dio.get(path, queryParameters: query),
+      maxAttempts: maxAttempts,
+    );
   }
 
   Future<Response<dynamic>> post(
     String path, {
     Object? data,
+    int maxAttempts = 2,
   }) {
     return _withRetry(
       () => _dio.post(
@@ -122,12 +151,14 @@ class ApiClient {
             ? null
             : Options(contentType: Headers.jsonContentType),
       ),
+      maxAttempts: maxAttempts,
     );
   }
 
   Future<Response<dynamic>> patch(
     String path, {
     Object? data,
+    int maxAttempts = 2,
   }) {
     return _withRetry(
       () => _dio.patch(
@@ -137,12 +168,14 @@ class ApiClient {
             ? null
             : Options(contentType: Headers.jsonContentType),
       ),
+      maxAttempts: maxAttempts,
     );
   }
 
   Future<Response<dynamic>> put(
     String path, {
     Object? data,
+    int maxAttempts = 2,
   }) {
     return _withRetry(
       () => _dio.put(
@@ -152,10 +185,15 @@ class ApiClient {
             ? null
             : Options(contentType: Headers.jsonContentType),
       ),
+      maxAttempts: maxAttempts,
     );
   }
 
-  Future<Response<dynamic>> delete(String path, {Object? data}) {
+  Future<Response<dynamic>> delete(
+    String path, {
+    Object? data,
+    int maxAttempts = 2,
+  }) {
     return _withRetry(
       () => _dio.delete(
         path,
@@ -164,6 +202,7 @@ class ApiClient {
             ? null
             : Options(contentType: Headers.jsonContentType),
       ),
+      maxAttempts: maxAttempts,
     );
   }
 
@@ -198,20 +237,20 @@ class ApiClient {
     );
   }
 
-  /// Retries brief network blips (common on mobile data) before surfacing an error.
   Future<Response<dynamic>> _withRetry(
     Future<Response<dynamic>> Function() run, {
-    int maxAttempts = 3,
+    int maxAttempts = 2,
   }) async {
     DioException? last;
-    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    final attempts = maxAttempts < 1 ? 1 : maxAttempts;
+    for (var attempt = 1; attempt <= attempts; attempt++) {
       try {
         return await run();
       } on DioException catch (e) {
         last = e;
-        final canRetry = _isTransient(e) && attempt < maxAttempts;
+        final canRetry = _isTransient(e) && attempt < attempts;
         if (!canRetry) throw _mapError(e);
-        await Future<void>.delayed(Duration(milliseconds: 350 * attempt));
+        await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
       }
     }
     throw _mapError(last!);

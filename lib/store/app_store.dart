@@ -51,6 +51,13 @@ class AppStore extends ChangeNotifier {
 
   Future<String?> get apiToken => _api.getToken();
 
+  /// Lets splash / Skip intro enter the app even if network init is still running.
+  void finishBoot() {
+    if (!booting) return;
+    booting = false;
+    notifyListeners();
+  }
+
   Future<void> init() async {
     booting = true;
     notifyListeners();
@@ -58,12 +65,13 @@ class AppStore extends ChangeNotifier {
       final token = await _api.getToken();
       if (token != null && token.isNotEmpty) {
         try {
-          await refreshMe();
+          // Boot must stay snappy — one attempt each, then enter the shop.
+          await refreshMe(maxAttempts: 1);
           await Future.wait([
-            loadCart(),
-            loadWishlist(),
-            refreshNotificationCounts(),
-          ]);
+            loadCart(maxAttempts: 1),
+            loadWishlist(maxAttempts: 1),
+            refreshNotificationCounts(maxAttempts: 1),
+          ]).timeout(const Duration(seconds: 8));
         } on ApiException catch (e) {
           // Only log out when the server rejects the session — never on
           // network blips right after a phone reboot / power-on.
@@ -76,18 +84,17 @@ class AppStore extends ChangeNotifier {
         }
       }
       try {
-        await loadShop();
+        await loadShop(maxAttempts: 1).timeout(const Duration(seconds: 10));
       } catch (_) {
-        shopError = 'Something went wrong. Please try again.';
+        shopError ??= 'Something went wrong. Please try again.';
       }
     } finally {
-      booting = false;
-      notifyListeners();
+      finishBoot();
     }
   }
 
-  Future<void> refreshMe() async {
-    final res = await _api.get('/auth/me');
+  Future<void> refreshMe({int maxAttempts = 2}) async {
+    final res = await _api.get('/auth/me', maxAttempts: maxAttempts);
     final data = res.data;
     final userJson = data is Map ? (data['user'] ?? data['data'] ?? data) : null;
     if (userJson is Map) {
@@ -103,6 +110,7 @@ class AppStore extends ChangeNotifier {
     bool? inGhana,
     bool? freeShip,
     String? sortBy,
+    int maxAttempts = 2,
   }) async {
     loadingShop = true;
     shopError = null;
@@ -123,7 +131,9 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final catsFuture = categories.isEmpty ? _api.get('/categories') : null;
+      final catsFuture = categories.isEmpty
+          ? _api.get('/categories', maxAttempts: maxAttempts)
+          : null;
       final query = <String, dynamic>{
         'per_page': 40,
         'sort': sort,
@@ -132,7 +142,11 @@ class AppStore extends ChangeNotifier {
         if (filterInGhana) 'in_ghana': 1,
         if (filterFreeShip) 'free_ship': 1,
       };
-      final productsRes = await _api.get('/products', query: query);
+      final productsRes = await _api.get(
+        '/products',
+        query: query,
+        maxAttempts: maxAttempts,
+      );
 
       if (catsFuture != null) {
         final catsRes = await catsFuture;
@@ -541,10 +555,10 @@ class AppStore extends ChangeNotifier {
     cartCount = cartItems.fold(0, (sum, i) => sum + i.quantity);
   }
 
-  Future<void> loadCart() async {
+  Future<void> loadCart({int maxAttempts = 2}) async {
     if (!isLoggedIn) return;
     try {
-      final res = await _api.get('/cart');
+      final res = await _api.get('/cart', maxAttempts: maxAttempts);
       _applyCart(res.data);
       notifyListeners();
     } catch (_) {}
@@ -571,10 +585,10 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadWishlist() async {
+  Future<void> loadWishlist({int maxAttempts = 2}) async {
     if (!isLoggedIn) return;
     try {
-      final res = await _api.get('/wishlist');
+      final res = await _api.get('/wishlist', maxAttempts: maxAttempts);
       final data = res.data is Map ? res.data['data'] : null;
       if (data is List) {
         wishlist = data
@@ -793,7 +807,7 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> refreshNotificationCounts() async {
+  Future<void> refreshNotificationCounts({int maxAttempts = 2}) async {
     if (!isLoggedIn) {
       unreadNotifications = 0;
       unreadMessages = 0;
@@ -803,7 +817,7 @@ class AppStore extends ChangeNotifier {
       return;
     }
     try {
-      final res = await _api.get('/notifications/counts');
+      final res = await _api.get('/notifications/counts', maxAttempts: maxAttempts);
       final data = res.data is Map ? res.data : null;
       if (data is Map) {
         unreadNotifications = (data['unread_notifications'] as num?)?.toInt() ?? 0;

@@ -160,12 +160,16 @@ GoRouter createRouter(AppStore store) {
       final loc = state.matchedLocation;
       final path = uri.path;
 
-      // Keep product/store deep links alive while splash boots.
+      // Keep product/store deep links alive while splash boots — but never trap
+      // the user on splash if they already skipped (finishBoot clears this).
       if (store.booting) {
         if (_isDeepLinkPath(path)) {
           pendingAfterBoot = _locationWithQuery(state);
         }
-        return loc == '/splash' ? null : '/splash';
+        if (loc == '/splash') return null;
+        // Allow Skip intro / forced entry into the main shell.
+        if (loc == '/shop' || loc.startsWith('/shop')) return null;
+        return '/splash';
       }
 
       if (loc == '/splash') {

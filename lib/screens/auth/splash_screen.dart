@@ -41,6 +41,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   int _messageIndex = 0;
   Timer? _messageTimer;
   bool _ready = false;
+  bool _entered = false;
 
   @override
   void initState() {
@@ -72,26 +73,40 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       setState(() => _messageIndex = (_messageIndex + 1) % _messages.length);
     });
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final store = context.read<AppStore>();
-      try {
-        await Future.any([
-          Future.wait([
-            store.init(),
-            Future<void>.delayed(const Duration(milliseconds: 2400)),
-          ]),
-          // If a previous call wedged native audio/camera, init can hang forever.
-          Future<void>.delayed(const Duration(seconds: 10)),
-        ]);
-      } catch (_) {
-        // Continue to shop even if bootstrap fails.
-      }
-      if (!mounted) return;
-      setState(() => _ready = true);
-      await Future<void>.delayed(const Duration(milliseconds: 450));
-      if (!mounted) return;
-      context.go('/shop');
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_bootstrap()));
+  }
+
+  /// Always release the router lock, then open the shop.
+  /// Without [AppStore.finishBoot], Skip intro / timeout navigated to /shop and
+  /// the redirect bounced straight back to splash — looked like a freeze.
+  void _enterApp() {
+    if (_entered || !mounted) return;
+    _entered = true;
+    final store = context.read<AppStore>();
+    store.finishBoot();
+    if (mounted) setState(() => _ready = true);
+    context.go('/shop');
+  }
+
+  Future<void> _bootstrap() async {
+    final store = context.read<AppStore>();
+    // Kick init but never wait on it forever — network/Keystore can hang.
+    unawaited(store.init());
+
+    final started = DateTime.now();
+    // Show branding briefly, then enter as soon as boot finishes (or 6s max).
+    while (mounted && !_entered) {
+      if (!store.booting) break;
+      if (DateTime.now().difference(started) >= const Duration(seconds: 6)) break;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    // Keep the intro visible at least ~2s so it doesn't flash.
+    final shown = DateTime.now().difference(started);
+    if (shown < const Duration(milliseconds: 2000)) {
+      await Future<void>.delayed(const Duration(milliseconds: 2000) - shown);
+    }
+    if (!mounted || _entered) return;
+    _enterApp();
   }
 
   @override
@@ -124,7 +139,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         ),
         child: Stack(
           children: [
-            // Soft floating orbs
             Positioned(
               top: -40,
               right: -30,
@@ -295,7 +309,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                     ),
                     const SizedBox(height: 12),
                     TextButton(
-                      onPressed: () => context.go('/shop'),
+                      onPressed: _enterApp,
                       child: Text(
                         'Skip intro',
                         style: TextStyle(

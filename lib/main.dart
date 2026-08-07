@@ -13,7 +13,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final api = ApiClient();
   final store = AppStore(api);
-  await PushNotifications.instance.init(store);
+  try {
+    await PushNotifications.instance.init(store).timeout(const Duration(seconds: 5));
+  } catch (_) {
+    // Push must never block opening the app.
+  }
   runApp(CityShopApp(store: store));
 }
 
