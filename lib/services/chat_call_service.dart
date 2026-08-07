@@ -323,14 +323,33 @@ class ChatCallService extends ChangeNotifier {
       } catch (e) {
         await _cleanup();
         if (e is StateError) rethrow;
-        if (e is TimeoutException) {
-          throw StateError(
-            'Could not start call — microphone timed out. Try again.',
-          );
-        }
-        rethrow;
+        throw StateError(_friendlyStartError(e));
       }
     });
+  }
+
+  String _friendlyStartError(Object e) {
+    final text = e.toString().toLowerCase();
+    if (e is TimeoutException || text.contains('timeout')) {
+      return 'Microphone timed out. Close other apps using the mic, then try again.';
+    }
+    if (text.contains('permission') || text.contains('notallowed') || text.contains('denied')) {
+      return kind == ChatCallKind.video
+          ? 'Allow camera and microphone in phone Settings, then try again.'
+          : 'Allow microphone in phone Settings, then try again.';
+    }
+    if (text.contains('getusermedia') ||
+        text.contains('notreadable') ||
+        text.contains('track') ||
+        text.contains('device') ||
+        text.contains('busy') ||
+        text.contains('in use')) {
+      return 'Microphone is busy. Close WhatsApp/other apps using the mic, or reboot the phone, then try again.';
+    }
+    if (text.contains('peerconnection') || text.contains('webrtc')) {
+      return 'Call engine failed to start. Force-close CityShop and open it again.';
+    }
+    return 'Could not start call. Check mic permission, or reboot the phone if a call froze earlier.';
   }
 
   Future<void> acceptCall() {

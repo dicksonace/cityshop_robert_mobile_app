@@ -866,8 +866,11 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) setState(() {});
     } catch (e) {
       if (!mounted) return;
+      final message = e is StateError
+          ? e.message
+          : e.toString().replaceFirst('Exception: ', '').trim();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e is StateError ? e.message : 'Could not start call')),
+        SnackBar(content: Text(message.isEmpty ? 'Could not start call' : message)),
       );
     }
   }
@@ -878,8 +881,11 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) setState(() {});
     } catch (e) {
       if (!mounted) return;
+      final message = e is StateError
+          ? e.message
+          : e.toString().replaceFirst('Exception: ', '').trim();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e is StateError ? e.message : 'Could not join call')),
+        SnackBar(content: Text(message.isEmpty ? 'Could not join call' : message)),
       );
     }
   }
