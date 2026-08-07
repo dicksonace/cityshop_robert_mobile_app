@@ -17,9 +17,10 @@ enum ChatCallEndReason { declined, completed, missed, cancelled }
 
 /// In-app WebRTC voice/video calls over the chat signal API.
 ///
-/// Important: do NOT touch native WebRTC (renderers / getUserMedia / PC) on
-/// `call_offer`. That path ran on every polled/realtime offer and wedged the
-/// Android camera/audio HAL so the app froze until a phone reboot.
+/// Hang up must NEVER wait on `getUserMedia` / peer-setup. Those native calls
+/// can block ~2 minutes on Android; if Hang up sat behind them the UI stayed
+/// on "Calling…" until they finished. We use a session generation so in-flight
+/// media is discarded the moment the user hangs up.
 class ChatCallService extends ChangeNotifier {
   ChatCallService({
     required this.store,
@@ -35,17 +36,13 @@ class ChatCallService extends ChangeNotifier {
   final String myName;
   final void Function(ChatMessage message)? onCallLog;
 
-  /// How long the callee may take to tap Accept after the offer is received.
   static const _ringTtl = Duration(seconds: 120);
-
-  /// Drop poll-replayed offers older than this (dead calls).
   static const _offerMaxAge = Duration(minutes: 3);
+  static const _mediaTimeout = Duration(seconds: 6);
 
   ChatCallState state = ChatCallState.idle;
   ChatCallKind kind = ChatCallKind.voice;
 
-  /// Video-only. Never create/init these for voice — Android camera surfaces
-  /// from RTCVideoRenderer were wedging the HAL and freezing the whole app.
   RTCVideoRenderer? localRenderer;
   RTCVideoRenderer? remoteRenderer;
 
@@ -57,45 +54,30 @@ class ChatCallService extends ChangeNotifier {
   final ListQueue<RTCIceCandidate> _pendingRemoteIce = ListQueue();
   final ListQueue<ChatMessage> _signalQueue = ListQueue();
   bool _drainingSignals = false;
-  Future<void> _opChain = Future<void>.value();
   int? _callerId;
   String _callerName = '';
   String peerName = '';
   DateTime? _startedAt;
   bool _renderersReady = false;
   bool _disposed = false;
-  bool _accepting = false;
-  bool _remoteHangup = false;
+
+  /// Bumped on hang-up / cleanup so in-flight start/accept aborts.
+  int _session = 0;
+
   final _ringtone = CallRingtone();
 
   bool get renderersReady => _renderersReady;
 
-  Future<T> _runExclusive<T>(Future<T> Function() action) {
-    final completer = Completer<T>();
-    _opChain = _opChain.then((_) async {
-      try {
-        completer.complete(await action());
-      } catch (e, st) {
-        completer.completeError(e, st);
-      }
-    });
-    return completer.future;
-  }
-
-  Future<void> _ensureVideoRenderers() async {
-    if (_disposed || _renderersReady) return;
-    localRenderer ??= RTCVideoRenderer();
-    remoteRenderer ??= RTCVideoRenderer();
-    await localRenderer!.initialize();
-    await remoteRenderer!.initialize();
-    _renderersReady = true;
-  }
+  bool _alive(int session) => !_disposed && session == _session;
 
   Future<void> disposeService() async {
     if (_disposed) return;
     _disposed = true;
+    _session++;
     _signalQueue.clear();
-    await _cleanup(disposeRenderers: true);
+    await _ringtone.stop();
+    await _tearDownMedia();
+    state = ChatCallState.idle;
     await _ringtone.dispose();
   }
 
@@ -127,14 +109,11 @@ class ChatCallService extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> _cleanup({bool disposeRenderers = false}) async {
-    await _ringtone.stop();
+  Future<void> _tearDownMedia() async {
     _pendingRemoteIce.clear();
     _pendingOffer = null;
     _pendingOfferReceivedAt = null;
     _startedAt = null;
-    _accepting = false;
-    _remoteHangup = false;
 
     final pc = _pc;
     _pc = null;
@@ -156,7 +135,6 @@ class ChatCallService extends ChangeNotifier {
       remoteRenderer?.srcObject = null;
     } catch (_) {}
 
-    // Always release video surfaces after a call — keeping them alive wedges Android.
     if (_renderersReady || localRenderer != null || remoteRenderer != null) {
       try {
         await localRenderer?.dispose();
@@ -170,6 +148,10 @@ class ChatCallService extends ChangeNotifier {
     }
 
     kind = ChatCallKind.voice;
+  }
+
+  Future<void> _dismissUi() async {
+    await _ringtone.stop();
     if (state != ChatCallState.idle) {
       state = ChatCallState.idle;
       notifyListeners();
@@ -198,25 +180,42 @@ class ChatCallService extends ChangeNotifier {
               'height': {'ideal': 480},
             }
           : false,
-    });
+    }).timeout(
+      _mediaTimeout,
+      onTimeout: () {
+        throw StateError(
+          'Microphone timed out. Close other apps using the mic, then try again.',
+        );
+      },
+    );
   }
 
-  Future<RTCPeerConnection> _createPeer() async {
+  Future<void> _ensureVideoRenderers(int session) async {
+    if (!_alive(session) || _renderersReady) return;
+    localRenderer ??= RTCVideoRenderer();
+    remoteRenderer ??= RTCVideoRenderer();
+    await localRenderer!.initialize().timeout(_mediaTimeout);
+    if (!_alive(session)) return;
+    await remoteRenderer!.initialize().timeout(_mediaTimeout);
+    if (_alive(session)) _renderersReady = true;
+  }
+
+  Future<RTCPeerConnection> _createPeer(int session) async {
     final pc = await createPeerConnection({
       'iceServers': [
         {'urls': 'stun:stun.l.google.com:19302'},
       ],
       'sdpSemantics': 'unified-plan',
-    });
+    }).timeout(_mediaTimeout);
     pc.onTrack = (event) {
-      if (_disposed || event.streams.isEmpty) return;
+      if (!_alive(session) || event.streams.isEmpty) return;
       if (_renderersReady) {
         remoteRenderer?.srcObject = event.streams.first;
       }
       notifyListeners();
     };
     pc.onIceCandidate = (candidate) {
-      if (_disposed) return;
+      if (!_alive(session)) return;
       if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
       unawaited(
         _sendSignal(
@@ -264,68 +263,74 @@ class ChatCallService extends ChangeNotifier {
     return RTCSessionDescription(description, type);
   }
 
-  Future<void> startCall(ChatCallKind callKind) {
-    return _runExclusive(() async {
-      if (_disposed || state != ChatCallState.idle) return;
-      if (!await _ensurePermissions(callKind)) {
-        throw StateError(
-          callKind == ChatCallKind.video
-              ? 'Camera and microphone permission required'
-              : 'Microphone permission required',
-        );
+  Future<void> startCall(ChatCallKind callKind) async {
+    if (_disposed || state != ChatCallState.idle) return;
+    if (!await _ensurePermissions(callKind)) {
+      throw StateError(
+        callKind == ChatCallKind.video
+            ? 'Camera and microphone permission required'
+            : 'Microphone permission required',
+      );
+    }
+    if (_disposed || state != ChatCallState.idle) return;
+
+    final session = _session;
+    _callerId = myUserId;
+    _callerName = myName;
+    kind = callKind;
+
+    // Show "Calling…" immediately — Hang up can dismiss without waiting on mic.
+    state = ChatCallState.calling;
+    notifyListeners();
+    unawaited(_ringtone.startOutgoing());
+
+    try {
+      if (callKind == ChatCallKind.video) {
+        await _ensureVideoRenderers(session);
+        if (!_alive(session) || state != ChatCallState.calling) return;
       }
 
-      _callerId = myUserId;
-      _callerName = myName;
-      kind = callKind;
-
-      // Paint the calling UI before touching native WebRTC so a hung mic
-      // doesn't look like a dead tap — and so we can hang up / recover.
-      state = ChatCallState.calling;
-      notifyListeners();
-      unawaited(_ringtone.startOutgoing());
-      await Future<void>.delayed(const Duration(milliseconds: 80));
-
-      try {
-        if (callKind == ChatCallKind.video) {
-          await _ensureVideoRenderers().timeout(const Duration(seconds: 8));
-        }
-        _localStream = await _openLocalMedia(callKind).timeout(
-          const Duration(seconds: 12),
-          onTimeout: () {
-            throw StateError(
-              'Microphone is busy or not responding. Close other apps and try again.',
-            );
-          },
-        );
-        if (_disposed || state != ChatCallState.calling) {
-          await _stopTracks(_localStream);
-          _localStream = null;
-          return;
-        }
-        if (callKind == ChatCallKind.video) {
-          localRenderer?.srcObject = _localStream;
-        }
-        _pc = await _createPeer().timeout(const Duration(seconds: 8));
-        for (final track in _localStream!.getTracks()) {
-          await _pc!.addTrack(track, _localStream!);
-        }
-
-        final offer = await _pc!.createOffer();
-        await _pc!.setLocalDescription(offer);
-        await _sendSignal(
-          'call_offer',
-          body: callKind == ChatCallKind.video ? 'Video call' : 'Voice call',
-          metadata: {
-            'sdp': {'type': offer.type, 'sdp': offer.sdp},
-          },
-        );
-      } catch (e) {
-        await _cleanup();
-        if (e is StateError) rethrow;
-        throw StateError(_friendlyStartError(e));
+      final stream = await _openLocalMedia(callKind);
+      if (!_alive(session) || state != ChatCallState.calling) {
+        await _stopTracks(stream);
+        return;
       }
-    });
+      _localStream = stream;
+      if (callKind == ChatCallKind.video) {
+        localRenderer?.srcObject = _localStream;
+      }
+
+      final pc = await _createPeer(session);
+      if (!_alive(session) || state != ChatCallState.calling) {
+        try {
+          await pc.close();
+          await pc.dispose();
+        } catch (_) {}
+        return;
+      }
+      _pc = pc;
+      for (final track in _localStream!.getTracks()) {
+        await _pc!.addTrack(track, _localStream!);
+      }
+
+      final offer = await _pc!.createOffer();
+      await _pc!.setLocalDescription(offer);
+      if (!_alive(session) || state != ChatCallState.calling) return;
+
+      await _sendSignal(
+        'call_offer',
+        body: callKind == ChatCallKind.video ? 'Video call' : 'Voice call',
+        metadata: {
+          'sdp': {'type': offer.type, 'sdp': offer.sdp},
+        },
+      );
+    } catch (e) {
+      if (!_alive(session)) return;
+      await _tearDownMedia();
+      await _dismissUi();
+      if (e is StateError) rethrow;
+      throw StateError(_friendlyStartError(e));
+    }
   }
 
   String _friendlyStartError(Object e) {
@@ -352,80 +357,96 @@ class ChatCallService extends ChangeNotifier {
     return 'Could not start call. Check mic permission, or reboot the phone if a call froze earlier.';
   }
 
-  Future<void> acceptCall() {
-    return _runExclusive(() async {
-      if (_disposed) return;
-      final offer = _pendingOffer;
-      if (offer == null) {
-        throw StateError('That call is no longer available. Ask them to call again.');
-      }
-      if (_pendingOfferReceivedAt != null &&
-          DateTime.now().difference(_pendingOfferReceivedAt!) > _ringTtl) {
-        await _cleanup();
-        throw StateError('That call has expired. Ask them to call again.');
+  Future<void> acceptCall() async {
+    if (_disposed) return;
+    final offer = _pendingOffer;
+    if (offer == null) {
+      throw StateError('That call is no longer available. Ask them to call again.');
+    }
+    if (_pendingOfferReceivedAt != null &&
+        DateTime.now().difference(_pendingOfferReceivedAt!) > _ringTtl) {
+      _session++;
+      await _tearDownMedia();
+      await _dismissUi();
+      throw StateError('That call has expired. Ask them to call again.');
+    }
+
+    final session = _session;
+    if (!await _ensurePermissions(kind)) {
+      throw StateError(
+        kind == ChatCallKind.video
+            ? 'Camera and microphone permission required'
+            : 'Microphone permission required',
+      );
+    }
+    if (!_alive(session) || _pendingOffer == null) {
+      throw StateError('Caller hung up before you could join.');
+    }
+
+    try {
+      await _ringtone.stop();
+      if (!_alive(session) || _pendingOffer == null) {
+        throw StateError('Caller hung up before you could join.');
       }
 
-      _accepting = true;
-      _remoteHangup = false;
-      if (!await _ensurePermissions(kind)) {
-        _accepting = false;
-        throw StateError(
-          kind == ChatCallKind.video
-              ? 'Camera and microphone permission required'
-              : 'Microphone permission required',
-        );
-      }
-
-      try {
-        await _ringtone.stop();
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-        if (_disposed || _remoteHangup || _pendingOffer == null) {
+      if (kind == ChatCallKind.video) {
+        await _ensureVideoRenderers(session);
+        if (!_alive(session)) {
           throw StateError('Caller hung up before you could join.');
         }
+      }
 
-        if (kind == ChatCallKind.video) {
-          await _ensureVideoRenderers();
-        }
-        _localStream = await _openLocalMedia(kind);
-        if (_disposed || _remoteHangup || _pendingOffer == null) {
-          await _stopTracks(_localStream);
-          _localStream = null;
-          throw StateError('Caller hung up before you could join.');
-        }
+      final stream = await _openLocalMedia(kind);
+      if (!_alive(session) || _pendingOffer == null) {
+        await _stopTracks(stream);
+        throw StateError('Caller hung up before you could join.');
+      }
+      _localStream = stream;
+      if (kind == ChatCallKind.video) {
+        localRenderer?.srcObject = _localStream;
+      }
 
-        if (kind == ChatCallKind.video) {
-          localRenderer?.srcObject = _localStream;
-        }
-        _pc = await _createPeer();
-        for (final track in _localStream!.getTracks()) {
-          await _pc!.addTrack(track, _localStream!);
-        }
-        await _pc!.setRemoteDescription(offer);
-        await _flushPendingIce();
-        final answer = await _pc!.createAnswer();
-        await _pc!.setLocalDescription(answer);
-        if (_remoteHangup) {
-          throw StateError('Caller hung up before you could join.');
-        }
-        await _sendSignal(
-          'call_answer',
-          metadata: {
-            'sdp': {'type': answer.type, 'sdp': answer.sdp},
-          },
-        );
-        _pendingOffer = null;
-        _pendingOfferReceivedAt = null;
-        _startedAt = DateTime.now();
-        _accepting = false;
-        state = ChatCallState.active;
-        notifyListeners();
-      } catch (e) {
-        _accepting = false;
-        await _cleanup();
+      final pc = await _createPeer(session);
+      if (!_alive(session) || _pendingOffer == null) {
+        try {
+          await pc.close();
+          await pc.dispose();
+        } catch (_) {}
+        throw StateError('Caller hung up before you could join.');
+      }
+      _pc = pc;
+      for (final track in _localStream!.getTracks()) {
+        await _pc!.addTrack(track, _localStream!);
+      }
+      await _pc!.setRemoteDescription(offer);
+      await _flushPendingIce();
+      final answer = await _pc!.createAnswer();
+      await _pc!.setLocalDescription(answer);
+      if (!_alive(session)) {
+        throw StateError('Caller hung up before you could join.');
+      }
+      await _sendSignal(
+        'call_answer',
+        metadata: {
+          'sdp': {'type': answer.type, 'sdp': answer.sdp},
+        },
+      );
+      if (!_alive(session)) return;
+      _pendingOffer = null;
+      _pendingOfferReceivedAt = null;
+      _startedAt = DateTime.now();
+      state = ChatCallState.active;
+      notifyListeners();
+    } catch (e) {
+      if (!_alive(session)) {
         if (e is StateError) rethrow;
-        throw StateError(_friendlyJoinError(e));
+        return;
       }
-    });
+      await _tearDownMedia();
+      await _dismissUi();
+      if (e is StateError) rethrow;
+      throw StateError(_friendlyJoinError(e));
+    }
   }
 
   String _friendlyJoinError(Object e) {
@@ -444,32 +465,43 @@ class ChatCallService extends ChangeNotifier {
     return 'Could not join call. Ask them to call again.';
   }
 
-  Future<void> endCall([ChatCallEndReason? reason]) {
-    return _runExclusive(() async {
-      if (_disposed || state == ChatCallState.idle) return;
+  /// Hang up: dismiss UI immediately, then tear down media / signal in background.
+  Future<void> endCall([ChatCallEndReason? reason]) async {
+    if (_disposed || state == ChatCallState.idle) return;
 
-      final status = reason != null
-          ? reason.name
-          : state == ChatCallState.active
-              ? 'completed'
-              : state == ChatCallState.incoming
-                  ? 'declined'
-                  : 'cancelled';
+    final status = reason != null
+        ? reason.name
+        : state == ChatCallState.active
+            ? 'completed'
+            : state == ChatCallState.incoming
+                ? 'declined'
+                : 'cancelled';
 
-      final duration = state == ChatCallState.active && _startedAt != null
-          ? DateTime.now().difference(_startedAt!).inSeconds.clamp(0, 86400)
-          : 0;
+    final duration = state == ChatCallState.active && _startedAt != null
+        ? DateTime.now().difference(_startedAt!).inSeconds.clamp(0, 86400)
+        : 0;
+    final callerId = _callerId ?? myUserId;
+    final callerName = _callerName.isEmpty ? myName : _callerName;
+    final callKind = kind == ChatCallKind.video ? 'video' : 'voice';
 
+    // Invalidate any in-flight getUserMedia / peer setup RIGHT NOW.
+    _session++;
+    _pendingOffer = null;
+    _pendingOfferReceivedAt = null;
+
+    await _dismissUi();
+
+    unawaited(() async {
       try {
         final result = await _sendSignal(
           'call_end',
           metadata: {
             'call_log': {
               'status': status,
-              'caller_id': _callerId ?? myUserId,
-              'caller_name': _callerName.isEmpty ? myName : _callerName,
+              'caller_id': callerId,
+              'caller_name': callerName,
               'duration_seconds': duration,
-              'call_kind': kind == ChatCallKind.video ? 'video' : 'voice',
+              'call_kind': callKind,
             },
           },
         );
@@ -479,14 +511,11 @@ class ChatCallService extends ChangeNotifier {
             ChatMessage.fromJson(Map<String, dynamic>.from(log), myUserId: myUserId),
           );
         }
-      } catch (_) {
-        // Hang-up should always tear down locally.
-      }
-      await _cleanup();
-    });
+      } catch (_) {}
+      await _tearDownMedia();
+    }());
   }
 
-  /// Queue signalling so poll/realtime storms cannot interleave mid-setup.
   Future<void> handleMessage(ChatMessage msg) async {
     if (_disposed) return;
     if (!msg.type.startsWith('call') || msg.type == 'call_log') return;
@@ -496,15 +525,12 @@ class ChatCallService extends ChangeNotifier {
       _processedIds.clear();
     }
 
-    // Hang-ups must interrupt Accept immediately (don't sit behind the op lock).
     if (msg.type == 'call_end') {
-      _remoteHangup = true;
+      _session++;
       _pendingOffer = null;
       _pendingOfferReceivedAt = null;
-      if (_accepting) return;
-      await _runExclusive(() async {
-        if (!_disposed) await _cleanup();
-      });
+      await _dismissUi();
+      unawaited(_tearDownMedia());
       return;
     }
 
@@ -514,7 +540,7 @@ class ChatCallService extends ChangeNotifier {
     try {
       while (!_disposed && _signalQueue.isNotEmpty) {
         final next = _signalQueue.removeFirst();
-        await _runExclusive(() => _handleSignal(next));
+        await _handleSignal(next);
       }
     } finally {
       _drainingSignals = false;
@@ -531,37 +557,30 @@ class ChatCallService extends ChangeNotifier {
 
   Future<void> _handleSignal(ChatMessage msg) async {
     if (_disposed) return;
-
     final meta = msg.metadata ?? {};
 
-    // Another device of ours answered — drop the ringing UI without touching WebRTC.
     if (msg.type == 'call_answer' && msg.senderId == myUserId) {
       if (state == ChatCallState.incoming || state == ChatCallState.calling) {
-        await _ringtone.stop();
-        await _cleanup();
+        _session++;
+        await _dismissUi();
+        unawaited(_tearDownMedia());
       }
       return;
     }
 
     if (msg.type == 'call_offer' && msg.senderId != null && msg.senderId != myUserId) {
       if (_isAncientOffer(msg)) return;
-      // Already in a live call — ignore a second offer.
-      if (state == ChatCallState.active || state == ChatCallState.calling || _accepting) {
-        return;
-      }
+      if (state == ChatCallState.active || state == ChatCallState.calling) return;
 
       final offer = _sdpFromMeta(meta['sdp']);
       if (offer == null) return;
 
-      // Soft reset previous ringing UI only (no native WebRTC yet).
       await _ringtone.stop();
       kind = meta['call_kind'] == 'video' ? ChatCallKind.video : ChatCallKind.voice;
       _callerId = msg.senderId;
       _callerName = peerName.isNotEmpty ? peerName : 'Caller';
       _pendingOffer = offer;
-      // TTL starts when *we* receive the offer, not when it was created on the server.
       _pendingOfferReceivedAt = DateTime.now();
-      _remoteHangup = false;
       _pendingRemoteIce.clear();
       state = ChatCallState.incoming;
       notifyListeners();
@@ -578,8 +597,7 @@ class ChatCallService extends ChangeNotifier {
         (c['sdpMLineIndex'] as num?)?.toInt(),
       );
       if (_pc == null) {
-        // Buffer candidates that arrive while still ringing / before setRemoteDescription.
-        if (state == ChatCallState.incoming || state == ChatCallState.calling || _accepting) {
+        if (state == ChatCallState.incoming || state == ChatCallState.calling) {
           _pendingRemoteIce.add(ice);
           if (_pendingRemoteIce.length > 80) {
             _pendingRemoteIce.removeFirst();
