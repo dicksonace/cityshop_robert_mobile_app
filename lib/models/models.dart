@@ -1114,6 +1114,8 @@ class ChatMessage {
     this.transferCurrency,
     this.transferNote,
     this.transferReference,
+    this.transferFromName,
+    this.transferToName,
     this.replyTo,
     this.readAt,
     this.isDeleted = false,
@@ -1141,6 +1143,8 @@ class ChatMessage {
   final String? transferCurrency;
   final String? transferNote;
   final String? transferReference;
+  final String? transferFromName;
+  final String? transferToName;
   final ChatReplyTo? replyTo;
   final String? readAt;
   final bool isDeleted;
@@ -1249,10 +1253,17 @@ class ChatMessage {
       productSlug: (product?['slug'] as String?)?.trim(),
       productImage: (product?['image_url'] as String?)?.trim(),
       productPrice: (product?['price'] as num?)?.toDouble(),
-      transferAmount: (transfer?['amount'] as num?)?.toDouble(),
+      transferAmount: () {
+        final raw = transfer?['amount'];
+        if (raw is num) return raw.toDouble();
+        if (raw is String) return double.tryParse(raw);
+        return null;
+      }(),
       transferCurrency: transfer?['currency'] as String? ?? 'GHS',
       transferNote: transfer?['note'] as String?,
       transferReference: transfer?['reference'] as String?,
+      transferFromName: (transfer?['from_name'] as String?)?.trim(),
+      transferToName: (transfer?['to_name'] as String?)?.trim(),
       replyTo: () {
         if (deleted) return null;
         final raw = (json['reply_to'] is Map ? json['reply_to'] : null) ??
@@ -1295,6 +1306,8 @@ class ChatMessage {
       transferCurrency: transferCurrency,
       transferNote: transferNote,
       transferReference: transferReference,
+      transferFromName: transferFromName,
+      transferToName: transferToName,
       replyTo: replyTo,
       readAt: readAt ?? this.readAt,
       isDeleted: isDeleted ?? this.isDeleted,

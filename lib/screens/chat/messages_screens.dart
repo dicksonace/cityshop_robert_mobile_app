@@ -20,6 +20,7 @@ import '../../models/models.dart';
 import '../../services/chat_call_service.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_sheet.dart';
 import '../../widgets/chat_call_overlay.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
@@ -1939,70 +1940,216 @@ class _ChatTransferCard extends StatelessWidget {
 
   final ChatMessage message;
 
+  String get _headline {
+    if (message.mine) return 'You transferred';
+    final from = (message.transferFromName ?? '').trim();
+    if (from.isNotEmpty) return '$from transferred';
+    return 'Transfer received';
+  }
+
+  void _openReceipt(BuildContext context) {
+    final amount = message.transferAmount;
+    final note = (message.transferNote ?? '').trim();
+    final ref = (message.transferReference ?? '').trim();
+    final from = (message.transferFromName ?? '').trim();
+    final to = (message.transferToName ?? '').trim();
+
+    showAppSheet<void>(
+      context: context,
+      builder: (_) => SheetShell(
+        action: FilledButton(
+          onPressed: () => Navigator.pop(context),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            foregroundColor: Colors.white,
+            minimumSize: const Size.fromHeight(48),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+          child: const Text('Close'),
+        ),
+        children: [
+          const Text(
+            'Transfer receipt',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0xFFDCFCE7),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Icon(Icons.swap_horiz_rounded, size: 32, color: Color(0xFF16A34A)),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Center(
+            child: Text(
+              amount == null ? 'GH₵—' : _money.format(amount),
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF15803D),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Center(
+            child: Text(
+              message.mine ? 'Money sent' : 'Money received',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          _ReceiptRow(label: 'From', value: from.isNotEmpty ? from : (message.mine ? 'You' : 'Sender')),
+          _ReceiptRow(label: 'To', value: to.isNotEmpty ? to : (message.mine ? 'Recipient' : 'You')),
+          if (ref.isNotEmpty) _ReceiptRow(label: 'Reference', value: ref),
+          if (message.createdAt != null)
+            _ReceiptRow(label: 'Date', value: _formatReceiptDate(message.createdAt!)),
+          if (note.isNotEmpty) _ReceiptRow(label: 'Note', value: note),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final amount = message.transferAmount;
     final note = (message.transferNote ?? '').trim();
     final ref = (message.transferReference ?? '').trim();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openReceipt(context),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDCFCE7),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.swap_horiz_rounded, color: Color(0xFF16A34A)),
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDCFCE7),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.swap_horiz_rounded, color: Color(0xFF16A34A)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _headline,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          amount == null ? 'GH₵—' : _money.format(amount),
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF15803D),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      message.mine ? 'You transferred' : 'Transfer received',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      amount == null ? 'GH₵—' : _money.format(amount),
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF15803D),
-                      ),
-                    ),
-                  ],
+              if (note.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(note, style: const TextStyle(color: AppColors.textPrimary, height: 1.3)),
+              ],
+              if (ref.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Ref: $ref',
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                 ),
+              ],
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                    'View receipt',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.accent,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.accent),
+                ],
               ),
             ],
           ),
-          if (note.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(note, style: const TextStyle(color: AppColors.textPrimary, height: 1.3)),
-          ],
-          if (ref.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Ref $ref',
-              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+        ),
+      ),
+    );
+  }
+}
+
+class _ReceiptRow extends StatelessWidget {
+  const _ReceiptRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 88,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
             ),
-          ],
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+String _formatReceiptDate(String iso) {
+  final dt = DateTime.tryParse(iso)?.toLocal();
+  if (dt == null) return iso;
+  final d = dt.day.toString().padLeft(2, '0');
+  final m = dt.month.toString().padLeft(2, '0');
+  final h = dt.hour.toString().padLeft(2, '0');
+  final min = dt.minute.toString().padLeft(2, '0');
+  return '$d/$m/${dt.year} · $h:$min';
 }
 
 /// Calls and other non-chat events sit in the middle of the thread.
