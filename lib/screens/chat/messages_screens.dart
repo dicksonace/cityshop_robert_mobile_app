@@ -305,8 +305,20 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _poll?.cancel();
     _recordTick?.cancel();
-    unawaited(_realtime?.dispose() ?? Future<void>.value());
-    unawaited(_call?.disposeService() ?? Future<void>.value());
+    // Tear down WebRTC/audio on the UI thread before the screen goes away so
+    // mic/camera tracks are released even if the isolate is about to die.
+    final call = _call;
+    _call = null;
+    final realtime = _realtime;
+    _realtime = null;
+    unawaited(() async {
+      try {
+        await call?.disposeService();
+      } catch (_) {}
+      try {
+        await realtime?.dispose();
+      } catch (_) {}
+    }());
     _recorder.dispose();
     _controller.dispose();
     _scroll.dispose();

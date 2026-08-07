@@ -6,7 +6,6 @@ class CallRingtone {
   CallRingtone();
 
   final AudioPlayer _player = AudioPlayer();
-  bool _playing = false;
 
   Future<void> startOutgoing() => _start('assets/sounds/call_ringback.wav', volume: 0.55);
 
@@ -21,23 +20,17 @@ class CallRingtone {
       await _player.setReleaseMode(ReleaseMode.loop);
       await _player.setVolume(volume);
       await _player.play(AssetSource(asset.replaceFirst('assets/', '')));
-      _playing = true;
     } catch (_) {
       // Missing asset / platform audio issue — silent fail.
-      _playing = false;
     }
   }
 
   Future<void> stop() async {
-    if (!_playing) {
-      try {
-        await _player.stop();
-      } catch (_) {}
-      return;
-    }
-    _playing = false;
     try {
       await _player.stop();
+    } catch (_) {}
+    try {
+      await _player.release();
     } catch (_) {}
   }
 

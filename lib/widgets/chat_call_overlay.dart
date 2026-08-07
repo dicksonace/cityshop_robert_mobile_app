@@ -59,7 +59,9 @@ class ChatCallOverlay extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
                   Expanded(
-                    child: isVideo
+                    child: isVideo &&
+                            call.renderersReady &&
+                            (call.state == ChatCallState.active || call.state == ChatCallState.calling)
                         ? Stack(
                             fit: StackFit.expand,
                             children: [
@@ -91,7 +93,7 @@ class ChatCallOverlay extends StatelessWidget {
                               radius: 56,
                               backgroundColor: AppColors.accent.withValues(alpha: 0.25),
                               child: Icon(
-                                Icons.person_rounded,
+                                isVideo ? Icons.videocam_rounded : Icons.person_rounded,
                                 size: 64,
                                 color: Colors.white.withValues(alpha: 0.9),
                               ),
