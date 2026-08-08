@@ -1041,6 +1041,18 @@ class _ChatScreenState extends State<ChatScreen> {
       backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
         titleSpacing: 0,
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/shop?tab=messages');
+            }
+          },
+        ),
         title: GestureDetector(
           onTap: _openChatSettings,
           child: Row(
