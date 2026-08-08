@@ -298,7 +298,6 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _recordTick;
   final _recorder = AudioRecorder();
   ConversationRealtime? _realtime;
-  bool _realtimeLive = false;
   ChatCallService? _call;
 
   @override
@@ -367,8 +366,14 @@ class _ChatScreenState extends State<ChatScreen> {
         loading = false;
       });
       _jumpToEnd();
+      // Apply any live offer immediately (push deep-link / Reverb miss).
+      for (final signal in result.pendingCallSignals) {
+        await _call?.handleMessage(signal);
+      }
       await _startRealtime(store);
       _startPoll();
+      // Don't wait for the first Timer.periodic tick — ring ASAP.
+      unawaited(_pollNew());
     } catch (e) {
       if (!mounted) return;
       setState(() => loading = false);
@@ -407,7 +412,8 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     if (ok) {
       _realtime = realtime;
-      _realtimeLive = true;
+      // Keep HTTP poll fast even when Reverb connects — ICE is poll-only and
+      // "connected" does not prove channel auth / message delivery works.
       _startPoll();
     } else {
       await realtime.dispose();
@@ -417,8 +423,9 @@ class _ChatScreenState extends State<ChatScreen> {
   void _startPoll() {
     _poll?.cancel();
     final inCall = _call != null && _call!.state != ChatCallState.idle;
-    // ICE no longer broadcasts (avoids killing the server) — poll often while in a call.
-    final seconds = inCall ? 1 : (_realtimeLive ? 15 : 4);
+    // ICE is poll-only. Never back off to 15s — that made incoming rings take
+    // forever whenever Reverb looked "live" but wasn't delivering offers.
+    final seconds = inCall ? 1 : 2;
     _poll = Timer.periodic(Duration(seconds: seconds), (_) => _pollNew());
   }
 
@@ -440,9 +447,10 @@ class _ChatScreenState extends State<ChatScreen> {
       for (final msg in polled.messages) {
         if (existing.contains(msg.id)) continue;
         fresh.add(msg);
-        if (msg.isSignalling) {
-          unawaited(_call?.handleMessage(msg) ?? Future<void>.value());
-        }
+      }
+      // Handle signals in order and await the drain so offer → ICE stays serial.
+      for (final msg in fresh.where((m) => m.isSignalling)) {
+        await _call?.handleMessage(msg);
       }
       var changed = fresh.isNotEmpty;
       final merged = [

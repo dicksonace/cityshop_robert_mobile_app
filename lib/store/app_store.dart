@@ -1035,23 +1035,43 @@ class AppStore extends ChangeNotifier {
     );
   }
 
-  Future<({ConversationModel conversation, List<ChatMessage> messages})> loadConversation(
+  Future<
+      ({
+        ConversationModel conversation,
+        List<ChatMessage> messages,
+        List<ChatMessage> pendingCallSignals,
+      })> loadConversation(
     int id,
   ) async {
     final res = await _api.get('/messages/$id');
     final convJson = res.data['conversation'];
     final msgs = res.data['messages'];
+    final signals = res.data['pending_call_signals'];
     final conversation = ConversationModel.fromJson(Map<String, dynamic>.from(convJson as Map));
+    final myId = user?.id ?? 0;
     final messages = msgs is List
         ? msgs
             .whereType<Map>()
             .map((e) => ChatMessage.fromJson(
                   Map<String, dynamic>.from(e),
-                  myUserId: user?.id ?? 0,
+                  myUserId: myId,
                 ))
             .toList()
         : <ChatMessage>[];
-    return (conversation: conversation, messages: messages);
+    final pendingCallSignals = signals is List
+        ? signals
+            .whereType<Map>()
+            .map((e) => ChatMessage.fromJson(
+                  Map<String, dynamic>.from(e),
+                  myUserId: myId,
+                ))
+            .toList()
+        : <ChatMessage>[];
+    return (
+      conversation: conversation,
+      messages: messages,
+      pendingCallSignals: pendingCallSignals,
+    );
   }
 
   Future<void> blockUser(int userId) async {

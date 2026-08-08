@@ -52,11 +52,14 @@ class ChatCallService extends ChangeNotifier {
   MediaStream? _localStream;
   RTCSessionDescription? _pendingOffer;
   DateTime? _pendingOfferReceivedAt;
+  /// When the offer was created on the server (preferred TTL clock).
+  DateTime? _pendingOfferCreatedAt;
   final Set<int> _processedIds = {};
   final ListQueue<RTCIceCandidate> _pendingRemoteIce = ListQueue();
   final ListQueue<ChatMessage> _signalQueue = ListQueue();
   final List<Map<String, dynamic>> _pendingIceOut = [];
   Timer? _iceFlushTimer;
+  Timer? _ringExpireTimer;
   bool _iceFlushInFlight = false;
   bool _drainingSignals = false;
   /// True while we are answering on THIS device, so our own `call_answer`
@@ -84,6 +87,8 @@ class ChatCallService extends ChangeNotifier {
     _session++;
     _iceFlushTimer?.cancel();
     _iceFlushTimer = null;
+    _ringExpireTimer?.cancel();
+    _ringExpireTimer = null;
     _pendingIceOut.clear();
     _signalQueue.clear();
     await _ringtone.stop();
@@ -127,6 +132,7 @@ class ChatCallService extends ChangeNotifier {
     _pendingRemoteIce.clear();
     _pendingOffer = null;
     _pendingOfferReceivedAt = null;
+    _pendingOfferCreatedAt = null;
     _startedAt = null;
 
     final pc = _pc;
@@ -165,6 +171,8 @@ class ChatCallService extends ChangeNotifier {
   }
 
   Future<void> _dismissUi() async {
+    _ringExpireTimer?.cancel();
+    _ringExpireTimer = null;
     await _ringtone.stop();
     if (state != ChatCallState.idle) {
       state = ChatCallState.idle;
@@ -172,6 +180,39 @@ class ChatCallService extends ChangeNotifier {
     } else {
       state = ChatCallState.idle;
     }
+  }
+
+  DateTime? get _offerClock => _pendingOfferCreatedAt ?? _pendingOfferReceivedAt;
+
+  bool get _offerExpired {
+    final clock = _offerClock;
+    if (clock == null) return false;
+    return DateTime.now().difference(clock) > _ringTtl;
+  }
+
+  void _armRingExpire() {
+    _ringExpireTimer?.cancel();
+    final clock = _offerClock;
+    if (clock == null) return;
+    final remaining = _ringTtl - DateTime.now().difference(clock);
+    if (remaining <= Duration.zero) {
+      unawaited(_expireIncomingRing());
+      return;
+    }
+    _ringExpireTimer = Timer(remaining, () {
+      unawaited(_expireIncomingRing());
+    });
+  }
+
+  Future<void> _expireIncomingRing() async {
+    if (_disposed || state != ChatCallState.incoming) return;
+    _session++;
+    _pendingOffer = null;
+    _pendingOfferReceivedAt = null;
+    _pendingOfferCreatedAt = null;
+    await _dismissUi();
+    unawaited(_tearDownMedia());
+    onCallError?.call('Missed call — the ring timed out. Ask them to call again.');
   }
 
   Future<bool> _ensurePermissions(ChatCallKind callKind) async {
@@ -440,8 +481,7 @@ class ChatCallService extends ChangeNotifier {
     if (offer == null) {
       throw StateError('That call is no longer available. Ask them to call again.');
     }
-    if (_pendingOfferReceivedAt != null &&
-        DateTime.now().difference(_pendingOfferReceivedAt!) > _ringTtl) {
+    if (_offerExpired) {
       _session++;
       await _tearDownMedia();
       await _dismissUi();
@@ -516,6 +556,7 @@ class ChatCallService extends ChangeNotifier {
       if (!_alive(session)) return;
       _pendingOffer = null;
       _pendingOfferReceivedAt = null;
+      _pendingOfferCreatedAt = null;
       _startedAt = DateTime.now();
       state = ChatCallState.active;
       notifyListeners();
@@ -572,6 +613,9 @@ class ChatCallService extends ChangeNotifier {
     _session++;
     _pendingOffer = null;
     _pendingOfferReceivedAt = null;
+    _pendingOfferCreatedAt = null;
+    _ringExpireTimer?.cancel();
+    _ringExpireTimer = null;
 
     await _dismissUi();
 
@@ -615,6 +659,7 @@ class ChatCallService extends ChangeNotifier {
       _session++;
       _pendingOffer = null;
       _pendingOfferReceivedAt = null;
+      _pendingOfferCreatedAt = null;
       await _dismissUi();
       unawaited(_tearDownMedia());
       return;
@@ -668,9 +713,18 @@ class ChatCallService extends ChangeNotifier {
       _callerName = peerName.isNotEmpty ? peerName : 'Caller';
       _pendingOffer = offer;
       _pendingOfferReceivedAt = DateTime.now();
+      final created = DateTime.tryParse(msg.createdAt ?? '');
+      _pendingOfferCreatedAt = created?.toLocal();
+      if (_offerExpired) {
+        _pendingOffer = null;
+        _pendingOfferReceivedAt = null;
+        _pendingOfferCreatedAt = null;
+        return;
+      }
       _pendingRemoteIce.clear();
       state = ChatCallState.incoming;
       notifyListeners();
+      _armRingExpire();
       unawaited(_ringtone.startIncoming());
       return;
     }
