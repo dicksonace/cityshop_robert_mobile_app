@@ -81,6 +81,20 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/qr/scan', builder: (_, __) => const QrScanScreen()),
       GoRoute(path: '/qr/receive', builder: (_, __) => const QrReceiveScreen()),
       GoRoute(
+        path: '/qr/contact',
+        builder: (_, state) {
+          final extra = state.extra;
+          if (extra is Map) {
+            final payload = extra['payload'] as String? ?? '';
+            final resolved = extra['resolved'] is Map
+                ? Map<String, dynamic>.from(extra['resolved'] as Map)
+                : <String, dynamic>{};
+            return QrContactScreen(payload: payload, resolved: resolved);
+          }
+          return const QrPayHubScreen();
+        },
+      ),
+      GoRoute(
         path: '/qr/pay',
         builder: (_, state) {
           final extra = state.extra;

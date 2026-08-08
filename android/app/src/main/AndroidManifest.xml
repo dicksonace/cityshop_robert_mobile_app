@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <!-- Saving the namecard to the gallery. Android 10+ writes via MediaStore
+         and needs no permission, so this is only for older devices. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
     <application
         android:label="CityShop"
         android:name="${applicationName}"

@@ -52,6 +52,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'order_status':
         return Icons.inventory_2_outlined;
       case 'payment':
+      case 'wallet':
+      case 'qr_payment':
         return Icons.payments_outlined;
       case 'admin_message':
       case 'dispute':
@@ -95,6 +97,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (n.orderId != null) {
       context.push('/orders/${n.orderId}');
       return;
+    }
+    if (n.type == 'payment' || n.type == 'wallet' || n.type == 'qr_payment') {
+      context.go('/shop?tab=wallet');
     }
   }
 

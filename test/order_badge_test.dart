@@ -32,7 +32,11 @@ class _FakeApiClient extends ApiClient {
       Response(requestOptions: RequestOptions(path: path), data: data);
 
   @override
-  Future<Response<dynamic>> get(String path, {Map<String, dynamic>? query}) async {
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? query,
+    int maxAttempts = 2,
+  }) async {
     switch (path) {
       case '/notifications/counts':
         return _ok(path, {

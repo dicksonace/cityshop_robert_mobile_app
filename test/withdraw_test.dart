@@ -64,7 +64,11 @@ class _FakeApiClient extends ApiClient {
   final List<(String, Map<String, dynamic>)> posts = [];
 
   @override
-  Future<Response<dynamic>> get(String path, {Map<String, dynamic>? query}) async {
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? query,
+    int maxAttempts = 2,
+  }) async {
     gets.add(path);
     final data = switch (path) {
       '/wallet/withdrawals' => overview,
@@ -84,7 +88,11 @@ class _FakeApiClient extends ApiClient {
   }
 
   @override
-  Future<Response<dynamic>> post(String path, {Object? data}) async {
+  Future<Response<dynamic>> post(
+    String path, {
+    Object? data,
+    int maxAttempts = 2,
+  }) async {
     final body = Map<String, dynamic>.from(data as Map);
     posts.add((path, body));
 
@@ -116,7 +124,14 @@ Future<AppStore> _pumpWithdraw(WidgetTester tester, ApiClient api) async {
   addTearDown(tester.view.reset);
 
   final store = AppStore(api)
-    ..user = const AppUser(id: 1, name: 'Robert Asare', email: 'robert@example.com');
+    ..user = const AppUser(
+      id: 1,
+      name: 'Robert Asare',
+      email: 'robert@example.com',
+      // Submitting now stops at a payment PIN prompt, and refuses outright
+      // when the account has no PIN set.
+      hasPaymentPin: true,
+    );
 
   await tester.pumpWidget(
     ChangeNotifierProvider<AppStore>.value(
@@ -129,11 +144,29 @@ Future<AppStore> _pumpWithdraw(WidgetTester tester, ApiClient api) async {
   return store;
 }
 
-/// Fills the form, taps through the review sheet, and settles.
+/// The form is taller than a phone viewport, so scroll a button into view the
+/// way a user would before tapping it.
+Future<void> _tapButton(WidgetTester tester, String label) async {
+  final button = find.widgetWithText(ElevatedButton, label);
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
+  await tester.tap(button);
+  await tester.pumpAndSettle();
+}
+
+/// Fills the amount and opens the review sheet.
 Future<void> _requestAmount(WidgetTester tester, String amount) async {
   await tester.enterText(find.widgetWithText(TextField, 'Amount (GH₵)'), amount);
-  await tester.tap(find.widgetWithText(ElevatedButton, 'Review withdrawal'));
-  await tester.pumpAndSettle();
+  await _tapButton(tester, 'Review withdrawal');
+}
+
+/// Taps through the PIN pad that confirms a withdrawal. The pad pops itself
+/// once the fourth digit lands.
+Future<void> _enterPin(WidgetTester tester, [String pin = '1234']) async {
+  for (final digit in pin.split('')) {
+    await tester.tap(find.text(digit));
+    await tester.pumpAndSettle();
+  }
 }
 
 void main() {
@@ -216,24 +249,29 @@ void main() {
     await _pumpWithdraw(tester, api);
 
     await tester.enterText(find.widgetWithText(TextField, 'Amount (GH₵)'), '500');
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Review withdrawal'));
-    await tester.pumpAndSettle();
+    await _tapButton(tester, 'Review withdrawal');
 
     expect(find.text('Check your payout details'), findsOneWidget);
     expect(find.text('GH₵500.00'), findsOneWidget);
     expect(api.posts, isEmpty);
 
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Request withdrawal to MoMo'));
-    await tester.pumpAndSettle();
+    await _tapButton(tester, 'Request withdrawal');
+
+    // Still nothing sent: the PIN pad stands between the review and the money.
+    expect(api.posts, isEmpty);
+
+    await _enterPin(tester);
 
     expect(api.posts.length, 1);
     final (path, body) = api.posts.single;
     expect(path, '/wallet/withdraw');
     expect(body, {
       'amount': 500.0,
+      'payout_type': 'momo',
       'momo_number': '0539790093',
       'account_name': 'Robert Asare',
       'network': 'mtn',
+      'payment_pin': '1234',
     });
   });
 
@@ -244,8 +282,8 @@ void main() {
     await tester.tap(find.text('Telecel Cash'));
     await tester.pumpAndSettle();
     await _requestAmount(tester, '50');
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Request withdrawal to MoMo'));
-    await tester.pumpAndSettle();
+    await _tapButton(tester, 'Request withdrawal');
+    await _enterPin(tester);
 
     expect(api.posts.single.$2['network'], 'telecel');
   });

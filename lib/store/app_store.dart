@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -1281,6 +1282,47 @@ class AppStore extends ChangeNotifier {
     } catch (_) {
       return null;
     }
+  }
+
+  List<Map<String, dynamic>>? _iceServers;
+
+  static const _iceFallback = <Map<String, dynamic>>[
+    {
+      'urls': ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
+    },
+  ];
+
+  /// STUN/TURN servers for calls. Cached for the app session and hard-bounded:
+  /// this sits on the call-start path, so a slow network must never hold up
+  /// ringing or answering. On timeout we fall back to public STUN.
+  Future<List<Map<String, dynamic>>> fetchIceServers() async {
+    final cached = _iceServers;
+    if (cached != null) return cached;
+    try {
+      final res = await _api
+          .get('/calls/ice-servers')
+          .timeout(const Duration(seconds: 3));
+      final data = res.data;
+      final raw = data is Map ? data['ice_servers'] : null;
+      if (raw is List && raw.isNotEmpty) {
+        final servers = raw
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        if (servers.isNotEmpty) {
+          _iceServers = servers;
+          return servers;
+        }
+      }
+    } catch (_) {
+      // fall through to defaults
+    }
+    return _iceFallback;
+  }
+
+  /// Warm the ICE cache while the chat screen loads so the call path never waits.
+  void primeIceServers() {
+    if (_iceServers == null) unawaited(fetchIceServers());
   }
 
   Future<void> loadAddresses() async {

@@ -49,12 +49,20 @@ class _FakeApiClient extends ApiClient {
   final List<Map<String, dynamic>> posted = [];
 
   @override
-  Future<Response<dynamic>> get(String path, {Map<String, dynamic>? query}) async {
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? query,
+    int maxAttempts = 2,
+  }) async {
     return Response(requestOptions: RequestOptions(path: path), data: preview);
   }
 
   @override
-  Future<Response<dynamic>> post(String path, {Object? data, Map<String, dynamic>? query}) async {
+  Future<Response<dynamic>> post(
+    String path, {
+    Object? data,
+    int maxAttempts = 2,
+  }) async {
     posted.add({'path': path, 'data': data});
     return Response(
       requestOptions: RequestOptions(path: path),

@@ -28,6 +28,7 @@ class ChatCallService extends ChangeNotifier {
     required this.myUserId,
     required this.myName,
     this.onCallLog,
+    this.onCallError,
   });
 
   final AppStore store;
@@ -35,6 +36,7 @@ class ChatCallService extends ChangeNotifier {
   final int myUserId;
   final String myName;
   final void Function(ChatMessage message)? onCallLog;
+  final void Function(String message)? onCallError;
 
   static const _ringTtl = Duration(seconds: 120);
   static const _offerMaxAge = Duration(minutes: 3);
@@ -57,6 +59,9 @@ class ChatCallService extends ChangeNotifier {
   Timer? _iceFlushTimer;
   bool _iceFlushInFlight = false;
   bool _drainingSignals = false;
+  /// True while we are answering on THIS device, so our own `call_answer`
+  /// echoing back through polling is not mistaken for "answered elsewhere".
+  bool _answeringHere = false;
   int? _callerId;
   String _callerName = '';
   String peerName = '';
@@ -209,13 +214,25 @@ class ChatCallService extends ChangeNotifier {
     if (_alive(session)) _renderersReady = true;
   }
 
+  /// Deterministic audio-then-video order. Both peers must build their m-lines
+  /// the same way or `setRemoteDescription` rejects the SDP outright.
+  List<MediaStreamTrack> _orderedTracks(MediaStream stream) {
+    return [...stream.getAudioTracks(), ...stream.getVideoTracks()];
+  }
+
   Future<RTCPeerConnection> _createPeer(int session) async {
+    final iceServers = await store.fetchIceServers();
     final pc = await createPeerConnection({
-      'iceServers': [
-        {'urls': 'stun:stun.l.google.com:19302'},
-      ],
+      'iceServers': iceServers,
       'sdpSemantics': 'unified-plan',
+      'iceCandidatePoolSize': 2,
     }).timeout(_mediaTimeout);
+    pc.onConnectionState = (state) {
+      if (!_alive(session)) return;
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        _handleConnectionFailed();
+      }
+    };
     pc.onTrack = (event) {
       if (!_alive(session) || event.streams.isEmpty) return;
       if (_renderersReady) {
@@ -237,6 +254,21 @@ class ChatCallService extends ChangeNotifier {
       });
     };
     return pc;
+  }
+
+  /// ICE gave up: signalling worked but no media path exists between the two
+  /// networks. Drop the call with a real reason instead of sitting on a silent
+  /// "connected" screen.
+  void _handleConnectionFailed() {
+    if (_disposed || state == ChatCallState.idle) return;
+    onCallError?.call(
+      'Call dropped — your networks could not connect. Try Wi-Fi or a stronger signal.',
+    );
+    unawaited(endCall(
+      state == ChatCallState.active
+          ? ChatCallEndReason.completed
+          : ChatCallEndReason.cancelled,
+    ));
   }
 
   Future<void> _flushOutgoingIce() async {
@@ -320,9 +352,11 @@ class ChatCallService extends ChangeNotifier {
     kind = callKind;
 
     // Show "Calling…" immediately — Hang up can dismiss without waiting on mic.
+    // The ringback deliberately does NOT start yet: it must never be playing
+    // while getUserMedia opens the mic, or the two audio clients fight over the
+    // route and Android's audio HAL stalls.
     state = ChatCallState.calling;
     notifyListeners();
-    unawaited(_ringtone.startOutgoing());
 
     try {
       if (callKind == ChatCallKind.video) {
@@ -349,7 +383,7 @@ class ChatCallService extends ChangeNotifier {
         return;
       }
       _pc = pc;
-      for (final track in _localStream!.getTracks()) {
+      for (final track in _orderedTracks(_localStream!)) {
         await _pc!.addTrack(track, _localStream!);
       }
 
@@ -364,6 +398,9 @@ class ChatCallService extends ChangeNotifier {
           'sdp': {'type': offer.type, 'sdp': offer.sdp},
         },
       );
+      if (_alive(session) && state == ChatCallState.calling) {
+        unawaited(_ringtone.startOutgoing());
+      }
     } catch (e) {
       if (!_alive(session)) return;
       await _tearDownMedia();
@@ -423,6 +460,7 @@ class ChatCallService extends ChangeNotifier {
       throw StateError('Caller hung up before you could join.');
     }
 
+    _answeringHere = true;
     try {
       await _ringtone.stop();
       if (!_alive(session) || _pendingOffer == null) {
@@ -455,10 +493,14 @@ class ChatCallService extends ChangeNotifier {
         throw StateError('Caller hung up before you could join.');
       }
       _pc = pc;
-      for (final track in _localStream!.getTracks()) {
+      // The offer must be applied BEFORE our own tracks. Adding tracks first
+      // creates transceivers in our local order, and if that order differs from
+      // the caller's m-lines WebRTC rejects the offer outright — which is what
+      // produced "Call signal was invalid. Ask them to call again."
+      await _pc!.setRemoteDescription(offer);
+      for (final track in _orderedTracks(_localStream!)) {
         await _pc!.addTrack(track, _localStream!);
       }
-      await _pc!.setRemoteDescription(offer);
       await _flushPendingIce();
       final answer = await _pc!.createAnswer();
       await _pc!.setLocalDescription(answer);
@@ -486,6 +528,8 @@ class ChatCallService extends ChangeNotifier {
       await _dismissUi();
       if (e is StateError) rethrow;
       throw StateError(_friendlyJoinError(e));
+    } finally {
+      _answeringHere = false;
     }
   }
 
@@ -561,8 +605,10 @@ class ChatCallService extends ChangeNotifier {
     if (!msg.type.startsWith('call') || msg.type == 'call_log') return;
     if (_processedIds.contains(msg.id)) return;
     _processedIds.add(msg.id);
-    if (_processedIds.length > 400) {
-      _processedIds.clear();
+    // Trim the oldest ids rather than clearing: a full clear lets a stale offer
+    // be handled twice and ring again after the call is over.
+    while (_processedIds.length > 400) {
+      _processedIds.remove(_processedIds.first);
     }
 
     if (msg.type == 'call_end') {
@@ -600,7 +646,8 @@ class ChatCallService extends ChangeNotifier {
     final meta = msg.metadata ?? {};
 
     if (msg.type == 'call_answer' && msg.senderId == myUserId) {
-      if (state == ChatCallState.incoming || state == ChatCallState.calling) {
+      if (!_answeringHere &&
+          (state == ChatCallState.incoming || state == ChatCallState.calling)) {
         _session++;
         await _dismissUi();
         unawaited(_tearDownMedia());

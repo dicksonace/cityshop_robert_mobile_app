@@ -55,8 +55,18 @@ class _FakeApiClient extends ApiClient {
   final List<Map<String, dynamic>> messages;
   final uploads = <Map<String, dynamic>>[];
 
+  /// Keeps the chat screen off the real Keystore/SharedPreferences path. The
+  /// live lookup arms a 2s timeout that outlives the test and trips the
+  /// "Timer is still pending" invariant.
   @override
-  Future<Response<dynamic>> get(String path, {Map<String, dynamic>? query}) async {
+  Future<String?> getToken() async => null;
+
+  @override
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? query,
+    int maxAttempts = 2,
+  }) async {
     final data = path == '/messages/7'
         ? {
             'conversation': {

@@ -60,7 +60,11 @@ class _FakeApiClient extends ApiClient {
   final Map<String, dynamic> funding;
 
   @override
-  Future<Response<dynamic>> get(String path, {Map<String, dynamic>? query}) async {
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? query,
+    int maxAttempts = 2,
+  }) async {
     return Response(
       requestOptions: RequestOptions(path: path),
       data: path == '/wallet/manual-funding' ? funding : const <String, dynamic>{},

@@ -17,7 +17,11 @@ class _FakeApiClient extends ApiClient {
   int orderCalls = 0;
 
   @override
-  Future<Response<dynamic>> get(String path, {Map<String, dynamic>? query}) async {
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? query,
+    int maxAttempts = 2,
+  }) async {
     if (path == '/orders') {
       orderCalls++;
       return Response(

@@ -11,6 +11,7 @@ import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/order_receipt_printer.dart';
+import '../../utils/wallet_statement_printer.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/tab_refresh.dart';
@@ -18,6 +19,24 @@ import '../../widgets/wallet_receipt_sheet.dart';
 import '../cart/paystack_payment_screen.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
+
+enum _StatementPeriod {
+  last30Days('Last 30 days', 30),
+  last3Months('Last 3 months', 90),
+  last12Months('Last 12 months', 365),
+  everything('All transactions', null);
+
+  const _StatementPeriod(this.label, this._days);
+
+  final String label;
+  final int? _days;
+
+  DateTime? get since {
+    final days = _days;
+    if (days == null) return null;
+    return DateTime.now().subtract(Duration(days: days));
+  }
+}
 
 class WalletTab extends StatefulWidget {
   const WalletTab({super.key});
@@ -36,6 +55,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
   int transactionsLastPage = 1;
   bool loadingMore = false;
   String? transactionsError;
+  bool buildingStatement = false;
 
   @override
   int? get tabIndex => 1;
@@ -98,6 +118,106 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
       if (mounted) setState(() => transactionsError = e.toString());
     } finally {
       if (mounted) setState(() => loadingMore = false);
+    }
+  }
+
+  /// Statements are assembled from the ledger API rather than the rows already
+  /// on screen, so a period covers everything even if the user never tapped
+  /// "Load more". Capped so a long history cannot spin forever.
+  Future<List<WalletTransactionItem>> _collectForStatement(DateTime? since) async {
+    const perPage = 50;
+    const maxPages = 20;
+    final store = context.read<AppStore>();
+    final collected = <WalletTransactionItem>[];
+
+    var page = 1;
+    var lastPage = 1;
+    while (page <= lastPage && page <= maxPages) {
+      final result = await store.fetchWalletTransactions(page: page, perPage: perPage);
+      lastPage = result.lastPage;
+
+      // Newest first, so the first row older than the cut-off ends the walk.
+      var reachedCutOff = false;
+      for (final tx in result.items) {
+        final at = _txDate(tx);
+        if (since != null && at != null && at.isBefore(since)) {
+          reachedCutOff = true;
+          break;
+        }
+        collected.add(tx);
+      }
+      if (reachedCutOff) break;
+      page += 1;
+    }
+
+    return collected;
+  }
+
+  static DateTime? _txDate(WalletTransactionItem tx) {
+    final raw = tx.createdAt;
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw)?.toLocal();
+  }
+
+  Future<void> _openStatement() async {
+    final choice = await showAppSheet<_StatementPeriod>(
+      context: context,
+      builder: (ctx) => SheetShell(
+        children: [
+          const Text(
+            'Transaction statement',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Choose a period. You can print it or save it as a PDF.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 14),
+          for (final period in _StatementPeriod.values)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.description_outlined),
+              title: Text(period.label),
+              trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+              onTap: () => Navigator.of(ctx).pop(period),
+            ),
+        ],
+      ),
+    );
+
+    if (choice == null || !mounted) return;
+
+    setState(() => buildingStatement = true);
+    try {
+      final rows = await _collectForStatement(choice.since);
+      if (!mounted) return;
+      if (rows.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No transactions in that period')),
+        );
+        return;
+      }
+      final store = context.read<AppStore>();
+      await printWalletStatement(
+        accountName: store.user?.name ?? 'CityShop wallet',
+        accountMobile: store.user?.mobile,
+        transactions: rows,
+        periodLabel: choice.label,
+        closingBalance: store.wallet?.availableBalance,
+      );
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not build the statement. Try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => buildingStatement = false);
     }
   }
 
@@ -389,7 +509,32 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Transaction History', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Transaction History',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                      ),
+                    ),
+                    if (transactions.isNotEmpty)
+                      TextButton.icon(
+                        onPressed: buildingStatement ? null : _openStatement,
+                        icon: buildingStatement
+                            ? const SizedBox(
+                                height: 14,
+                                width: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.print_outlined, size: 18),
+                        label: Text(buildingStatement ? 'Preparing…' : 'Statement'),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                  ],
+                ),
                 if (transactionsError != null) ...[
                   const SizedBox(height: 10),
                   Text(transactionsError!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),

@@ -299,99 +299,85 @@ class _AddressesScreenState extends State<AddressesScreen> {
   }
 }
 
-class ProfileEditScreen extends StatefulWidget {
+class ProfileEditScreen extends StatelessWidget {
   const ProfileEditScreen({super.key});
-
-  @override
-  State<ProfileEditScreen> createState() => _ProfileEditScreenState();
-}
-
-class _ProfileEditScreenState extends State<ProfileEditScreen> {
-  late final TextEditingController name;
-  late final TextEditingController email;
-  late final TextEditingController mobile;
-  bool saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final u = context.read<AppStore>().user;
-    name = TextEditingController(text: u?.name ?? '');
-    email = TextEditingController(text: u?.email ?? '');
-    mobile = TextEditingController(text: u?.mobile ?? '');
-  }
-
-  @override
-  void dispose() {
-    name.dispose();
-    email.dispose();
-    mobile.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    setState(() => saving = true);
-    try {
-      await context.read<AppStore>().updateProfile(
-            name: name.text.trim(),
-            email: email.text.trim(),
-            mobile: mobile.text.trim(),
-          );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated')));
-      context.pop();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    } finally {
-      if (mounted) setState(() => saving = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AppStore>().user;
+    final name = user?.name ?? '';
+    final email = user?.email ?? '';
+    final mobile = user?.mobile ?? '';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Profile settings')),
       body: ListView(
-        // Keep Save changes clear of the system navigation bar.
-        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
+        padding: EdgeInsets.fromLTRB(16, 20, 16, 16 + MediaQuery.paddingOf(context).bottom),
         children: [
-          Row(
-            children: [
-              BuyerProfileAvatar(
-                name: user?.name ?? name.text,
-                avatar: user?.avatar,
-                radius: 36,
-              ),
-              const SizedBox(width: 14),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Profile picture',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Tap the photo to upload from camera or gallery.',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
-                    ),
-                  ],
+          Center(
+            child: Column(
+              children: [
+                BuyerProfileAvatar(
+                  name: name,
+                  avatar: user?.avatar,
+                  radius: 48,
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Text(
+                  name.isEmpty ? 'CityShop user' : name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Tap the photo to update your picture',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 20),
-          TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
+          const SizedBox(height: 24),
+          _LockedProfileField(label: 'Name', value: name.isEmpty ? '—' : name),
           const SizedBox(height: 10),
-          TextField(controller: email, decoration: const InputDecoration(labelText: 'Email')),
+          _LockedProfileField(label: 'Email', value: email.isEmpty ? '—' : email),
           const SizedBox(height: 10),
-          TextField(controller: mobile, decoration: const InputDecoration(labelText: 'Mobile')),
-          const SizedBox(height: 20),
-          PrimaryButton(label: 'Save changes', loading: saving, onPressed: saving ? null : _save),
+          _LockedProfileField(label: 'Mobile', value: mobile.isEmpty ? '—' : mobile),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF7ED),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFFED7AA)),
+            ),
+            child: const Text(
+              'Name, email, and mobile are locked so someone who opens your phone cannot change your account details. Contact CityShop support if you need them updated.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _LockedProfileField extends StatelessWidget {
+  const _LockedProfileField({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        suffixIcon: const Icon(Icons.lock_outline, size: 18, color: AppColors.textMuted),
+      ),
+      child: Text(
+        value,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
       ),
     );
   }

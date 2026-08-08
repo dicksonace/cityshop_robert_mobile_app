@@ -21,7 +21,11 @@ class _PendingApiClient extends ApiClient {
   void fail() => _pending.completeError(ApiException('offline'));
 
   @override
-  Future<Response<dynamic>> post(String path, {Object? data}) {
+  Future<Response<dynamic>> post(
+    String path, {
+    Object? data,
+    int maxAttempts = 2,
+  }) {
     posts++;
     return _pending.future;
   }

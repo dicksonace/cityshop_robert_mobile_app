@@ -72,6 +72,8 @@
 	<string>CityShop needs microphone access so you can send voice messages in chat.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>CityShop needs photo library access so you can search for products and send photos or video in chat.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>CityShop needs permission to save your payment QR code to Photos.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

@@ -10,7 +10,11 @@ import 'package:cityshop_mobile/store/app_store.dart';
 
 class _IdleApiClient extends ApiClient {
   @override
-  Future<Response<dynamic>> get(String path, {Map<String, dynamic>? query}) async {
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? query,
+    int maxAttempts = 2,
+  }) async {
     return Response(requestOptions: RequestOptions(path: path), data: const <String, dynamic>{});
   }
 }

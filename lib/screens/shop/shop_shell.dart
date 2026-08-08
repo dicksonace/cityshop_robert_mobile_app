@@ -1283,7 +1283,8 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
     final links = <(IconData, String, String, String)>[
       (Icons.notifications_outlined, 'Notifications', 'Orders, messages & updates', '/notifications'),
       (Icons.notifications_active_outlined, 'Allow phone alerts', 'Turn on popup notifications', '__enable_push__'),
-      (Icons.person_outline, 'Profile settings', 'Name, email & photo', '/profile/edit'),
+      (Icons.person_outline, 'Profile settings', 'Photo & account details', '/profile/edit'),
+      (Icons.qr_code_2_rounded, 'My namecard', 'Your QR to get paid & add friends', '/qr/receive'),
       (Icons.location_on_outlined, 'Addresses', 'Saved delivery addresses', '/addresses'),
       (Icons.favorite_border, 'Wishlist', 'Saved products', '/wishlist'),
       (Icons.pin_outlined, 'Payment PIN', '4-digit code for wallet & transfers', '/profile/payment-pin'),

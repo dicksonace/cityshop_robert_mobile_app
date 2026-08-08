@@ -350,12 +350,17 @@ class _ChatScreenState extends State<ChatScreen> {
           setState(() => messages = [...messages, msg]);
           _jumpToEnd();
         },
+        onCallError: (message) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        },
       )..addListener(() {
           if (!mounted) return;
           setState(() {});
           _startPoll();
         });
       _call!.peerName = result.conversation.otherName;
+      store.primeIceServers();
       setState(() {
         conversation = result.conversation;
         messages = result.messages;
@@ -1334,16 +1339,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                                   ),
                                                   if (m.mine && !m.isDeleted) ...[
                                                     const SizedBox(width: 4),
-                                                    Icon(
-                                                      m.isRead ? Icons.done_all_rounded : Icons.done_rounded,
-                                                      size: 14,
-                                                      color: m.isRead
-                                                          ? (m.isProduct || m.isTransfer || m.isFile
-                                                              ? const Color(0xFF38BDF8)
-                                                              : const Color(0xFFBAE6FD))
-                                                          : (m.isProduct || m.isTransfer || m.isFile
-                                                              ? AppColors.textMuted
-                                                              : Colors.white70),
+                                                    _MessageTick(
+                                                      read: m.isRead,
+                                                      onWhiteBubble: m.isProduct || m.isTransfer || m.isFile,
                                                     ),
                                                   ],
                                                 ],
@@ -2491,7 +2489,8 @@ class _AttachPanel extends StatelessWidget {
         crossAxisCount: 4,
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
-        childAspectRatio: 0.92,
+        // Tall enough for a two-line label: "Video call" wraps at phone widths.
+        childAspectRatio: 0.78,
         children: [
           for (final tile in tiles)
             InkWell(
@@ -2511,9 +2510,14 @@ class _AttachPanel extends StatelessWidget {
                     child: Icon(tile.icon, color: AppColors.accent, size: 24),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    tile.label,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  Flexible(
+                    child: Text(
+                      tile.label,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ],
               ),
@@ -2529,6 +2533,27 @@ class _AttachTileData {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
+}
+
+/// Delivery ticks for messages you sent, including voice notes. Green in both
+/// states so they stay legible against the orange bubble; the darker shade and
+/// the second tick mean the other side has read it.
+class _MessageTick extends StatelessWidget {
+  const _MessageTick({required this.read, required this.onWhiteBubble});
+
+  final bool read;
+  final bool onWhiteBubble;
+
+  @override
+  Widget build(BuildContext context) {
+    return Icon(
+      read ? Icons.done_all_rounded : Icons.done_rounded,
+      size: 14,
+      color: onWhiteBubble
+          ? (read ? AppColors.emerald : const Color(0xFF6EE7B7))
+          : (read ? const Color(0xFF4ADE80) : const Color(0xFFBBF7D0)),
+    );
+  }
 }
 
 class _ChatVideo extends StatefulWidget {

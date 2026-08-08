@@ -47,7 +47,12 @@ class _FakeApiClient extends ApiClient {
   final Map<String, dynamic> orderJson;
 
   @override
-  Future<Response<dynamic>> get(String path, {Map<String, dynamic>? query}) async => Response(
+  Future<Response<dynamic>> get(
+    String path, {
+    Map<String, dynamic>? query,
+    int maxAttempts = 2,
+  }) async =>
+      Response(
         requestOptions: RequestOptions(path: path),
         data: path == '/orders/1' ? {'data': orderJson} : const <String, dynamic>{},
       );
