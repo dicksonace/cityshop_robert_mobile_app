@@ -736,9 +736,11 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<Map<String, dynamic>> loadQrReceiveCode({double? amount}) async {
+  Future<Map<String, dynamic>> loadQrReceiveCode({double? amount, String? reason}) async {
+    final cleanedReason = reason?.trim();
     final res = await _api.get('/wallet/qr/receive', query: {
       if (amount != null) 'amount': amount,
+      if (cleanedReason != null && cleanedReason.isNotEmpty) 'reason': cleanedReason,
     });
     final data = res.data is Map ? res.data['data'] : null;
     if (data is Map) {

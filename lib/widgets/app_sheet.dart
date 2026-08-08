@@ -26,8 +26,9 @@ class SheetShell extends StatelessWidget {
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     final navBar = MediaQuery.viewPaddingOf(context).bottom;
     // The keyboard already pushes the sheet up, so only reserve nav bar space
-    // when it is closed. 12 keeps the button off the very edge either way.
-    final actionBottom = 12 + (keyboard > 0 ? 0.0 : navBar);
+    // when it is closed. Extra bottom padding also lifts short sheets (like the
+    // statement period picker) so the last row is not clipped under the home bar.
+    final bottomPad = 16 + (keyboard > 0 ? 0.0 : navBar);
     final maxHeight = (MediaQuery.sizeOf(context).height - keyboard) * maxHeightFactor;
 
     return Padding(
@@ -51,7 +52,7 @@ class SheetShell extends StatelessWidget {
             ),
             Flexible(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                padding: EdgeInsets.fromLTRB(20, 14, 20, action == null ? bottomPad : 4),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -61,7 +62,7 @@ class SheetShell extends StatelessWidget {
             ),
             if (action != null)
               Padding(
-                padding: EdgeInsets.fromLTRB(20, 10, 20, actionBottom),
+                padding: EdgeInsets.fromLTRB(20, 10, 20, bottomPad),
                 child: action,
               ),
           ],

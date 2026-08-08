@@ -21,6 +21,7 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/payment_pin_sheet.dart';
+import '../../widgets/payment_success_screen.dart';
 import '../../widgets/wallet_transfer_pad.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
@@ -361,8 +362,14 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
   String? _avatar;
   String? _role;
   double? _amount;
+  String? _reason;
+  bool _editingAmount = false;
+  bool _applyingAmount = false;
   final _amountCtrl = TextEditingController();
+  final _reasonCtrl = TextEditingController();
   final _qrCardKey = GlobalKey();
+  final _amountFocus = FocusNode();
+  final _reasonFocus = FocusNode();
 
   @override
   void initState() {
@@ -373,6 +380,9 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
   @override
   void dispose() {
     _amountCtrl.dispose();
+    _reasonCtrl.dispose();
+    _amountFocus.dispose();
+    _reasonFocus.dispose();
     super.dispose();
   }
 
@@ -383,14 +393,14 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
     return 'Buyer';
   }
 
-  Future<void> _load({double? amount}) async {
+  Future<void> _load({double? amount, String? reason}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final store = context.read<AppStore>();
-      final data = await store.loadQrReceiveCode(amount: amount);
+      final data = await store.loadQrReceiveCode(amount: amount, reason: reason);
       if (!mounted) return;
       setState(() {
         _payload = data['payload'] as String?;
@@ -405,11 +415,14 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
           _role = store.user?.role;
         }
         _amount = (data['amount'] as num?)?.toDouble();
+        _reason = (data['reason'] as String?)?.trim();
+        if (_reason != null && _reason!.isEmpty) _reason = null;
         if (_amount != null) {
           _amountCtrl.text = _amount!.toStringAsFixed(2);
         } else {
           _amountCtrl.clear();
         }
+        _reasonCtrl.text = _reason ?? '';
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -429,8 +442,16 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
 
   Future<void> _setAmount() async {
     final raw = _amountCtrl.text.trim();
+    final reason = _reasonCtrl.text.trim();
     if (raw.isEmpty) {
-      await _load();
+      // Reason alone is allowed only with an amount — otherwise clear both.
+      setState(() => _applyingAmount = true);
+      try {
+        await _load();
+        if (mounted) setState(() => _editingAmount = false);
+      } finally {
+        if (mounted) setState(() => _applyingAmount = false);
+      }
       return;
     }
     final amount = double.tryParse(raw);
@@ -440,39 +461,48 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
       );
       return;
     }
-    await _load(amount: amount);
+    if (reason.length > 80) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Reason must be 80 characters or less')),
+      );
+      return;
+    }
+    setState(() => _applyingAmount = true);
+    try {
+      await _load(amount: amount, reason: reason.isEmpty ? null : reason);
+      if (mounted) {
+        setState(() => _editingAmount = false);
+        _amountFocus.unfocus();
+        _reasonFocus.unfocus();
+      }
+    } finally {
+      if (mounted) setState(() => _applyingAmount = false);
+    }
   }
 
-  Future<void> _promptAmount() async {
+  void _openAmountEditor() {
     _amountCtrl.text = _amount?.toStringAsFixed(2) ?? '';
-    final applied = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Specify amount'),
-        content: TextField(
-          controller: _amountCtrl,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            hintText: 'Leave empty for open amount',
-            prefixText: 'GH₵ ',
-          ),
-          onSubmitted: (_) => Navigator.pop(ctx, true),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              _amountCtrl.clear();
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('Clear'),
-          ),
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Apply')),
-        ],
-      ),
-    );
-    if (applied == true && mounted) await _setAmount();
+    _reasonCtrl.text = _reason ?? '';
+    setState(() => _editingAmount = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _amountFocus.requestFocus();
+    });
+  }
+
+  Future<void> _clearAmount() async {
+    _amountCtrl.clear();
+    _reasonCtrl.clear();
+    setState(() => _applyingAmount = true);
+    try {
+      await _load();
+      if (mounted) {
+        setState(() => _editingAmount = false);
+        _amountFocus.unfocus();
+        _reasonFocus.unfocus();
+      }
+    } finally {
+      if (mounted) setState(() => _applyingAmount = false);
+    }
   }
 
   String get _safeName => (_name ?? 'cityshop').replaceAll(RegExp(r'[^\w\-]+'), '_');
@@ -632,7 +662,7 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
         actions: [
           IconButton(
             tooltip: 'Refresh code',
-            onPressed: _loading ? null : () => _load(amount: _amount),
+            onPressed: _loading ? null : () => _load(amount: _amount, reason: _reason),
             icon: const Icon(Icons.refresh),
           ),
         ],
@@ -654,7 +684,12 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    12,
+                    20,
+                    28 + MediaQuery.viewInsetsOf(context).bottom,
+                  ),
                   children: [
                     RepaintBoundary(
                       key: _qrCardKey,
@@ -708,6 +743,17 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                                   color: AppColors.accent,
                                 ),
                               ),
+                              if ((_reason ?? '').isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  _reason!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
                             ],
                             const SizedBox(height: 16),
                             if (_payload != null)
@@ -774,11 +820,135 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    TextButton.icon(
-                      onPressed: _saving ? null : _promptAmount,
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: Text(_amount == null ? 'Specify an amount' : 'Edit amount'),
+                    const SizedBox(height: 14),
+                    // Solid amount block — no floating dialog over the QR.
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: _editingAmount
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const Text(
+                                  'Request amount',
+                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Leave amount empty for an open QR. Reason is optional.',
+                                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _amountCtrl,
+                                  focusNode: _amountFocus,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  textInputAction: TextInputAction.next,
+                                  onSubmitted: (_) => _reasonFocus.requestFocus(),
+                                  decoration: const InputDecoration(
+                                    prefixText: 'GH₵ ',
+                                    hintText: '0.00',
+                                    labelText: 'Amount',
+                                    filled: true,
+                                    fillColor: Color(0xFFF8FAFC),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: _reasonCtrl,
+                                  focusNode: _reasonFocus,
+                                  maxLength: 80,
+                                  textInputAction: TextInputAction.done,
+                                  onSubmitted: (_) => _setAmount(),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Reason for request',
+                                    hintText: 'e.g. Lunch money, market stall fee',
+                                    filled: true,
+                                    fillColor: Color(0xFFF8FAFC),
+                                    counterText: '',
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    TextButton(
+                                      onPressed: _applyingAmount ? null : () {
+                                        setState(() => _editingAmount = false);
+                                        _amountFocus.unfocus();
+                                        _reasonFocus.unfocus();
+                                      },
+                                      child: const Text('Cancel'),
+                                    ),
+                                    if (_amount != null || (_reason ?? '').isNotEmpty)
+                                      TextButton(
+                                        onPressed: _applyingAmount ? null : _clearAmount,
+                                        child: const Text('Clear'),
+                                      ),
+                                    const Spacer(),
+                                    SizedBox(
+                                      height: 40,
+                                      child: ElevatedButton(
+                                        onPressed: _applyingAmount ? null : _setAmount,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.accent,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        child: Text(_applyingAmount ? 'Updating…' : 'Update QR'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            )
+                          : InkWell(
+                              onTap: _saving ? null : _openAmountEditor,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.ringOrange,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(Icons.payments_outlined, color: AppColors.accent, size: 20),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _amount == null ? 'Request a fixed amount' : 'Requested amount',
+                                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _amount == null
+                                              ? 'Optional — set amount and reason'
+                                              : (_reason == null || _reason!.isEmpty)
+                                                  ? _money.format(_amount)
+                                                  : '${_money.format(_amount)} · $_reason',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: _amount == null ? AppColors.textSecondary : AppColors.accent,
+                                            fontWeight: _amount == null ? FontWeight.w400 : FontWeight.w700,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(Icons.chevron_right, color: AppColors.textMuted),
+                                ],
+                              ),
+                            ),
                     ),
                   ],
                 ),
@@ -913,6 +1083,7 @@ class _QrContactScreenState extends State<QrContactScreen> {
     final avatar = ApiConfig.resolveMediaUrl(_user['avatar'] as String?);
     final letter = _name.trim().isNotEmpty ? _name.trim()[0].toUpperCase() : 'C';
     final fixed = (widget.resolved['amount'] as num?)?.toDouble();
+    final reason = (widget.resolved['reason'] as String? ?? '').trim();
     final seller = _roleLabel == 'Seller';
 
     return Scaffold(
@@ -978,7 +1149,7 @@ class _QrContactScreenState extends State<QrContactScreen> {
                     style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
                   ),
                 ],
-                if (fixed != null && fixed > 0) ...[
+                if ((fixed != null && fixed > 0) || reason.isNotEmpty) ...[
                   const SizedBox(height: 18),
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -988,19 +1159,33 @@ class _QrContactScreenState extends State<QrContactScreen> {
                     ),
                     child: Column(
                       children: [
-                        const Text(
-                          'They are asking for',
-                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(height: 4),
                         Text(
-                          _money.format(fixed),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 22,
-                            color: AppColors.accent,
-                          ),
+                          fixed != null && fixed > 0 ? 'They are asking for' : 'Reason for request',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                         ),
+                        if (fixed != null && fixed > 0) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _money.format(fixed),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 22,
+                              color: AppColors.accent,
+                            ),
+                          ),
+                        ],
+                        if (reason.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            reason,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1089,12 +1274,14 @@ class QrPayScreen extends StatelessWidget {
     final avatar = _user['avatar'] as String?;
     final fixed = (resolved['amount'] as num?)?.toDouble();
     final lockedAmount = fixed != null && fixed > 0 ? fixed : null;
+    final reason = (resolved['reason'] as String? ?? '').trim();
 
     return WalletTransferPad(
       recipientName: name,
       recipientMobile: mobile,
       recipientAvatar: avatar,
       lockedAmount: lockedAmount,
+      initialNote: reason.isEmpty ? null : reason,
       actionLabel: 'Transfer',
       onBack: () => context.pop(),
       onSubmit: (amount, note) async {
@@ -1122,32 +1309,17 @@ class QrPayScreen extends StatelessWidget {
           );
           if (!context.mounted) return;
           final ref = result['reference'] as String? ?? '';
-          final conversationId = (result['conversation_id'] as num?)?.toInt();
-          final goChat = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Payment sent'),
-              content: Text(
-                conversationId != null
-                    ? 'You paid ${_money.format(amount)}.\nIt also appears in your chat.\nRef: $ref'
-                    : 'You paid ${_money.format(amount)}.\nRef: $ref',
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Done')),
-                if (conversationId != null)
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('Open chat'),
-                  ),
-              ],
-            ),
+          // Full-page success only — no "Open chat" shortcut (that button was
+          // marked to remove). Transfer still lands in chat on the backend.
+          await showPaymentSuccess(
+            context,
+            amount: amount,
+            recipientName: name,
+            reference: ref,
+            note: note,
           );
           if (!context.mounted) return;
-          if (goChat == true && conversationId != null) {
-            context.go('/messages/$conversationId');
-          } else {
-            context.go('/shop?tab=wallet');
-          }
+          context.go('/shop?tab=wallet');
         } on ApiException catch (e) {
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(

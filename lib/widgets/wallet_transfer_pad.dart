@@ -18,6 +18,7 @@ class WalletTransferPad extends StatefulWidget {
     this.recipientMobile,
     this.recipientAvatar,
     this.lockedAmount,
+    this.initialNote,
     this.actionLabel = 'Transfer',
     this.onBack,
   });
@@ -27,6 +28,8 @@ class WalletTransferPad extends StatefulWidget {
   final String? recipientAvatar;
   /// When set (e.g. fixed-amount QR), keypad edits are disabled.
   final double? lockedAmount;
+  /// Prefills the note (e.g. reason baked into a request QR).
+  final String? initialNote;
   final String actionLabel;
   final VoidCallback? onBack;
   final Future<void> Function(double amount, String? note) onSubmit;
@@ -46,6 +49,11 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
     super.initState();
     final locked = widget.lockedAmount;
     _amount = locked != null && locked > 0 ? locked.toStringAsFixed(2) : '';
+    final seedNote = (widget.initialNote ?? '').trim();
+    if (seedNote.isNotEmpty) {
+      _note.text = seedNote;
+      showNote = true;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AppStore>().loadWallet();
     });

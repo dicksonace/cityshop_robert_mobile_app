@@ -10,6 +10,7 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/payment_pin_sheet.dart';
+import '../../widgets/payment_success_screen.dart';
 import '../../widgets/wallet_transfer_pad.dart';
 
 final _money = NumberFormat.currency(locale: 'en_GH', symbol: 'GH₵', decimalDigits: 2);
@@ -267,6 +268,15 @@ class ChatTransferScreen extends StatelessWidget {
             amount: amount,
             note: note,
             paymentPin: pin,
+          );
+          if (!context.mounted) return;
+          final ref = (msg.transferReference ?? '').trim();
+          await showPaymentSuccess(
+            context,
+            amount: amount,
+            recipientName: recipientName,
+            reference: ref.isEmpty ? null : ref,
+            note: note,
           );
           if (!context.mounted) return;
           Navigator.pop(context, msg);
