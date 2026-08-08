@@ -166,11 +166,12 @@ pw.Document buildWalletStatementDocument({
           pw.Table(
             border: pw.TableBorder.all(color: PdfColors.grey300),
             columnWidths: {
-              0: const pw.FlexColumnWidth(1.5),
-              1: const pw.FlexColumnWidth(1.3),
-              2: const pw.FlexColumnWidth(2.6),
-              3: const pw.FlexColumnWidth(1.4),
+              0: const pw.FlexColumnWidth(1.4),
+              1: const pw.FlexColumnWidth(1.2),
+              2: const pw.FlexColumnWidth(2.2),
+              3: const pw.FlexColumnWidth(1.3),
               4: const pw.FlexColumnWidth(1.3),
+              5: const pw.FlexColumnWidth(1.3),
             },
             children: [
               pw.TableRow(
@@ -180,7 +181,8 @@ pw.Document buildWalletStatementDocument({
                   _cell('Type', bold: true),
                   _cell('Details', bold: true),
                   _cell('Amount', bold: true, align: pw.TextAlign.right),
-                  _cell('Balance', bold: true, align: pw.TextAlign.right),
+                  _cell('Before balance', bold: true, align: pw.TextAlign.right),
+                  _cell('After balance', bold: true, align: pw.TextAlign.right),
                 ],
               ),
               for (final tx in transactions)
@@ -191,6 +193,10 @@ pw.Document buildWalletStatementDocument({
                     _cell(_details(tx)),
                     _cell(
                       '${tx.amount >= 0 ? '+' : '-'}${_money.format(tx.amount.abs())}',
+                      align: pw.TextAlign.right,
+                    ),
+                    _cell(
+                      tx.balanceBefore == null ? '-' : _money.format(tx.balanceBefore!),
                       align: pw.TextAlign.right,
                     ),
                     _cell(

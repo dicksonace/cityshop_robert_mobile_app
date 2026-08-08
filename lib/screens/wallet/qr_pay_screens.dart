@@ -923,25 +923,41 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          _amount == null ? 'Request a fixed amount' : 'Requested amount',
-                                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          _amount == null
-                                              ? 'Optional — set amount and reason'
-                                              : (_reason == null || _reason!.isEmpty)
-                                                  ? _money.format(_amount)
-                                                  : '${_money.format(_amount)} · $_reason',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: _amount == null ? AppColors.textSecondary : AppColors.accent,
-                                            fontWeight: _amount == null ? FontWeight.w400 : FontWeight.w700,
-                                            fontSize: 13,
+                                        if (_amount == null)
+                                          const Text(
+                                            'Request a fixed amount',
+                                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                          )
+                                        else ...[
+                                          Text(
+                                            _money.format(_amount),
+                                            style: const TextStyle(
+                                              color: AppColors.accent,
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 15,
+                                            ),
                                           ),
-                                        ),
+                                          if ((_reason ?? '').isNotEmpty) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              _reason!,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: AppColors.textSecondary,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                        if (_amount == null) ...[
+                                          const SizedBox(height: 2),
+                                          const Text(
+                                            'Optional — set amount and reason',
+                                            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
@@ -1159,12 +1175,19 @@ class _QrContactScreenState extends State<QrContactScreen> {
                     ),
                     child: Column(
                       children: [
-                        Text(
-                          fixed != null && fixed > 0 ? 'They are asking for' : 'Reason for request',
-                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                        ),
-                        if (fixed != null && fixed > 0) ...[
-                          const SizedBox(height: 4),
+                        if (reason.isNotEmpty) ...[
+                          Text(
+                            reason,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          if (fixed != null && fixed > 0) const SizedBox(height: 6),
+                        ],
+                        if (fixed != null && fixed > 0)
                           Text(
                             _money.format(fixed),
                             style: const TextStyle(
@@ -1173,19 +1196,6 @@ class _QrContactScreenState extends State<QrContactScreen> {
                               color: AppColors.accent,
                             ),
                           ),
-                        ],
-                        if (reason.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            reason,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),

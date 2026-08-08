@@ -5,8 +5,8 @@ import '../theme/app_theme.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
-/// Full-screen success after a wallet transfer or QR payment — same layout as
-/// the familiar payment-success screen, painted in CityShop orange.
+/// Full-screen success after a wallet transfer or QR payment — CityShop orange
+/// header with a solid white detail card so Amount / Balance stay readable.
 class PaymentSuccessScreen extends StatelessWidget {
   const PaymentSuccessScreen({
     super.key,
@@ -42,29 +42,36 @@ class PaymentSuccessScreen extends StatelessWidget {
               AppColors.ringOrange,
               Colors.white,
             ],
-            stops: [0.0, 0.18, 0.34, 0.55, 0.78],
+            stops: [0.0, 0.16, 0.32, 0.5, 0.72],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
                 child: Row(
                   children: [
-                    const SizedBox(width: 48),
+                    IconButton(
+                      onPressed: () => _finish(context),
+                      tooltip: 'Back',
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.all(8),
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 16),
+                    ),
                     const Expanded(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.check_circle, color: Colors.white, size: 22),
-                          SizedBox(width: 8),
+                          Icon(Icons.check_circle, color: Colors.white, size: 20),
+                          SizedBox(width: 6),
                           Text(
                             'Payment Successful',
                             style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
-                              fontSize: 17,
+                              fontSize: 16,
                             ),
                           ),
                         ],
@@ -72,15 +79,21 @@ class PaymentSuccessScreen extends StatelessWidget {
                     ),
                     TextButton(
                       onPressed: () => _finish(context),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        minimumSize: const Size(48, 36),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                       child: const Text(
                         'Home',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 22),
               Text(
                 _money.format(amount),
                 style: const TextStyle(
@@ -90,17 +103,32 @@ class PaymentSuccessScreen extends StatelessWidget {
                   letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 22),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 28),
-                child: Column(
-                  children: [
-                    _row('To', recipientName),
-                    _row('Amount', _money.format(amount)),
-                    _row('Payment method', 'Balance'),
-                    if (memo.isNotEmpty) _row('Note', memo),
-                    if (ref.isNotEmpty) _row('Reference', ref),
-                  ],
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      _row('To', recipientName),
+                      _row('Amount', _money.format(amount)),
+                      _row('Payment method', 'Balance'),
+                      if (memo.isNotEmpty) _row('Note', memo),
+                      if (ref.isNotEmpty) _row('Reference', ref, last: true),
+                    ],
+                  ),
                 ),
               ),
               const Spacer(),
@@ -139,19 +167,19 @@ class PaymentSuccessScreen extends StatelessWidget {
     Navigator.of(context).pop();
   }
 
-  Widget _row(String label, String value) {
+  Widget _row(String label, String value, {bool last = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.only(bottom: last ? 0 : 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 118,
             child: Text(
               label,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.88),
-                fontSize: 14,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
               ),
             ),
           ),
@@ -160,8 +188,8 @@ class PaymentSuccessScreen extends StatelessWidget {
               value,
               textAlign: TextAlign.right,
               style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
                 fontSize: 14,
               ),
             ),
@@ -181,14 +209,17 @@ Future<void> showPaymentSuccess(
   String? note,
 }) {
   return Navigator.of(context).push<void>(
-    MaterialPageRoute(
-      fullscreenDialog: true,
-      builder: (_) => PaymentSuccessScreen(
+    PageRouteBuilder(
+      opaque: true,
+      pageBuilder: (_, __, ___) => PaymentSuccessScreen(
         amount: amount,
         recipientName: recipientName,
         reference: reference,
         note: note,
       ),
+      transitionsBuilder: (_, animation, __, child) {
+        return FadeTransition(opacity: animation, child: child);
+      },
     ),
   );
 }
