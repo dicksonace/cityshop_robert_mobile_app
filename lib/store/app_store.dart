@@ -389,14 +389,14 @@ class AppStore extends ChangeNotifier {
 
   Future<void> register({
     required String name,
-    required String email,
+    String? email,
     required String mobile,
     required String password,
     required String passwordConfirmation,
   }) async {
     final res = await _api.post('/auth/register', data: {
       'name': name,
-      'email': email,
+      if (email != null && email.isNotEmpty) 'email': email,
       'mobile': mobile,
       'password': password,
       'password_confirmation': passwordConfirmation,

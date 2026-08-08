@@ -40,7 +40,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       await context.read<AppStore>().register(
             name: _name.text.trim(),
-            email: _email.text.trim(),
+            email: _email.text.trim().isEmpty ? null : _email.text.trim(),
             mobile: _mobile.text.trim(),
             password: _password.text,
             passwordConfirmation: _confirm.text,
@@ -102,8 +102,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 _field('Full Name', _name, Icons.badge_outlined),
                 _field('Mobile Number', _mobile, Icons.phone_outlined,
                     hint: '0241234567', keyboard: TextInputType.phone),
-                _field('Email Address', _email, Icons.email_outlined,
-                    keyboard: TextInputType.emailAddress),
+                _field('Email Address (Optional)', _email, Icons.email_outlined,
+                    hint: 'Optional', keyboard: TextInputType.emailAddress),
                 _field(
                   'Password',
                   _password,
