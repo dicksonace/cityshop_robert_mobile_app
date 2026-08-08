@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../theme/app_theme.dart';
+
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
-/// Full-screen success after a wallet transfer or QR payment — matches the
-/// familiar "Payment Successful" layout with a large amount and a single Done.
+/// Full-screen success after a wallet transfer or QR payment — same layout as
+/// the familiar payment-success screen, painted in CityShop orange.
 class PaymentSuccessScreen extends StatelessWidget {
   const PaymentSuccessScreen({
     super.key,
@@ -34,12 +36,13 @@ class PaymentSuccessScreen extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF1677FF),
-              Color(0xFF4B9BFF),
-              Color(0xFFE8F3FF),
+              AppColors.primaryDark,
+              AppColors.primary,
+              AppColors.accent,
+              AppColors.ringOrange,
               Colors.white,
             ],
-            stops: [0.0, 0.22, 0.45, 0.72],
+            stops: [0.0, 0.18, 0.34, 0.55, 0.78],
           ),
         ),
         child: SafeArea(
@@ -106,11 +109,12 @@ class PaymentSuccessScreen extends StatelessWidget {
                 child: SizedBox(
                   width: double.infinity,
                   height: 48,
-                  child: OutlinedButton(
+                  child: ElevatedButton(
                     onPressed: () => _finish(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF1677FF),
-                      side: const BorderSide(color: Color(0xFF1677FF), width: 1.4),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
                       shape: const StadiumBorder(),
                     ),
                     child: const Text(
@@ -146,7 +150,7 @@ class PaymentSuccessScreen extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.92),
+                color: Colors.white.withValues(alpha: 0.88),
                 fontSize: 14,
               ),
             ),
