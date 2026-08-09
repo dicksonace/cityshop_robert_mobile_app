@@ -369,15 +369,35 @@ class ChatCallService extends ChangeNotifier {
     final sdp = _asStringKeyedMap(raw);
     if (sdp == null) return null;
     var description = sdp['sdp']?.toString() ?? '';
+    // Nested { sdp: { sdp: '...', type: 'offer' } } from some clients.
+    if (description.isEmpty || description == '[object Object]') {
+      final nested = _asStringKeyedMap(sdp['sdp']);
+      if (nested != null) {
+        description = nested['sdp']?.toString() ?? '';
+        if ((sdp['type']?.toString() ?? '').trim().isEmpty) {
+          sdp['type'] = nested['type'];
+        }
+      }
+    }
     var type = (sdp['type']?.toString() ?? '').trim().toLowerCase();
     // Some peers double-escape newlines when the offer rides JSON → MySQL → JSON.
+    if (description.contains(r'\r\n') && !description.contains('\r') && !description.contains('\n')) {
+      description = description.replaceAll(r'\r\n', '\n');
+    }
     if (description.contains(r'\n') && !description.contains('\n')) {
       description = description.replaceAll(r'\n', '\n');
     }
-    description = description.replaceAll('\r\n', '\n').trim();
+    description = description
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
     if (description.isEmpty || type.isEmpty) return null;
     if (type != 'offer' && type != 'answer' && type != 'pranswer') return null;
     if (!description.contains('v=0')) return null;
+    if (!RegExp(r'^m=(audio|video)\s', multiLine: true).hasMatch(description)) {
+      return null;
+    }
     return RTCSessionDescription(description, type);
   }
 
@@ -386,60 +406,73 @@ class ChatCallService extends ChangeNotifier {
     return RegExp(r'^m=video\s', multiLine: true).hasMatch(sdp);
   }
 
-  /// After setRemoteDescription(offer), reuse the offer's transceivers instead of
-  /// always addTrack (which creates extra m-lines and makes createAnswer fail —
-  /// the source of "Call signal was invalid").
+  List<String> _mLineKinds(String? sdp) {
+    if (sdp == null || sdp.isEmpty) return const [];
+    final kinds = <String>[];
+    for (final line in sdp.split('\n')) {
+      if (line.startsWith('m=audio')) kinds.add('audio');
+      if (line.startsWith('m=video')) kinds.add('video');
+    }
+    return kinds;
+  }
+
+  String? _transceiverMediaKind(RTCRtpTransceiver t, String? fallback) {
+    final receiverKind = t.receiver.track?.kind;
+    if (receiverKind == 'audio' || receiverKind == 'video') return receiverKind;
+    final mid = t.mid.toLowerCase();
+    if (mid == 'audio' || mid == '0') return 'audio';
+    if (mid == 'video' || mid == '1') return 'video';
+    return fallback;
+  }
+
+  /// After setRemoteDescription(offer), reuse the offer's transceivers.
+  /// Never addTrack here — that invents extra m-lines and createAnswer fails
+  /// with the "Call signal was invalid" toast.
   Future<void> _attachLocalTracksForAnswer(
     RTCPeerConnection pc,
     MediaStream stream,
+    String? offerSdp,
   ) async {
-    final localTracks = _orderedTracks(stream);
     List<RTCRtpTransceiver> transceivers = const [];
-    try {
-      transceivers = await pc.getTransceivers();
-    } catch (_) {}
-
-    final used = <RTCRtpTransceiver>{};
-    for (final track in localTracks) {
-      RTCRtpTransceiver? slot;
-      for (final t in transceivers) {
-        if (used.contains(t)) continue;
-        if (t.sender.track != null) continue;
-        final receiverKind = t.receiver.track?.kind;
-        if (receiverKind == track.kind) {
-          slot = t;
-          break;
-        }
+    for (var attempt = 0; attempt < 6; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(Duration(milliseconds: 40 * attempt));
       }
-      if (slot == null) {
-        for (final t in transceivers) {
-          if (used.contains(t) || t.sender.track != null) continue;
-          final mid = t.mid.toLowerCase();
-          if (track.kind == 'audio' && (mid == '0' || mid == 'audio')) {
-            slot = t;
-            break;
-          }
-          if (track.kind == 'video' && (mid == '1' || mid == 'video')) {
-            slot = t;
-            break;
-          }
-        }
+      try {
+        transceivers = await pc.getTransceivers();
+      } catch (_) {
+        transceivers = const [];
       }
+      if (transceivers.isNotEmpty) break;
+    }
 
-      if (slot != null) {
-        used.add(slot);
-        try {
-          await slot.sender.replaceTrack(track);
-        } catch (_) {
-          await pc.addTrack(track, stream);
-          continue;
-        }
-        try {
-          await slot.setDirection(TransceiverDirection.SendRecv);
-        } catch (_) {}
+    final audios = stream.getAudioTracks();
+    final videos = stream.getVideoTracks();
+    final mKinds = _mLineKinds(offerSdp);
+    var audioIdx = 0;
+    var videoIdx = 0;
+
+    for (var i = 0; i < transceivers.length; i++) {
+      final t = transceivers[i];
+      final fallback = i < mKinds.length ? mKinds[i] : null;
+      final kind = _transceiverMediaKind(t, fallback);
+      final MediaStreamTrack? track;
+      if (kind == 'audio' && audioIdx < audios.length) {
+        track = audios[audioIdx++];
+      } else if (kind == 'video' && videoIdx < videos.length) {
+        track = videos[videoIdx++];
       } else {
-        await pc.addTrack(track, stream);
+        continue;
       }
+      try {
+        await t.sender.replaceTrack(track);
+      } catch (e) {
+        debugPrint('CALL_ACCEPT replaceTrack($kind) failed: $e');
+        continue;
+      }
+      try {
+        await t.setDirection(TransceiverDirection.SendRecv);
+      } catch (_) {}
     }
   }
 
@@ -503,8 +536,11 @@ class ChatCallService extends ChangeNotifier {
         'call_offer',
         body: callKind == ChatCallKind.video ? 'Video call' : 'Voice call',
         metadata: {
-          // Always send lowercase type — some Android WebRTC builds reject "Offer".
-          'sdp': {'type': 'offer', 'sdp': offer.sdp},
+          // Plain strings only — never send a platform RTCSessionDescription object.
+          'sdp': {
+            'type': 'offer',
+            'sdp': offer.sdp ?? '',
+          },
           'call_kind': callKind == ChatCallKind.video ? 'video' : 'voice',
         },
       );
@@ -621,10 +657,20 @@ class ChatCallService extends ChangeNotifier {
         localRenderer?.srcObject = _localStream;
       }
 
-      await _attachLocalTracksForAnswer(_pc!, _localStream!);
+      await _attachLocalTracksForAnswer(_pc!, _localStream!, offer.sdp);
 
-      final answer = await _pc!.createAnswer();
-      await _pc!.setLocalDescription(answer);
+      RTCSessionDescription answer;
+      try {
+        answer = await _pc!.createAnswer({
+          'offerToReceiveAudio': 1,
+          'offerToReceiveVideo': offerNeedsVideo ? 1 : 0,
+        });
+        await _pc!.setLocalDescription(answer);
+      } catch (e) {
+        debugPrint('CALL_ACCEPT createAnswer failed: $e');
+        rethrow;
+      }
+
       // ICE after local description — applying early can break answer setup.
       await _flushPendingIce();
       if (!_alive(session)) {
@@ -633,7 +679,10 @@ class ChatCallService extends ChangeNotifier {
       await _sendSignal(
         'call_answer',
         metadata: {
-          'sdp': {'type': 'answer', 'sdp': answer.sdp},
+          'sdp': {
+            'type': 'answer',
+            'sdp': answer.sdp ?? '',
+          },
           'call_kind': mediaKind == ChatCallKind.video ? 'video' : 'voice',
         },
       );
@@ -671,8 +720,17 @@ class ChatCallService extends ChangeNotifier {
     if (text.contains('getusermedia') || text.contains('notreadable') || text.contains('track')) {
       return 'Could not access microphone/camera. Close other apps using them and try again.';
     }
-    if (text.contains('sdp') || text.contains('description') || text.contains('setremote')) {
+    if (text.contains('timeout')) {
+      return 'Joining timed out. Ask them to call again.';
+    }
+    if (text.contains('setremotedescription') ||
+        text.contains('invalid session description') ||
+        text.contains('parse') ||
+        text.contains('sdp')) {
       return 'Call signal was invalid. Ask them to call again.';
+    }
+    if (text.contains('createanswer') || text.contains('setlocaldescription')) {
+      return 'Could not answer the call. Ask them to call again.';
     }
     return 'Could not join call. Ask them to call again.';
   }
