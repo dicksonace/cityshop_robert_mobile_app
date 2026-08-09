@@ -959,6 +959,8 @@ class _ChatScreenState extends State<ChatScreen> {
           peerId: c.otherId,
           storeSlug: c.storeSlug,
           isSeller: c.isSeller || (c.storeSlug ?? '').trim().isNotEmpty,
+          canComplain: c.canComplain || c.isSeller || (c.storeSlug ?? '').trim().isNotEmpty,
+          sellerId: c.sellerId ?? (c.isSeller ? c.otherId : null),
           productId: c.productId,
         ),
       ),

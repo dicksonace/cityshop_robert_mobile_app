@@ -27,6 +27,8 @@ class ChatSettingsScreen extends StatelessWidget {
     this.peerId,
     this.storeSlug,
     this.isSeller = false,
+    this.canComplain = false,
+    this.sellerId,
     this.productId,
   });
 
@@ -36,10 +38,16 @@ class ChatSettingsScreen extends StatelessWidget {
   final int? peerId;
   final String? storeSlug;
   final bool isSeller;
+  final bool canComplain;
+  final int? sellerId;
   final int? productId;
+
+  int? get _complaintSellerId => sellerId ?? (canComplain || isSeller ? peerId : null);
 
   @override
   Widget build(BuildContext context) {
+    final showComplaint = canComplain && _complaintSellerId != null;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
@@ -97,23 +105,13 @@ class ChatSettingsScreen extends StatelessWidget {
                   );
                 },
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _SettingsGroup(
-            children: [
               _SettingsTile(
                 icon: Icons.delete_outline_rounded,
                 label: 'Delete',
                 destructive: true,
                 onTap: () => _confirmDelete(context),
               ),
-            ],
-          ),
-          if (isSeller && peerId != null) ...[
-            const SizedBox(height: 12),
-            _SettingsGroup(
-              children: [
+              if (showComplaint)
                 _SettingsTile(
                   icon: Icons.flag_outlined,
                   label: 'Make a complaint',
@@ -122,7 +120,7 @@ class ChatSettingsScreen extends StatelessWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => ChatComplaintScreen(
-                          sellerId: peerId!,
+                          sellerId: _complaintSellerId!,
                           sellerName: peerName,
                           productId: productId,
                         ),
@@ -130,9 +128,8 @@ class ChatSettingsScreen extends StatelessWidget {
                     );
                   },
                 ),
-              ],
-            ),
-          ],
+            ],
+          ),
           const SizedBox(height: 24),
         ],
       ),

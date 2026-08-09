@@ -937,6 +937,8 @@ class ConversationModel {
     this.storeSlug,
     this.otherMobile,
     this.isSeller = false,
+    this.canComplain = false,
+    this.sellerId,
     this.productId,
     this.productName,
     this.productSlug,
@@ -959,6 +961,9 @@ class ConversationModel {
   final String? storeSlug;
   final String? otherMobile;
   final bool isSeller;
+  /// True when the current user is the buyer in this chat (can report the seller).
+  final bool canComplain;
+  final int? sellerId;
   final int? productId;
   final String? productName;
   final String? productSlug;
@@ -1044,6 +1049,15 @@ class ConversationModel {
               other['store_slug'] != null ||
               (other['seller_profile'] is Map &&
                   ((other['seller_profile'] as Map)['slug'] as String?)?.trim().isNotEmpty == true)),
+      canComplain: json['can_complain'] == true ||
+          (json['buyer_id'] != null &&
+              json['seller_id'] != null &&
+              other is Map &&
+              other['id'] == json['seller_id']),
+      sellerId: (json['seller_id'] as num?)?.toInt() ??
+          (other is Map && (other['is_seller'] == true || other['store_slug'] != null)
+              ? (other['id'] as num?)?.toInt()
+              : null),
       productId: product is Map ? product['id'] as int? : null,
       productName: product is Map ? product['name'] as String? : null,
       productSlug: product is Map ? (product['slug'] as String?)?.trim() : null,
@@ -1082,6 +1096,8 @@ class ConversationModel {
       storeSlug: storeSlug,
       otherMobile: otherMobile,
       isSeller: isSeller,
+      canComplain: canComplain,
+      sellerId: sellerId,
       productId: productId ?? this.productId,
       productName: productName ?? this.productName,
       productSlug: productSlug ?? this.productSlug,
