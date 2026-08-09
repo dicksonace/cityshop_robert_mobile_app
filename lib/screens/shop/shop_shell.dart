@@ -1287,6 +1287,7 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
       (Icons.qr_code_2_rounded, 'My namecard', 'Your QR to get paid & add friends', '/qr/receive'),
       (Icons.location_on_outlined, 'Addresses', 'Saved delivery addresses', '/addresses'),
       (Icons.favorite_border, 'Wishlist', 'Saved products', '/wishlist'),
+      (Icons.storefront_outlined, 'Following', 'Sellers you follow', '/following'),
       (Icons.pin_outlined, 'Payment PIN', '4-digit code for wallet & transfers', '/profile/payment-pin'),
       (Icons.lock_outline, 'Change password', 'Account security', '/profile/password'),
       (Icons.shopping_cart_outlined, 'My cart', 'Review items before checkout', '/cart'),

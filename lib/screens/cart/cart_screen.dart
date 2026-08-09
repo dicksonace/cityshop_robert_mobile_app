@@ -158,7 +158,7 @@ class _CartScreenState extends State<CartScreen> {
                                                 onPressed: () async {
                                                   await store.removeCartItem(item.id);
                                                 },
-                                                icon: const Icon(Icons.delete_outline, color: AppColors.danger),
+                                                icon: const Icon(Icons.close, color: AppColors.danger),
                                               ),
                                             ],
                                           ),

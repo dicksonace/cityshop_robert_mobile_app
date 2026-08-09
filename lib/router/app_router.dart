@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../screens/account/account_screens.dart';
 import '../screens/account/manual_deposit_screen.dart';
+import '../screens/account/manual_deposit_status_screen.dart';
 import '../screens/account/notifications_screen.dart';
 import '../screens/account/payment_pin_screen.dart';
 import '../screens/account/wallet_orders_screens.dart';
@@ -16,6 +17,7 @@ import '../screens/cart/cart_screen.dart';
 import '../screens/cart/checkout_screen.dart';
 import '../screens/cart/direct_pay_draft_screen.dart';
 import '../screens/cart/direct_payment_screen.dart';
+import '../screens/chat/create_group_screen.dart';
 import '../screens/chat/friend_chat_screens.dart';
 import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
@@ -74,8 +76,15 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
       GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
       GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
+      GoRoute(path: '/following', builder: (_, __) => const FollowingScreen()),
       GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
       GoRoute(path: '/wallet/manual-deposit', builder: (_, __) => const ManualDepositScreen()),
+      GoRoute(
+        path: '/wallet/manual-deposit/:id',
+        builder: (_, state) => ManualDepositStatusScreen(
+          depositId: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
+        ),
+      ),
       GoRoute(path: '/wallet/withdraw', builder: (_, __) => const WithdrawScreen()),
       GoRoute(path: '/qr', builder: (_, __) => const QrPayHubScreen()),
       GoRoute(path: '/qr/scan', builder: (_, __) => const QrScanScreen()),
@@ -171,6 +180,10 @@ GoRouter createRouter(AppStore store) {
       GoRoute(
         path: '/messages/new',
         builder: (_, __) => const NewChatScreen(),
+      ),
+      GoRoute(
+        path: '/messages/new-group',
+        builder: (_, __) => const CreateGroupScreen(),
       ),
       GoRoute(
         path: '/messages/:id',

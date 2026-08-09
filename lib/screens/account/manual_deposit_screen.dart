@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -177,7 +178,7 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
     setState(() => submitting = true);
     try {
       final store = context.read<AppStore>();
-      await store.submitWalletTopUp(
+      final created = await store.submitWalletTopUp(
         amount: amount,
         network: network,
         proofPath: file.path,
@@ -185,6 +186,11 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
         userNote: noteCtrl.text.trim(),
       );
       if (!mounted) return;
+      final id = (created['id'] as num?)?.toInt();
+      if (id != null) {
+        context.push('/wallet/manual-deposit/$id');
+        return;
+      }
       _toast('Top-up submitted — we credit your wallet once an admin verifies it.');
       amountCtrl.clear();
       refCtrl.clear();
@@ -197,6 +203,31 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
       if (mounted) _toast('$e');
     } finally {
       if (mounted) setState(() => submitting = false);
+    }
+  }
+
+  Future<void> _cancelRequest(Map request) async {
+    final id = (request['id'] as num?)?.toInt();
+    if (id == null || '${request['status']}' != 'pending') return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel request?'),
+        content: const Text('This pending deposit will be cancelled.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Cancel request')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await context.read<AppStore>().cancelManualTopUp(id);
+      if (!mounted) return;
+      _toast('Deposit request cancelled.');
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) _toast(e.message);
     }
   }
 
@@ -402,10 +433,17 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
           ),
           if (_requests.isNotEmpty) ...[
             const SizedBox(height: 20),
-            const Text('Your recent requests', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+            const Text('Recent Deposit', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
             const SizedBox(height: 8),
             for (final request in _requests) ...[
-              _RequestRow(request: request),
+              _RequestRow(
+                request: request,
+                onView: () {
+                  final id = (request['id'] as num?)?.toInt();
+                  if (id != null) context.push('/wallet/manual-deposit/$id');
+                },
+                onCancel: () => _cancelRequest(request),
+              ),
               const SizedBox(height: 8),
             ],
           ],
@@ -569,14 +607,21 @@ class _ProofPicker extends StatelessWidget {
 }
 
 class _RequestRow extends StatelessWidget {
-  const _RequestRow({required this.request});
+  const _RequestRow({
+    required this.request,
+    required this.onView,
+    required this.onCancel,
+  });
 
   final Map request;
+  final VoidCallback onView;
+  final VoidCallback onCancel;
 
   static const _statusColors = <String, (Color, Color)>{
     'pending': (Color(0xFFFEF3C7), Color(0xFF92400E)),
     'approved': (Color(0xFFD1FAE5), Color(0xFF065F46)),
     'rejected': (Color(0xFFFEE2E2), Color(0xFF991B1B)),
+    'cancelled': (Color(0xFFF3F4F6), Color(0xFF4B5563)),
   };
 
   String get _when {
@@ -596,6 +641,7 @@ class _RequestRow extends StatelessWidget {
     final reference = '${request['payment_reference'] ?? ''}';
     final notes = '${request['admin_notes'] ?? ''}';
     final amount = (request['amount'] as num?)?.toDouble() ?? 0;
+    final pending = status == 'pending';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -633,10 +679,40 @@ class _RequestRow extends StatelessWidget {
             [if (reference.isNotEmpty) 'Ref: $reference', _when].where((p) => p.isNotEmpty).join(' · '),
             style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
           ),
-          if (notes.isNotEmpty) ...[
+          if (notes.isNotEmpty && status != 'cancelled') ...[
             const SizedBox(height: 4),
             Text('Admin: $notes', style: const TextStyle(fontSize: 12, height: 1.3)),
           ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              TextButton.icon(
+                onPressed: onView,
+                icon: const Icon(Icons.visibility_outlined, size: 16),
+                label: const Text('View full details'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF5B21B6),
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              if (pending) ...[
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: onCancel,
+                  icon: const Icon(Icons.close, size: 16),
+                  label: const Text('Cancel request'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFFB91C1C),
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );

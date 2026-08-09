@@ -264,6 +264,8 @@ class SellerStore {
     this.totalSales,
     this.productCount = 0,
     this.reviewCount = 0,
+    this.followerCount = 0,
+    this.isFollowing = false,
     this.city,
     this.region,
     this.email,
@@ -286,6 +288,8 @@ class SellerStore {
   final int? totalSales;
   final int productCount;
   final int reviewCount;
+  final int followerCount;
+  final bool isFollowing;
   final String? city;
   final String? region;
   final String? email;
@@ -322,6 +326,8 @@ class SellerStore {
       totalSales: (json['total_sales'] as num?)?.toInt(),
       productCount: (json['product_count'] as num?)?.toInt() ?? 0,
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
+      followerCount: (json['follower_count'] as num?)?.toInt() ?? 0,
+      isFollowing: json['is_following'] == true,
       city: json['city'] as String?,
       region: json['region'] as String?,
       email: json['email'] as String?,
@@ -628,6 +634,9 @@ class WithdrawalOverview {
     this.feeEnabled = true,
     this.feeAmount = 10,
     this.feeAppliesTo = 'bank',
+    this.feeMode = 'flat',
+    this.feePercent = 0,
+    this.autoPaystack = false,
   });
 
   final List<WithdrawalItem> items;
@@ -640,14 +649,29 @@ class WithdrawalOverview {
   final bool feeEnabled;
   final double feeAmount;
   final String feeAppliesTo;
+  final String feeMode;
+  final double feePercent;
+  final bool autoPaystack;
 
   bool get canWithdraw => availableBalance >= minimum;
 
-  double feeFor(String payoutType) {
-    if (!feeEnabled || feeAppliesTo == 'none' || feeAmount <= 0) return 0;
+  double feeFor(String payoutType, [double amount = 0]) {
+    if (!feeEnabled) return 0;
+    if (feeMode == 'percent') {
+      return feePercent > 0 ? double.parse((amount * feePercent / 100).toStringAsFixed(2)) : 0;
+    }
+    if (feeAppliesTo == 'none' || feeAmount <= 0) return 0;
     final type = payoutType == 'bank' ? 'bank' : 'momo';
     if (feeAppliesTo == 'all' || feeAppliesTo == type) return feeAmount;
     return 0;
+  }
+
+  double maxWithdrawable(String payoutType) {
+    if (feeMode == 'percent' && feePercent > 0) {
+      final max = availableBalance / (1 + feePercent / 100);
+      return (max * 100).floorToDouble() / 100;
+    }
+    return (availableBalance - feeFor(payoutType)).clamp(0, availableBalance);
   }
 
   factory WithdrawalOverview.fromJson(Map<String, dynamic> json) {
@@ -680,6 +704,9 @@ class WithdrawalOverview {
       feeEnabled: fee['enabled'] != false,
       feeAmount: (fee['amount'] as num?)?.toDouble() ?? 10,
       feeAppliesTo: fee['applies_to'] as String? ?? 'bank',
+      feeMode: fee['mode'] as String? ?? 'flat',
+      feePercent: (fee['percent'] as num?)?.toDouble() ?? 0,
+      autoPaystack: fee['auto_paystack'] == true,
     );
   }
 }
@@ -937,6 +964,8 @@ class ConversationModel {
     this.storeSlug,
     this.otherMobile,
     this.isSeller = false,
+    this.isGroup = false,
+    this.memberCount = 0,
     this.canComplain = false,
     this.sellerId,
     this.productId,
@@ -961,6 +990,8 @@ class ConversationModel {
   final String? storeSlug;
   final String? otherMobile;
   final bool isSeller;
+  final bool isGroup;
+  final int memberCount;
   /// True when the current user is the buyer in this chat (can report the seller).
   final bool canComplain;
   final int? sellerId;
@@ -1031,9 +1062,13 @@ class ConversationModel {
     return ConversationModel(
       id: json['id'] as int,
       otherId: other is Map ? other['id'] as int? : null,
-      otherName: other is Map
-          ? (other['store_name'] as String? ?? other['name'] as String? ?? 'User')
-          : 'User',
+      otherName: json['is_group'] == true
+          ? (json['name'] as String? ??
+              (other is Map ? other['name'] as String? : null) ??
+              'Group')
+          : (other is Map
+              ? (other['store_name'] as String? ?? other['name'] as String? ?? 'User')
+              : 'User'),
       otherAvatar: other is Map ? other['avatar'] as String? : null,
       storeName: other is Map ? other['store_name'] as String? : null,
       storeSlug: other is Map
@@ -1049,6 +1084,10 @@ class ConversationModel {
               other['store_slug'] != null ||
               (other['seller_profile'] is Map &&
                   ((other['seller_profile'] as Map)['slug'] as String?)?.trim().isNotEmpty == true)),
+      isGroup: json['is_group'] == true,
+      memberCount: (json['member_count'] as num?)?.toInt() ??
+          (other is Map ? (other['member_count'] as num?)?.toInt() : null) ??
+          0,
       canComplain: json['can_complain'] == true ||
           (json['buyer_id'] != null &&
               json['seller_id'] != null &&
@@ -1096,6 +1135,8 @@ class ConversationModel {
       storeSlug: storeSlug,
       otherMobile: otherMobile,
       isSeller: isSeller,
+      isGroup: isGroup,
+      memberCount: memberCount,
       canComplain: canComplain,
       sellerId: sellerId,
       productId: productId ?? this.productId,
@@ -1453,6 +1494,52 @@ class WishlistItem {
       id: json['id'] as int,
       productId: json['product_id'] as int? ?? (json['product'] is Map ? json['product']['id'] as int : 0),
       product: Product.fromJson(Map<String, dynamic>.from(json['product'] as Map)),
+    );
+  }
+}
+
+class FollowedSeller {
+  const FollowedSeller({
+    required this.id,
+    required this.sellerId,
+    required this.storeName,
+    this.storeSlug,
+    this.shopPhoto,
+    this.rating,
+    this.totalSales,
+    this.followerCount = 0,
+    this.followedAt,
+  });
+
+  final int id;
+  final int sellerId;
+  final String storeName;
+  final String? storeSlug;
+  final String? shopPhoto;
+  final double? rating;
+  final int? totalSales;
+  final int followerCount;
+  final DateTime? followedAt;
+
+  factory FollowedSeller.fromJson(Map<String, dynamic> json) {
+    final seller = json['seller'];
+    final map = seller is Map ? Map<String, dynamic>.from(seller) : <String, dynamic>{};
+    DateTime? followedAt;
+    final raw = json['followed_at'];
+    if (raw is String && raw.trim().isNotEmpty) {
+      followedAt = DateTime.tryParse(raw);
+    }
+
+    return FollowedSeller(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      sellerId: (map['id'] as num?)?.toInt() ?? 0,
+      storeName: map['store_name'] as String? ?? map['name'] as String? ?? 'Seller',
+      storeSlug: map['store_slug'] as String?,
+      shopPhoto: map['shop_photo'] as String?,
+      rating: (map['rating'] as num?)?.toDouble(),
+      totalSales: (map['total_sales'] as num?)?.toInt(),
+      followerCount: (map['follower_count'] as num?)?.toInt() ?? 0,
+      followedAt: followedAt,
     );
   }
 }

@@ -36,6 +36,8 @@ class AppStore extends ChangeNotifier {
   int cartCount = 0;
   Set<int> wishlistProductIds = {};
   List<WishlistItem> wishlist = [];
+  Set<int> followingSellerIds = {};
+  List<FollowedSeller> following = [];
   List<OrderModel> orders = [];
   WalletInfo? wallet;
   List<ConversationModel> conversations = [];
@@ -71,6 +73,7 @@ class AppStore extends ChangeNotifier {
           await Future.wait([
             loadCart(maxAttempts: 1),
             loadWishlist(maxAttempts: 1),
+            loadFollowing(maxAttempts: 1),
             refreshNotificationCounts(maxAttempts: 1),
           ]).timeout(const Duration(seconds: 8));
         } on ApiException catch (e) {
@@ -291,8 +294,12 @@ class AppStore extends ChangeNotifier {
     return (store: store, products: products);
   }
 
-  Future<({Product product, List<Product> related, List<Map<String, dynamic>> reviews})>
-      fetchProductDetail(String slug) async {
+  Future<({
+    Product product,
+    List<Product> related,
+    List<Map<String, dynamic>> reviews,
+    bool isFollowingSeller,
+  })> fetchProductDetail(String slug) async {
     final res = await _api.get('/products/$slug');
     final body = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
     final data = body['data'] ?? body;
@@ -310,10 +317,17 @@ class AppStore extends ChangeNotifier {
         ? reviewsJson.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
         : <Map<String, dynamic>>[];
 
+    final product = Product.fromJson(Map<String, dynamic>.from(data as Map));
+    final isFollowingSeller = body['is_following_seller'] == true;
+    if (isFollowingSeller && product.sellerId != null) {
+      followingSellerIds = {...followingSellerIds, product.sellerId!};
+    }
+
     return (
-      product: Product.fromJson(Map<String, dynamic>.from(data as Map)),
+      product: product,
       related: related,
       reviews: reviews,
+      isFollowingSeller: isFollowingSeller,
     );
   }
 
@@ -335,7 +349,7 @@ class AppStore extends ChangeNotifier {
     } else {
       await refreshMe();
     }
-    await Future.wait([loadCart(), loadWishlist(), refreshNotificationCounts()]);
+    await Future.wait([loadCart(), loadWishlist(), loadFollowing(), refreshNotificationCounts()]);
     notifyListeners();
   }
 
@@ -428,6 +442,8 @@ class AppStore extends ChangeNotifier {
     cartCount = 0;
     wishlist = [];
     wishlistProductIds = {};
+    following = [];
+    followingSellerIds = {};
     orders = [];
     wallet = null;
     conversations = [];
@@ -660,6 +676,51 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> loadFollowing({int maxAttempts = 2}) async {
+    try {
+      final res = await _api.get('/following', maxAttempts: maxAttempts);
+      final data = res.data is Map ? res.data['data'] : null;
+      if (data is List) {
+        following = data
+            .whereType<Map>()
+            .map((e) => FollowedSeller.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+        followingSellerIds = following.map((e) => e.sellerId).toSet();
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<bool> toggleFollowSeller(int sellerId) async {
+    final was = followingSellerIds.contains(sellerId);
+    _setFollowing(sellerId, !was);
+
+    try {
+      final res = await _api.post('/following/toggle', data: {'seller_id': sellerId});
+      final followingNow = res.data is Map ? res.data['following'] as bool? ?? !was : !was;
+      if (followingNow == was) _setFollowing(sellerId, followingNow);
+      if (followingNow || following.isEmpty) {
+        await loadFollowing();
+      } else if (!followingNow) {
+        following = following.where((f) => f.sellerId != sellerId).toList();
+        notifyListeners();
+      }
+      return followingNow;
+    } catch (_) {
+      _setFollowing(sellerId, was);
+      rethrow;
+    }
+  }
+
+  void _setFollowing(int sellerId, bool on) {
+    if (on) {
+      followingSellerIds = {...followingSellerIds, sellerId};
+    } else {
+      followingSellerIds = {...followingSellerIds}..remove(sellerId);
+    }
+    notifyListeners();
+  }
+
   Future<void> loadOrders() async {
     final res = await _api.get('/orders', query: {'per_page': 50});
     final data = res.data is Map ? res.data['data'] : null;
@@ -855,14 +916,14 @@ class AppStore extends ChangeNotifier {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<void> submitWalletTopUp({
+  Future<Map<String, dynamic>> submitWalletTopUp({
     required double amount,
     required String network,
     required String proofPath,
     String? paymentReference,
     String? userNote,
   }) async {
-    await _api.postMultipart(
+    final res = await _api.postMultipart(
       '/wallet/manual-top-up',
       fields: {
         'amount': amount,
@@ -874,6 +935,23 @@ class AppStore extends ChangeNotifier {
       fileField: 'proof',
       filePath: proofPath,
     );
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
+  Future<Map<String, dynamic>> fetchManualTopUp(int id) async {
+    final res = await _api.get('/wallet/manual-top-up/$id');
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
+  Future<Map<String, dynamic>> cancelManualTopUp(int id) async {
+    final res = await _api.post('/wallet/manual-top-up/$id/cancel');
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
   }
 
   Future<void> loadConversations() async {
@@ -1006,6 +1084,30 @@ class AppStore extends ChangeNotifier {
       return Map<String, dynamic>.from(userJson);
     }
     return null;
+  }
+
+  Future<({ConversationModel conversation, List<ChatMessage> messages})> createGroupChat({
+    required String name,
+    required List<int> memberIds,
+  }) async {
+    final res = await _api.post('/messages/groups', data: {
+      'name': name.trim(),
+      'member_ids': memberIds,
+    });
+    final convJson = res.data['conversation'];
+    final msgs = res.data['messages'];
+    final conversation = ConversationModel.fromJson(Map<String, dynamic>.from(convJson as Map));
+    final messages = msgs is List
+        ? msgs
+            .whereType<Map>()
+            .map((e) => ChatMessage.fromJson(
+                  Map<String, dynamic>.from(e),
+                  myUserId: user?.id ?? 0,
+                ))
+            .toList()
+        : <ChatMessage>[];
+    await loadConversations();
+    return (conversation: conversation, messages: messages);
   }
 
   Future<ChatMessage> sendTransferMessage(

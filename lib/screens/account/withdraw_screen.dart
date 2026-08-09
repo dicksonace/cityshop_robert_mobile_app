@@ -92,8 +92,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   }
 
   void _withdrawAll() {
-    final fee = overview.feeFor(payoutType);
-    final max = (overview.availableBalance - fee).clamp(0, overview.availableBalance);
+    final max = overview.maxWithdrawable(payoutType);
     setState(() => amountCtrl.text = max.toStringAsFixed(2));
   }
 
@@ -135,7 +134,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       _toast('Minimum withdrawal is ${_money.format(overview.minimum)}');
       return;
     }
-    final fee = overview.feeFor(payoutType);
+    final fee = overview.feeFor(payoutType, amount);
     final total = amount + fee;
     if (total > overview.availableBalance) {
       _toast(
@@ -252,21 +251,25 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   _money.format(amount),
                   style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 26),
                 ),
-                if (overview.feeFor(payoutType) > 0) ...[
+                if (overview.feeFor(payoutType, amount) > 0) ...[
                   const SizedBox(height: 6),
                   Text(
-                    'Withdrawal fee ${_money.format(overview.feeFor(payoutType))}',
+                    overview.feeMode == 'percent'
+                        ? 'Withdrawal fee ${overview.feePercent.toStringAsFixed(overview.feePercent % 1 == 0 ? 0 : 2)}% (${_money.format(overview.feeFor(payoutType, amount))})'
+                        : 'Withdrawal fee ${_money.format(overview.feeFor(payoutType, amount))}',
                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   ),
                   Text(
-                    'Total deducted ${_money.format(amount + overview.feeFor(payoutType))}',
+                    'Total deducted ${_money.format(amount + overview.feeFor(payoutType, amount))}',
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                   ),
                 ],
                 const SizedBox(height: 2),
-                const Text(
-                  'Usually processed within 15 minutes and sometimes instant.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                Text(
+                  overview.autoPaystack
+                      ? 'Paystack will send this payout automatically.'
+                      : 'Usually processed within 15 minutes and sometimes instant.',
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -439,9 +442,13 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   decoration: InputDecoration(
                     labelText: 'Amount (GH₵)',
                     helperText: () {
-                      final fee = overview.feeFor(payoutType);
+                      final typed = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                      final fee = overview.feeFor(payoutType, typed);
                       final base = 'Minimum ${_money.format(overview.minimum)}'
                           ' · Available ${_money.format(overview.availableBalance)}';
+                      if (overview.feeMode == 'percent' && overview.feePercent > 0) {
+                        return '$base · ${overview.feePercent.toStringAsFixed(overview.feePercent % 1 == 0 ? 0 : 2)}% fee';
+                      }
                       if (fee <= 0) return base;
                       return '$base · ${_isBank ? 'Bank' : 'MoMo'} fee ${_money.format(fee)}';
                     }(),

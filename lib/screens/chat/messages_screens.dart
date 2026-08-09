@@ -83,6 +83,52 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
     }
   }
 
+  Future<void> _openComposeMenu(BuildContext context) async {
+    await showAppSheet<void>(
+      context: context,
+      builder: (ctx) => SheetShell(
+        children: [
+          const Text(
+            'Start a conversation',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Buyers and sellers can chat 1:1 or create a group.',
+            style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+          ),
+          const SizedBox(height: 14),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const CircleAvatar(
+              backgroundColor: Color(0xFFFFEDD5),
+              child: Icon(Icons.person_add_alt_1_outlined, color: AppColors.accent),
+            ),
+            title: const Text('New chat', style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: const Text('Find someone by mobile number'),
+            onTap: () {
+              Navigator.pop(ctx);
+              context.push('/messages/new');
+            },
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const CircleAvatar(
+              backgroundColor: Color(0xFFDBEAFE),
+              child: Icon(Icons.groups_outlined, color: Color(0xFF1D4ED8)),
+            ),
+            title: const Text('New group', style: TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: const Text('Create a group with multiple people'),
+            onTap: () {
+              Navigator.pop(ctx);
+              context.push('/messages/new-group');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
@@ -160,9 +206,9 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
             const SizedBox(height: 16),
             Center(
               child: ElevatedButton.icon(
-                onPressed: () => context.push('/messages/new'),
-                icon: const Icon(Icons.person_add_alt_1_outlined),
-                label: const Text('Find friend by mobile'),
+                onPressed: () => _openComposeMenu(context),
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text('New chat or group'),
               ),
             ),
           ],
@@ -188,8 +234,8 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
                 icon: const Icon(Icons.search),
               ),
               IconButton(
-                tooltip: 'New chat',
-                onPressed: () => context.push('/messages/new'),
+                tooltip: 'New chat or group',
+                onPressed: () => _openComposeMenu(context),
                 icon: const Icon(Icons.add_circle_outline),
               ),
             ],
@@ -206,12 +252,24 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
           final c = store.conversations[index];
           return ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            leading: _ConversationAvatar(name: c.otherName, avatar: c.otherAvatar, radius: 24),
+            leading: c.isGroup
+                ? CircleAvatar(
+                    radius: 24,
+                    backgroundColor: AppColors.accent.withValues(alpha: 0.15),
+                    child: const Icon(Icons.groups_rounded, color: AppColors.accent),
+                  )
+                : _ConversationAvatar(name: c.otherName, avatar: c.otherAvatar, radius: 24),
             title: Text(c.otherName, style: const TextStyle(fontWeight: FontWeight.w800)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (c.productName != null) ...[
+                if (c.isGroup) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '${c.memberCount} members',
+                    style: const TextStyle(fontSize: 12, color: AppColors.accent, fontWeight: FontWeight.w600),
+                  ),
+                ] else if (c.productName != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     c.productName!,
@@ -1108,16 +1166,18 @@ class _ChatScreenState extends State<ChatScreen> {
               onPressed: () => context.push('/stores/${conversation!.storeSlug!.trim()}'),
               icon: const Icon(Icons.storefront_outlined, color: AppColors.accent),
             ),
-          IconButton(
-            tooltip: 'Audio call',
-            onPressed: () => unawaited(_startInAppCall(ChatCallKind.voice)),
-            icon: const Icon(Icons.call_rounded, color: AppColors.accent),
-          ),
-          IconButton(
-            tooltip: 'Video call',
-            onPressed: () => unawaited(_startInAppCall(ChatCallKind.video)),
-            icon: const Icon(Icons.videocam_rounded, color: Color(0xFF0284C7)),
-          ),
+          if (conversation?.isGroup != true) ...[
+            IconButton(
+              tooltip: 'Audio call',
+              onPressed: () => unawaited(_startInAppCall(ChatCallKind.voice)),
+              icon: const Icon(Icons.call_rounded, color: AppColors.accent),
+            ),
+            IconButton(
+              tooltip: 'Video call',
+              onPressed: () => unawaited(_startInAppCall(ChatCallKind.video)),
+              icon: const Icon(Icons.videocam_rounded, color: Color(0xFF0284C7)),
+            ),
+          ],
           if (conversation?.otherId != null)
             PopupMenuButton<String>(
               onSelected: (value) {
@@ -1556,7 +1616,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         if (showAttachPanel)
                           _AttachPanel(
-                            canCall: true,
+                            canCall: conversation?.isGroup != true,
+                            canTransfer: conversation?.isGroup != true,
                             onCamera: () => _sendPhoto(ImageSource.camera),
                             onAlbum: () => _sendPhoto(ImageSource.gallery),
                             onVideo: _sendVideo,
@@ -2486,6 +2547,7 @@ class _ConversationAvatar extends StatelessWidget {
 class _AttachPanel extends StatelessWidget {
   const _AttachPanel({
     required this.canCall,
+    required this.canTransfer,
     required this.onCamera,
     required this.onAlbum,
     required this.onVideo,
@@ -2497,6 +2559,7 @@ class _AttachPanel extends StatelessWidget {
   });
 
   final bool canCall;
+  final bool canTransfer;
   final VoidCallback onCamera;
   final VoidCallback onAlbum;
   final VoidCallback onVideo;
@@ -2517,7 +2580,7 @@ class _AttachPanel extends StatelessWidget {
         _AttachTileData('Audio', Icons.call_outlined, onAudioCall),
         _AttachTileData('Video call', Icons.video_call_outlined, onVideoCall),
       ],
-      _AttachTileData('Transfer', Icons.swap_horiz_rounded, onTransfer),
+      if (canTransfer) _AttachTileData('Transfer', Icons.swap_horiz_rounded, onTransfer),
       _AttachTileData('Files', Icons.folder_outlined, onFiles),
     ];
 

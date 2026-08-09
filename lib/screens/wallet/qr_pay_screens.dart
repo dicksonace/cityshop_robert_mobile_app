@@ -19,6 +19,7 @@ import '../../api/api_client.dart';
 import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/payment_pin_sheet.dart';
 import '../../widgets/payment_success_screen.dart';
@@ -26,7 +27,43 @@ import '../../widgets/wallet_transfer_pad.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
-/// Hub: Scan someone else's code, or show My QR to receive.
+/// Paste / type a shared CityShop QR payload, then open the contact screen.
+Future<void> resolveEnteredCityShopCode(BuildContext context, String raw) async {
+  final payload = raw.trim();
+  if (payload.isEmpty) return;
+  final store = context.read<AppStore>();
+  final resolved = await store.resolveQrPayment(payload);
+  if (!context.mounted) return;
+  await context.push('/qr/contact', extra: {
+    'payload': payload,
+    'resolved': resolved,
+  });
+}
+
+Future<void> showEnterCityShopCodeSheet(BuildContext context) async {
+  final entered = await showAppSheet<String>(
+    context: context,
+    builder: (ctx) => const _EnterCodeSheet(),
+  );
+  if (entered == null || !context.mounted) return;
+  try {
+    await resolveEnteredCityShopCode(context, entered);
+  } on ApiException catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppColors.danger),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: AppColors.danger),
+      );
+    }
+  }
+}
+
+/// Hub: Scan someone else's code, enter a pasted code, or show My QR.
 class QrPayHubScreen extends StatelessWidget {
   const QrPayHubScreen({super.key});
 
@@ -40,7 +77,7 @@ class QrPayHubScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
           const Text(
-            'Scan a CityShop QR to send money or add the person, or show your own namecard so they can scan you.',
+            'Scan a CityShop QR to send money or add the person, enter a shared code, or show your own namecard so they can scan you.',
             style: TextStyle(color: AppColors.textSecondary, height: 1.4),
           ),
           const SizedBox(height: 16),
@@ -58,6 +95,19 @@ class QrPayHubScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _HubTile(
+            icon: Icons.keyboard_alt_outlined,
+            title: 'Enter code',
+            subtitle: 'Paste a CityShop QR link or code text',
+            onTap: () {
+              if (user == null) {
+                context.push('/login');
+                return;
+              }
+              showEnterCityShopCodeSheet(context);
+            },
+          ),
+          const SizedBox(height: 10),
+          _HubTile(
             icon: Icons.qr_code_2_rounded,
             title: 'My namecard',
             subtitle: 'Show your code so others can pay you or add you',
@@ -71,6 +121,92 @@ class QrPayHubScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _EnterCodeSheet extends StatefulWidget {
+  const _EnterCodeSheet();
+
+  @override
+  State<_EnterCodeSheet> createState() => _EnterCodeSheetState();
+}
+
+class _EnterCodeSheetState extends State<_EnterCodeSheet> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (text.isEmpty) return;
+    _controller
+      ..text = text
+      ..selection = TextSelection.collapsed(offset: text.length);
+    setState(() {});
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    if (value.isEmpty) return;
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SheetShell(
+      action: SizedBox(
+        height: 50,
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: _controller.text.trim().isEmpty ? null : _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.accent,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Continue'),
+        ),
+      ),
+      children: [
+        const Text(
+          'Enter code',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Paste a shared CityShop QR link or the CS1… code text, then continue to transfer money or chat.',
+          style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _controller,
+          autofocus: true,
+          minLines: 3,
+          maxLines: 5,
+          textInputAction: TextInputAction.done,
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) => _submit(),
+          decoration: InputDecoration(
+            hintText: 'CS1…. or cityshop://pay?c=…',
+            filled: true,
+            fillColor: AppColors.background,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
+            ),
+            suffixIcon: IconButton(
+              tooltip: 'Paste',
+              onPressed: _paste,
+              icon: const Icon(Icons.content_paste_rounded),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -293,8 +429,8 @@ class _QrScanScreenState extends State<QrScanScreen> {
             ),
           ),
           Positioned(
-            left: 36,
-            right: 36,
+            left: 24,
+            right: 24,
             bottom: 36,
             child: SafeArea(
               top: false,
@@ -305,6 +441,19 @@ class _QrScanScreenState extends State<QrScanScreen> {
                     icon: Icons.qr_code_2_rounded,
                     label: 'My namecard',
                     onTap: _handling ? null : () => context.push('/qr/receive'),
+                  ),
+                  _bottomAction(
+                    icon: Icons.keyboard_alt_outlined,
+                    label: 'Enter code',
+                    onTap: _handling
+                        ? null
+                        : () async {
+                            await _controller.stop();
+                            if (!context.mounted) return;
+                            await showEnterCityShopCodeSheet(context);
+                            if (!mounted) return;
+                            await _controller.start();
+                          },
                   ),
                   _bottomAction(
                     icon: Icons.photo_library_outlined,
@@ -577,7 +726,7 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
           subject: 'My CityShop namecard',
           text: _amount != null
               ? 'Scan my CityShop QR to send me ${_money.format(_amount)}'
-              : 'Scan my CityShop QR to send me money or add me on CityShop',
+              : 'Scan my CityShop QR to transfer money or chat me',
           sharePositionOrigin: origin,
         ),
       );
@@ -729,7 +878,7 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                             ),
                             const SizedBox(height: 16),
                             const Text(
-                              'Scan this QR code to send me money or add me on CityShop',
+                              'Scan this QR code to transfer money or chat me',
                               textAlign: TextAlign.center,
                               style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
                             ),
@@ -1207,37 +1356,44 @@ class _QrContactScreenState extends State<QrContactScreen> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: OutlinedButton.icon(
-                        onPressed: _opening ? null : _openChat,
-                        icon: _opening
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.chat_bubble_outline_rounded, size: 20),
-                        label: Text(_opening ? 'Opening…' : 'Chat'),
-                      ),
+                  const Text(
+                    'Transfer money or chat me',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      height: 1.3,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: _opening ? null : _openTransfer,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          foregroundColor: Colors.white,
-                        ),
-                        icon: const Icon(Icons.swap_horiz_rounded, size: 20),
-                        label: const Text('Transfer'),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: _opening ? null : _openTransfer,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        foregroundColor: Colors.white,
                       ),
+                      icon: const Icon(Icons.swap_horiz_rounded, size: 20),
+                      label: const Text('Transfer money'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: _opening ? null : _openChat,
+                      icon: _opening
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.chat_bubble_outline_rounded, size: 20),
+                      label: Text(_opening ? 'Opening…' : 'Chat me'),
                     ),
                   ),
                 ],

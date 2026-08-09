@@ -36,6 +36,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   bool adding = false;
   bool wishBusy = false;
   int qty = 1;
+  bool showAddedToast = false;
+  Timer? _addedToastTimer;
 
   /// Whether this buyer's like was already counted in the fetched total, so the
   /// displayed count can follow the heart without refetching the product.
@@ -45,6 +47,26 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _addedToastTimer?.cancel();
+    super.dispose();
+  }
+
+  void _showAddedToast() {
+    _addedToastTimer?.cancel();
+    setState(() => showAddedToast = true);
+    _addedToastTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      setState(() => showAddedToast = false);
+    });
+  }
+
+  void _hideAddedToast() {
+    _addedToastTimer?.cancel();
+    if (showAddedToast) setState(() => showAddedToast = false);
   }
 
   Future<void> _load() async {
@@ -85,31 +107,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     try {
       await store.addToCart(p.id, quantity: qty);
       if (!mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.clearSnackBars();
+      // Drop any leftover system snackbars that can stick around after rebuilds.
+      ScaffoldMessenger.of(context).clearSnackBars();
       if (goCheckout) {
-        // Go straight to cart — don't leave a sticky bar stacked on the next screen.
+        _hideAddedToast();
         context.push('/cart');
         return;
       }
-      messenger.showSnackBar(
-        SnackBar(
-          content: const Text('Added to cart'),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 88),
-          duration: const Duration(seconds: 2),
-          dismissDirection: DismissDirection.down,
-          action: SnackBarAction(
-            label: 'Cart',
-            onPressed: () {
-              messenger.hideCurrentSnackBar();
-              context.push('/cart');
-            },
-          ),
-        ),
-      );
+      _showAddedToast();
     } on ApiException catch (e) {
       if (!mounted) return;
+      _hideAddedToast();
       final messenger = ScaffoldMessenger.of(context);
       messenger.clearSnackBars();
       messenger.showSnackBar(
@@ -169,6 +177,33 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
+  Future<void> _toggleFollowSeller() async {
+    final p = product;
+    final sellerId = p?.sellerId;
+    if (sellerId == null) return;
+    final store = context.read<AppStore>();
+    if (!store.isLoggedIn) {
+      context.push('/login');
+      return;
+    }
+    try {
+      final following = await store.toggleFollowSeller(sellerId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(following ? 'Following this seller' : 'Unfollowed this seller'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      setState(() {});
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppColors.danger),
+      );
+    }
+  }
+
   Future<void> _shareProduct() async {
     final p = product;
     final slug = p?.slug.isNotEmpty == true ? p!.slug : widget.slug;
@@ -195,11 +230,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         title: Text(p?.name ?? 'Product'),
         actions: [
           IconButton(
-            tooltip: 'Share',
-            onPressed: _shareProduct,
-            icon: const Icon(Icons.share_outlined),
-          ),
-          IconButton(
             onPressed: wishBusy ? null : _toggleWish,
             icon: Icon(
               wishlisted ? Icons.favorite : Icons.favorite_border,
@@ -214,29 +244,105 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               child: const Icon(Icons.shopping_cart_outlined),
             ),
           ),
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            onSelected: (value) async {
+              if (value == 'share') {
+                await _shareProduct();
+              } else if (value == 'follow') {
+                await _toggleFollowSeller();
+              }
+            },
+            itemBuilder: (context) {
+              final sellerId = p?.sellerId;
+              final following = sellerId != null && store.followingSellerIds.contains(sellerId);
+              return [
+                const PopupMenuItem(
+                  value: 'share',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.share_outlined),
+                    title: Text('Share this ad'),
+                  ),
+                ),
+                if (sellerId != null)
+                  PopupMenuItem(
+                    value: 'follow',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(following ? Icons.person_remove_alt_1_outlined : Icons.person_add_alt_1_outlined),
+                      title: Text(following ? 'Unfollow this seller' : 'Follow this seller'),
+                    ),
+                  ),
+              ];
+            },
+          ),
         ],
       ),
-      body: loading
-          ? const FullPageLoader(label: 'Loading product…')
-          : error != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: loading
+                ? const FullPageLoader(label: 'Loading product…')
+                : error != null
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(error!),
+                            TextButton(onPressed: _load, child: const Text('Retry')),
+                          ],
+                        ),
+                      )
+                    : _Body(
+                        product: p!,
+                        related: related,
+                        reviews: reviews,
+                        qty: qty,
+                        likeCount: p.wishlistAdds + (wishlisted ? 1 : 0) - (likeCounted ? 1 : 0),
+                        onQtyChanged: (q) => setState(() => qty = q),
+                        onMessage: _messageSeller,
+                      ),
+          ),
+          if (showAddedToast)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 12,
+              child: Material(
+                elevation: 6,
+                color: const Color(0xFF323232),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
                     children: [
-                      Text(error!),
-                      TextButton(onPressed: _load, child: const Text('Retry')),
+                      const Expanded(
+                        child: Text(
+                          'Added to cart',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          _hideAddedToast();
+                          context.push('/cart');
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.accent,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Cart', style: TextStyle(fontWeight: FontWeight.w800)),
+                      ),
                     ],
                   ),
-                )
-              : _Body(
-                  product: p!,
-                  related: related,
-                  reviews: reviews,
-                  qty: qty,
-                  likeCount: p.wishlistAdds + (wishlisted ? 1 : 0) - (likeCounted ? 1 : 0),
-                  onQtyChanged: (q) => setState(() => qty = q),
-                  onMessage: _messageSeller,
                 ),
+              ),
+            ),
+        ],
+      ),
       bottomNavigationBar: p == null
           ? null
           : SafeArea(

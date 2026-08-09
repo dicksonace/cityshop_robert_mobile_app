@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
+import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -108,6 +109,172 @@ class _WishlistScreenState extends State<WishlistScreen> {
                               ),
                             );
                           },
+                        ),
+    );
+  }
+}
+
+class FollowingScreen extends StatefulWidget {
+  const FollowingScreen({super.key});
+
+  @override
+  State<FollowingScreen> createState() => _FollowingScreenState();
+}
+
+class _FollowingScreenState extends State<FollowingScreen> {
+  bool loading = true;
+  String? error;
+  final _busy = <int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      await context.read<AppStore>().loadFollowing();
+    } on ApiException catch (e) {
+      error = e.message;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _unfollow(FollowedSeller seller) async {
+    setState(() => _busy.add(seller.sellerId));
+    try {
+      await context.read<AppStore>().toggleFollowSeller(seller.sellerId);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: AppColors.danger),
+      );
+    } finally {
+      if (mounted) setState(() => _busy.remove(seller.sellerId));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = context.watch<AppStore>();
+    return Scaffold(
+      appBar: AppBar(title: const Text('Following')),
+      body: !store.isLoggedIn
+          ? Center(
+              child: ElevatedButton(
+                onPressed: () => context.push('/login'),
+                child: const Text('Login'),
+              ),
+            )
+          : loading
+              ? const FullPageLoader(label: 'Loading following…')
+              : error != null
+                  ? Center(child: Text(error!))
+                  : store.following.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text(
+                              'You are not following any sellers yet.\nOpen a product and tap Follow this seller.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+                            ),
+                          ),
+                        )
+                      : RefreshIndicator(
+                          color: AppColors.accent,
+                          onRefresh: _load,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                            itemCount: store.following.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              final item = store.following[index];
+                              final photo = ApiConfig.resolveMediaUrl(item.shopPhoto);
+                              final letter = item.storeName.trim().isNotEmpty
+                                  ? item.storeName.trim()[0].toUpperCase()
+                                  : 'S';
+                              final busy = _busy.contains(item.sellerId);
+                              return Material(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: item.storeSlug == null || item.storeSlug!.isEmpty
+                                      ? null
+                                      : () => context.push('/stores/${item.storeSlug}'),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 24,
+                                          backgroundColor: AppColors.ringOrange,
+                                          backgroundImage: photo.isNotEmpty
+                                              ? CachedNetworkImageProvider(photo)
+                                              : null,
+                                          child: photo.isEmpty
+                                              ? Text(
+                                                  letter,
+                                                  style: const TextStyle(
+                                                    color: AppColors.accent,
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                                )
+                                              : null,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                item.storeName,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                [
+                                                  if (item.rating != null) '★ ${item.rating!.toStringAsFixed(1)}',
+                                                  if (item.totalSales != null) '${item.totalSales} sales',
+                                                  if (item.followerCount > 0) '${item.followerCount} followers',
+                                                ].where((e) => e.isNotEmpty).join(' · '),
+                                                style: const TextStyle(
+                                                  color: AppColors.textSecondary,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed: busy ? null : () => _unfollow(item),
+                                          child: busy
+                                              ? const SizedBox(
+                                                  width: 16,
+                                                  height: 16,
+                                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                                )
+                                              : const Text('Unfollow'),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
     );
   }

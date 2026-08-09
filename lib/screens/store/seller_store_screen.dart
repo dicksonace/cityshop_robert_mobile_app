@@ -54,6 +54,10 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
             search: search,
           );
       if (!mounted) return;
+      final app = context.read<AppStore>();
+      if (result.store.isFollowing) {
+        app.followingSellerIds = {...app.followingSellerIds, result.store.sellerId};
+      }
       setState(() {
         store = result.store;
         products = result.products;
@@ -71,6 +75,54 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
         error = e.toString();
         loading = false;
       });
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    final s = store;
+    if (s == null || s.sellerId == 0) return;
+    final app = context.read<AppStore>();
+    if (!app.isLoggedIn) {
+      context.push('/login');
+      return;
+    }
+    try {
+      final following = await app.toggleFollowSeller(s.sellerId);
+      if (!mounted) return;
+      setState(() {
+        store = SellerStore(
+          sellerId: s.sellerId,
+          storeName: s.storeName,
+          slug: s.slug,
+          sellerName: s.sellerName,
+          shopPhoto: s.shopPhoto,
+          description: s.description,
+          businessAddress: s.businessAddress,
+          isBusinessRegistered: s.isBusinessRegistered,
+          approvedAt: s.approvedAt,
+          rating: s.rating,
+          totalSales: s.totalSales,
+          productCount: s.productCount,
+          reviewCount: s.reviewCount,
+          followerCount: following
+              ? s.followerCount + (s.isFollowing ? 0 : 1)
+              : (s.followerCount - (s.isFollowing ? 1 : 0)).clamp(0, 1 << 30),
+          isFollowing: following,
+          city: s.city,
+          region: s.region,
+          email: s.email,
+          mobile: s.mobile,
+          whatsapp: s.whatsapp,
+          digitalAddress: s.digitalAddress,
+          residentialAddress: s.residentialAddress,
+        );
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(following ? 'Following this seller' : 'Unfollowed this seller')),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -260,6 +312,7 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                                                 if (s?.rating != null) '★ ${s!.rating!.toStringAsFixed(1)}',
                                                 if (s?.totalSales != null) '${s!.totalSales} sales',
                                                 '${s?.productCount ?? 0} products',
+                                                if ((s?.followerCount ?? 0) > 0) '${s!.followerCount} followers',
                                               ].join(' · '),
                                               style: TextStyle(
                                                 color: Colors.white.withValues(alpha: 0.92),
@@ -307,9 +360,20 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                                 children: [
                                   Expanded(
                                     child: OutlinedButton.icon(
-                                      onPressed: _openSellerProfile,
-                                      icon: const Icon(Icons.person_outline, size: 18),
-                                      label: const Text('Profile'),
+                                      onPressed: _toggleFollow,
+                                      icon: Icon(
+                                        (s?.isFollowing ?? false) ||
+                                                context.watch<AppStore>().followingSellerIds.contains(s?.sellerId)
+                                            ? Icons.person_remove_alt_1_outlined
+                                            : Icons.person_add_alt_1_outlined,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        (s?.isFollowing ?? false) ||
+                                                context.watch<AppStore>().followingSellerIds.contains(s?.sellerId)
+                                            ? 'Following'
+                                            : 'Follow',
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
