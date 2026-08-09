@@ -222,6 +222,137 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     }
   }
 
+  Future<void> _openRecharge({
+    required bool paystackConfigured,
+    required bool manualEnabled,
+  }) async {
+    if (!paystackConfigured && !manualEnabled) return;
+
+    // Only one path available — skip the chooser.
+    if (paystackConfigured && !manualEnabled) {
+      await _paystackTopUp();
+      return;
+    }
+    if (!paystackConfigured && manualEnabled) {
+      await _openManualDeposit();
+      return;
+    }
+
+    final choice = await showAppSheet<String>(
+      context: context,
+      builder: (ctx) {
+        return SheetShell(
+          children: [
+            const Text(
+              'Recharge',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Choose how you want to add funds.',
+              style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+            ),
+            const SizedBox(height: 16),
+            Material(
+              color: const Color(0xFFFFF7ED),
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => Navigator.pop(ctx, 'paystack'),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFFDBA74)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.smartphone, color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Auto Paystack', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                            SizedBox(height: 2),
+                            Text(
+                              'Instant MoMo or card',
+                              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => Navigator.pop(ctx, 'manual'),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFBAE6FD)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0EA5E9),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.upload_rounded, color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Manual', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                            SizedBox(height: 2),
+                            Text(
+                              'MoMo / bank + upload proof',
+                              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || choice == null) return;
+    if (choice == 'manual') {
+      await _openManualDeposit();
+    } else if (choice == 'paystack') {
+      await _paystackTopUp();
+    }
+  }
+
   Future<void> _paystackTopUp() async {
     final amountCtrl = TextEditingController();
     String method = 'momo';
@@ -446,21 +577,22 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 const SizedBox(height: 16),
                 _WalletActionPair(
                   onWithdraw: _openWithdraw,
-                  onRecharge: paystackConfigured ? _paystackTopUp : null,
+                  onRecharge: (paystackConfigured || enabled)
+                      ? () => _openRecharge(
+                            paystackConfigured: paystackConfigured,
+                            manualEnabled: enabled,
+                          )
+                      : null,
                 ),
               ],
             ),
           ),
-          if (!paystackConfigured) ...[
+          if (!paystackConfigured && !enabled) ...[
             const SizedBox(height: 10),
             const Text(
-              'Online recharge requires Paystack to be configured on the server.',
+              'Recharge is unavailable right now.',
               style: TextStyle(color: Color(0xFFB45309), fontSize: 12),
             ),
-          ],
-          if (enabled) ...[
-            const SizedBox(height: 14),
-            _ManualDepositPrompt(onTap: _openManualDeposit),
           ],
           const SizedBox(height: 18),
           Container(
@@ -778,96 +910,6 @@ class _WalletActionPair extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ManualDepositPrompt extends StatelessWidget {
-  const _ManualDepositPrompt({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFF0F9FF),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFBAE6FD)),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0284C7), Color(0xFF0891B2)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.account_balance, color: Colors.white, size: 21),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'MANUAL TOP-UP',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                        color: Color(0xFF0284C7),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'Paying a large amount?',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                    ),
-                    const SizedBox(height: 3),
-                    const Text(
-                      'Send money to CityShop MoMo or bank, then submit proof — admin credits your wallet.',
-                      style: TextStyle(fontSize: 12.5, height: 1.35, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: const [
-                        Flexible(
-                          child: Text(
-                            'Use manual payment',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13,
-                              color: Color(0xFF0369A1),
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 4),
-                        Icon(Icons.arrow_forward, size: 14, color: Color(0xFF0369A1)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
