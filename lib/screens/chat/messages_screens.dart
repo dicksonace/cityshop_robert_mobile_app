@@ -468,11 +468,28 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _jumpToEnd() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) {
-        _scroll.jumpTo(_scroll.position.maxScrollExtent);
-      }
-    });
+    // reverse:true ListView → offset 0 is the newest messages (composer end).
+    void tryJump([int left = 10]) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_scroll.hasClients) {
+          if (_scroll.offset > 0.5) {
+            _scroll.jumpTo(0);
+          }
+        } else if (left > 0) {
+          tryJump(left - 1);
+          return;
+        }
+        // Product/image cards can grow after first layout — stick to bottom briefly.
+        if (left > 0) {
+          Future<void>.delayed(const Duration(milliseconds: 40), () {
+            if (mounted) tryJump(left - 1);
+          });
+        }
+      });
+    }
+
+    tryJump();
   }
 
   Future<void> _deleteMessage(ChatMessage message) async {
@@ -1192,12 +1209,15 @@ class _ChatScreenState extends State<ChatScreen> {
                         )
                       : ListView.builder(
                           controller: _scroll,
-                          padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
+                          reverse: true,
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
                           itemCount: thread.length,
                           itemBuilder: (context, index) {
-                            final m = thread[index];
-                            final showDay = index == 0 ||
-                                _dayKey(thread[index - 1].createdAt) != _dayKey(m.createdAt);
+                            // reverse:true paints index 0 at the bottom (newest).
+                            final logicalIndex = thread.length - 1 - index;
+                            final m = thread[logicalIndex];
+                            final showDay = logicalIndex == 0 ||
+                                _dayKey(thread[logicalIndex - 1].createdAt) != _dayKey(m.createdAt);
                             return Column(
                               children: [
                                 if (showDay && m.createdAt != null)
