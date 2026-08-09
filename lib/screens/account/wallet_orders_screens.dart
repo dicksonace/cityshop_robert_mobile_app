@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
+import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -564,6 +565,8 @@ class _WalletTransactionRow extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _TransactionAvatar(tx: tx),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -656,6 +659,39 @@ class _WalletTransactionRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Profile photo for transfers; type icon for other ledger rows.
+class _TransactionAvatar extends StatelessWidget {
+  const _TransactionAvatar({required this.tx});
+
+  final WalletTransactionItem tx;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = (tx.counterpartyName ?? '').trim();
+    final avatar = ApiConfig.resolveMediaUrl(tx.counterpartyAvatar);
+    final credit = tx.isCredit;
+    final initial = name.isNotEmpty
+        ? name.substring(0, 1).toUpperCase()
+        : (credit ? '+' : '−');
+
+    return CircleAvatar(
+      radius: 22,
+      backgroundColor: credit ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+      backgroundImage: avatar.isNotEmpty ? CachedNetworkImageProvider(avatar) : null,
+      child: avatar.isNotEmpty
+          ? null
+          : Text(
+              initial,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: name.isNotEmpty ? 16 : 18,
+                color: credit ? const Color(0xFF16A34A) : AppColors.danger,
+              ),
+            ),
     );
   }
 }

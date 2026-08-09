@@ -491,6 +491,9 @@ class WalletTransactionItem {
     this.createdAt,
     this.balanceBefore,
     this.balanceAfter,
+    this.counterpartyName,
+    this.counterpartyAvatar,
+    this.counterpartyMobile,
   });
 
   final int id;
@@ -502,11 +505,19 @@ class WalletTransactionItem {
   final String? createdAt;
   final double? balanceBefore;
   final double? balanceAfter;
+  final String? counterpartyName;
+  final String? counterpartyAvatar;
+  final String? counterpartyMobile;
 
   bool get isCredit => amount > 0;
 
   factory WalletTransactionItem.fromJson(Map<String, dynamic> json) {
     final type = json['type'] as String? ?? '';
+    final party = json['counterparty'];
+    Map<String, dynamic>? partyMap;
+    if (party is Map) {
+      partyMap = Map<String, dynamic>.from(party);
+    }
     return WalletTransactionItem(
       id: (json['id'] as num?)?.toInt() ?? 0,
       type: type,
@@ -517,6 +528,9 @@ class WalletTransactionItem {
       createdAt: json['created_at'] as String?,
       balanceBefore: (json['balance_before'] as num?)?.toDouble(),
       balanceAfter: (json['balance_after'] as num?)?.toDouble(),
+      counterpartyName: partyMap?['name'] as String?,
+      counterpartyAvatar: partyMap?['avatar'] as String?,
+      counterpartyMobile: partyMap?['mobile'] as String?,
     );
   }
 }
