@@ -273,14 +273,14 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                           }
                         },
                   child: Text(
-                    submitting ? 'Starting…' : 'Pay to Add Funds',
+                    submitting ? 'Starting…' : 'Recharge',
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                   ),
                 ),
               ),
               children: [
                 const Text(
-                  'Add Funds',
+                  'Recharge',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
                 ),
                 const SizedBox(height: 6),
@@ -428,76 +428,39 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                   _money.format(wallet?.availableBalance ?? 0),
                   style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900),
                 ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    // Flexible so a long pending figure never squeezes out the
-                    // withdraw button on narrow phones.
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Pending: ${_money.format(wallet?.pendingBalance ?? 0)}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _WithdrawButton(onTap: _openWithdraw),
-                  ],
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Pending: ${_money.format(wallet?.pendingBalance ?? 0)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _WalletActionPair(
+                  onWithdraw: _openWithdraw,
+                  onRecharge: paystackConfigured ? _paystackTopUp : null,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
+          if (!paystackConfigured) ...[
+            const SizedBox(height: 10),
+            const Text(
+              'Online recharge requires Paystack to be configured on the server.',
+              style: TextStyle(color: Color(0xFFB45309), fontSize: 12),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text('Add Funds', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                const SizedBox(height: 4),
-                const Text(
-                  'Top up via Paystack (MoMo or card).',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: paystackConfigured ? const Color(0xFF16A34A) : Colors.grey,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: paystackConfigured ? _paystackTopUp : null,
-                    child: Text(paystackConfigured ? 'Pay to Add Funds' : 'Top-up unavailable'),
-                  ),
-                ),
-                if (!paystackConfigured) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Online top-up requires Paystack to be configured on the server.',
-                    style: TextStyle(color: Color(0xFFB45309), fontSize: 12),
-                  ),
-                ],
-                if (enabled) ...[
-                  const SizedBox(height: 12),
-                  _ManualDepositPrompt(onTap: _openManualDeposit),
-                ],
-              ],
-            ),
-          ),
+          ],
+          if (enabled) ...[
+            const SizedBox(height: 14),
+            _ManualDepositPrompt(onTap: _openManualDeposit),
+          ],
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(16),
@@ -719,38 +682,66 @@ class _BalanceCell extends StatelessWidget {
   }
 }
 
-/// Links the wallet to the manual deposit page, matching the web prompt card.
-/// Sits on the balance card so cashing out is one tap from the wallet.
-class _WithdrawButton extends StatelessWidget {
-  const _WithdrawButton({required this.onTap});
+/// Side-by-side Withdrawal | Recharge actions on the balance card.
+class _WalletActionPair extends StatelessWidget {
+  const _WalletActionPair({
+    required this.onWithdraw,
+    required this.onRecharge,
+  });
 
-  final VoidCallback onTap;
+  final VoidCallback onWithdraw;
+  final VoidCallback? onRecharge;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          child: Row(
-            children: [
-              Icon(Icons.arrow_outward_rounded, size: 17, color: AppColors.accent),
-              SizedBox(width: 6),
-              Text(
-                'Withdraw',
-                style: TextStyle(
-                  color: AppColors.accent,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(28)),
+                onTap: onWithdraw,
+                child: const Center(
+                  child: Text(
+                    'Withdrawal',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+          Expanded(
+            child: Material(
+              color: onRecharge == null ? Colors.grey.shade400 : AppColors.primary,
+              borderRadius: const BorderRadius.horizontal(right: Radius.circular(28)),
+              child: InkWell(
+                borderRadius: const BorderRadius.horizontal(right: Radius.circular(28)),
+                onTap: onRecharge,
+                child: Center(
+                  child: Text(
+                    onRecharge == null ? 'Unavailable' : 'Recharge',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

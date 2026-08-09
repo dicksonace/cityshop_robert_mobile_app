@@ -186,11 +186,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Withdraw'), findsOneWidget);
-    // It belongs on the balance card, above the Add Funds block.
+    expect(find.text('Withdrawal'), findsOneWidget);
+    expect(find.text('Recharge'), findsOneWidget);
+    // Both actions sit on the balance card, above transaction history.
     expect(
-      tester.getCenter(find.text('Withdraw')).dy,
-      lessThan(tester.getCenter(find.text('Add Funds')).dy),
+      tester.getCenter(find.text('Withdrawal')).dy,
+      lessThan(tester.getCenter(find.text('Transaction History')).dy),
     );
   });
 
