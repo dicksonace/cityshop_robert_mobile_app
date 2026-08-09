@@ -368,12 +368,79 @@ class ChatCallService extends ChangeNotifier {
   RTCSessionDescription? _sdpFromMeta(dynamic raw) {
     final sdp = _asStringKeyedMap(raw);
     if (sdp == null) return null;
-    final description = sdp['sdp']?.toString();
-    final type = sdp['type']?.toString();
-    if (description == null || description.isEmpty || type == null || type.isEmpty) {
-      return null;
+    var description = sdp['sdp']?.toString() ?? '';
+    var type = (sdp['type']?.toString() ?? '').trim().toLowerCase();
+    // Some peers double-escape newlines when the offer rides JSON → MySQL → JSON.
+    if (description.contains(r'\n') && !description.contains('\n')) {
+      description = description.replaceAll(r'\n', '\n');
     }
+    description = description.replaceAll('\r\n', '\n').trim();
+    if (description.isEmpty || type.isEmpty) return null;
+    if (type != 'offer' && type != 'answer' && type != 'pranswer') return null;
+    if (!description.contains('v=0')) return null;
     return RTCSessionDescription(description, type);
+  }
+
+  bool _sdpHasVideo(String? sdp) {
+    if (sdp == null || sdp.isEmpty) return false;
+    return RegExp(r'^m=video\s', multiLine: true).hasMatch(sdp);
+  }
+
+  /// After setRemoteDescription(offer), reuse the offer's transceivers instead of
+  /// always addTrack (which creates extra m-lines and makes createAnswer fail —
+  /// the source of "Call signal was invalid").
+  Future<void> _attachLocalTracksForAnswer(
+    RTCPeerConnection pc,
+    MediaStream stream,
+  ) async {
+    final localTracks = _orderedTracks(stream);
+    List<RTCRtpTransceiver> transceivers = const [];
+    try {
+      transceivers = await pc.getTransceivers();
+    } catch (_) {}
+
+    final used = <RTCRtpTransceiver>{};
+    for (final track in localTracks) {
+      RTCRtpTransceiver? slot;
+      for (final t in transceivers) {
+        if (used.contains(t)) continue;
+        if (t.sender.track != null) continue;
+        final receiverKind = t.receiver.track?.kind;
+        if (receiverKind == track.kind) {
+          slot = t;
+          break;
+        }
+      }
+      if (slot == null) {
+        for (final t in transceivers) {
+          if (used.contains(t) || t.sender.track != null) continue;
+          final mid = t.mid.toLowerCase();
+          if (track.kind == 'audio' && (mid == '0' || mid == 'audio')) {
+            slot = t;
+            break;
+          }
+          if (track.kind == 'video' && (mid == '1' || mid == 'video')) {
+            slot = t;
+            break;
+          }
+        }
+      }
+
+      if (slot != null) {
+        used.add(slot);
+        try {
+          await slot.sender.replaceTrack(track);
+        } catch (_) {
+          await pc.addTrack(track, stream);
+          continue;
+        }
+        try {
+          await slot.setDirection(TransceiverDirection.SendRecv);
+        } catch (_) {}
+      } else {
+        await pc.addTrack(track, stream);
+      }
+    }
   }
 
   Future<void> startCall(ChatCallKind callKind) async {
@@ -436,7 +503,9 @@ class ChatCallService extends ChangeNotifier {
         'call_offer',
         body: callKind == ChatCallKind.video ? 'Video call' : 'Voice call',
         metadata: {
-          'sdp': {'type': offer.type, 'sdp': offer.sdp},
+          // Always send lowercase type — some Android WebRTC builds reject "Offer".
+          'sdp': {'type': 'offer', 'sdp': offer.sdp},
+          'call_kind': callKind == ChatCallKind.video ? 'video' : 'voice',
         },
       );
       if (_alive(session) && state == ChatCallState.calling) {
@@ -478,7 +547,7 @@ class ChatCallService extends ChangeNotifier {
   Future<void> acceptCall() async {
     if (_disposed) return;
     final offer = _pendingOffer;
-    if (offer == null) {
+    if (offer == null || (offer.sdp ?? '').isEmpty) {
       throw StateError('That call is no longer available. Ask them to call again.');
     }
     if (_offerExpired) {
@@ -488,10 +557,17 @@ class ChatCallService extends ChangeNotifier {
       throw StateError('That call has expired. Ask them to call again.');
     }
 
+    // Match media to the offer's m-lines (not just call_kind). Opening a camera
+    // for an audio-only offer creates an extra video m-line and WebRTC rejects
+    // the answer as an "invalid" signal.
+    final offerNeedsVideo = _sdpHasVideo(offer.sdp);
+    final mediaKind = offerNeedsVideo ? ChatCallKind.video : ChatCallKind.voice;
+    kind = mediaKind;
+
     final session = _session;
-    if (!await _ensurePermissions(kind)) {
+    if (!await _ensurePermissions(mediaKind)) {
       throw StateError(
-        kind == ChatCallKind.video
+        mediaKind == ChatCallKind.video
             ? 'Camera and microphone permission required'
             : 'Microphone permission required',
       );
@@ -507,23 +583,15 @@ class ChatCallService extends ChangeNotifier {
         throw StateError('Caller hung up before you could join.');
       }
 
-      if (kind == ChatCallKind.video) {
+      if (mediaKind == ChatCallKind.video) {
         await _ensureVideoRenderers(session);
         if (!_alive(session)) {
           throw StateError('Caller hung up before you could join.');
         }
       }
 
-      final stream = await _openLocalMedia(kind);
-      if (!_alive(session) || _pendingOffer == null) {
-        await _stopTracks(stream);
-        throw StateError('Caller hung up before you could join.');
-      }
-      _localStream = stream;
-      if (kind == ChatCallKind.video) {
-        localRenderer?.srcObject = _localStream;
-      }
-
+      // Build the peer first and apply the offer before getUserMedia so a bad
+      // SDP fails fast with a clear error (instead of after the mic prompt).
       final pc = await _createPeer(session);
       if (!_alive(session) || _pendingOffer == null) {
         try {
@@ -533,34 +601,53 @@ class ChatCallService extends ChangeNotifier {
         throw StateError('Caller hung up before you could join.');
       }
       _pc = pc;
-      // The offer must be applied BEFORE our own tracks. Adding tracks first
-      // creates transceivers in our local order, and if that order differs from
-      // the caller's m-lines WebRTC rejects the offer outright — which is what
-      // produced "Call signal was invalid. Ask them to call again."
-      await _pc!.setRemoteDescription(offer);
-      for (final track in _orderedTracks(_localStream!)) {
-        await _pc!.addTrack(track, _localStream!);
+
+      try {
+        await _pc!.setRemoteDescription(
+          RTCSessionDescription(offer.sdp, 'offer'),
+        );
+      } catch (e) {
+        debugPrint('CALL_ACCEPT setRemoteDescription failed: $e');
+        rethrow;
       }
-      await _flushPendingIce();
+
+      final stream = await _openLocalMedia(mediaKind);
+      if (!_alive(session) || _pendingOffer == null) {
+        await _stopTracks(stream);
+        throw StateError('Caller hung up before you could join.');
+      }
+      _localStream = stream;
+      if (mediaKind == ChatCallKind.video) {
+        localRenderer?.srcObject = _localStream;
+      }
+
+      await _attachLocalTracksForAnswer(_pc!, _localStream!);
+
       final answer = await _pc!.createAnswer();
       await _pc!.setLocalDescription(answer);
+      // ICE after local description — applying early can break answer setup.
+      await _flushPendingIce();
       if (!_alive(session)) {
         throw StateError('Caller hung up before you could join.');
       }
       await _sendSignal(
         'call_answer',
         metadata: {
-          'sdp': {'type': answer.type, 'sdp': answer.sdp},
+          'sdp': {'type': 'answer', 'sdp': answer.sdp},
+          'call_kind': mediaKind == ChatCallKind.video ? 'video' : 'voice',
         },
       );
       if (!_alive(session)) return;
       _pendingOffer = null;
       _pendingOfferReceivedAt = null;
       _pendingOfferCreatedAt = null;
+      _ringExpireTimer?.cancel();
+      _ringExpireTimer = null;
       _startedAt = DateTime.now();
       state = ChatCallState.active;
       notifyListeners();
     } catch (e) {
+      debugPrint('CALL_ACCEPT failed: $e');
       if (!_alive(session)) {
         if (e is StateError) rethrow;
         return;
@@ -705,10 +792,21 @@ class ChatCallService extends ChangeNotifier {
       if (state == ChatCallState.active || state == ChatCallState.calling) return;
 
       final offer = _sdpFromMeta(meta['sdp']);
-      if (offer == null) return;
+      if (offer == null) {
+        debugPrint('CALL_OFFER ignored — could not parse SDP metadata');
+        return;
+      }
+
+      // Same live offer redelivered via poll/WS — keep ICE, don't reset the ring.
+      if (state == ChatCallState.incoming &&
+          _pendingOffer?.sdp == offer.sdp &&
+          _pendingOffer?.type == offer.type) {
+        return;
+      }
 
       await _ringtone.stop();
-      kind = meta['call_kind'] == 'video' ? ChatCallKind.video : ChatCallKind.voice;
+      final fromMeta = meta['call_kind'] == 'video';
+      kind = (_sdpHasVideo(offer.sdp) || fromMeta) ? ChatCallKind.video : ChatCallKind.voice;
       _callerId = msg.senderId;
       _callerName = peerName.isNotEmpty ? peerName : 'Caller';
       _pendingOffer = offer;
@@ -768,7 +866,9 @@ class ChatCallService extends ChangeNotifier {
       final answer = _sdpFromMeta(meta['sdp']);
       if (answer == null) return;
       await _ringtone.stop();
-      await _pc!.setRemoteDescription(answer);
+      await _pc!.setRemoteDescription(
+        RTCSessionDescription(answer.sdp, 'answer'),
+      );
       await _flushPendingIce();
       _startedAt = DateTime.now();
       state = ChatCallState.active;
