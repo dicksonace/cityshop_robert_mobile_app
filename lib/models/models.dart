@@ -715,6 +715,12 @@ class WithdrawalOverview {
     return tiers.last.fee;
   }
 
+  /// CityShop default when the API has not sent bank_tiers yet.
+  static const List<BankFeeTier> defaultBankTiers = [
+    BankFeeTier(min: 10, max: 1000, fee: 10),
+    BankFeeTier(min: 1001, max: 25000, fee: 20),
+  ];
+
   double feeFor(String payoutType, [double amount = 0]) {
     if (!feeEnabled) return 0;
     if (feeMode == 'percent') {
@@ -723,8 +729,9 @@ class WithdrawalOverview {
     if (feeAppliesTo == 'none') return 0;
     final type = payoutType == 'bank' ? 'bank' : 'momo';
     if (!(feeAppliesTo == 'all' || feeAppliesTo == type)) return 0;
-    if (type == 'bank' && bankTiers.isNotEmpty) {
-      return feeFromBankTiers(amount, bankTiers, feeAmount);
+    if (type == 'bank') {
+      final tiers = bankTiers.isNotEmpty ? bankTiers : defaultBankTiers;
+      return feeFromBankTiers(amount, tiers, feeAmount);
     }
     return feeAmount > 0 ? feeAmount : 0;
   }

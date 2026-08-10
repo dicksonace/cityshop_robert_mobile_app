@@ -367,5 +367,18 @@ void main() {
       expect(overview.feeFor('momo', 15000), 0);
       expect(overview.maxWithdrawable('bank'), 1020);
     });
+
+    test('uses default bank bands when API omits bank_tiers', () {
+      final overview = WithdrawalOverview.fromJson(_overview(fee: {
+        'enabled': true,
+        'amount': 10,
+        'applies_to': 'bank',
+        'mode': 'flat',
+        'percent': 0,
+      }));
+
+      expect(overview.feeFor('bank', 500), 10);
+      expect(overview.feeFor('bank', 5000), 20);
+    });
   });
 }
