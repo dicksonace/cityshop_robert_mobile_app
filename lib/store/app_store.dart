@@ -251,12 +251,14 @@ class AppStore extends ChangeNotifier {
   }
 
   /// Products similar to locally stored recent views (same categories).
+  /// Falls back to recommended shop picks when there are no recent views yet.
   Future<List<RecentViewMatch>> fetchMatchesForRecentViews() async {
     final ids = await RecentViews.getIds();
-    if (ids.isEmpty) return const [];
     final res = await _api.get(
       '/products/matches-for-recent-views',
-      query: {'ids': ids.join(',')},
+      query: {
+        if (ids.isNotEmpty) 'ids': ids.join(','),
+      },
     );
     final body = res.data;
     final list = body is Map ? body['products'] : null;
@@ -264,6 +266,7 @@ class AppStore extends ChangeNotifier {
     return list
         .whereType<Map>()
         .map((e) => RecentViewMatch.fromJson(Map<String, dynamic>.from(e)))
+        .where((e) => e.id > 0 && e.slug.isNotEmpty)
         .toList();
   }
 

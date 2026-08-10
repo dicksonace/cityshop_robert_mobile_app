@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +12,7 @@ import '../../api/api_client.dart';
 import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../services/push_notifications.dart';
+import '../../services/recent_views.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
@@ -951,6 +954,7 @@ class _MatchesForRecentViews extends StatefulWidget {
 class _MatchesForRecentViewsState extends State<_MatchesForRecentViews> {
   List<RecentViewMatch> _products = const [];
   bool _loaded = false;
+  bool _loading = false;
 
   @override
   void initState() {
@@ -958,7 +962,18 @@ class _MatchesForRecentViewsState extends State<_MatchesForRecentViews> {
     _load();
   }
 
+  @override
+  void didUpdateWidget(covariant _MatchesForRecentViews oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Parent bumps ValueKey(_matchesTick) on refresh / tab revisit.
+    if (oldWidget.key != widget.key) {
+      _load();
+    }
+  }
+
   Future<void> _load() async {
+    if (_loading) return;
+    _loading = true;
     try {
       final items = await context.read<AppStore>().fetchMatchesForRecentViews();
       if (!mounted) return;
@@ -969,15 +984,23 @@ class _MatchesForRecentViewsState extends State<_MatchesForRecentViews> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _products = const [];
+        // Keep prior products if a refresh fails so the strip does not vanish.
         _loaded = true;
       });
+    } finally {
+      _loading = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_loaded || _products.isEmpty) return const SizedBox.shrink();
+    if (!_loaded) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+        child: SizedBox(height: 168),
+      );
+    }
+    if (_products.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -1021,7 +1044,12 @@ class _MatchesForRecentViewsState extends State<_MatchesForRecentViews> {
                   final sellers = item.sellersInCategory < 1 ? 1 : item.sellersInCategory;
                   final image = ApiConfig.resolveMediaUrl(item.imageUrl);
                   return InkWell(
-                    onTap: () => context.push('/products/${item.slug}'),
+                    onTap: () {
+                      unawaited(
+                        RecentViews.record(id: item.id, categoryId: item.categoryId),
+                      );
+                      context.push('/products/${item.slug}');
+                    },
                     borderRadius: BorderRadius.circular(12),
                     child: SizedBox(
                       width: 110,
@@ -1095,7 +1123,10 @@ class ProductCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       elevation: 0,
       child: InkWell(
-        onTap: () => context.push('/products/${product.slug}'),
+        onTap: () {
+          unawaited(context.read<AppStore>().recordProductView(product));
+          context.push('/products/${product.slug}');
+        },
         child: Container(
           decoration: BoxDecoration(
             border: Border.all(color: AppColors.border),

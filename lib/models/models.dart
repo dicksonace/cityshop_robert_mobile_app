@@ -51,6 +51,7 @@ class RecentViewMatch {
     required this.price,
     this.discountPrice,
     this.imageUrl,
+    this.categoryId,
     this.sellersInCategory = 1,
   });
 
@@ -60,6 +61,7 @@ class RecentViewMatch {
   final double price;
   final double? discountPrice;
   final String? imageUrl;
+  final int? categoryId;
   final int sellersInCategory;
 
   double get fromPrice => discountPrice ?? price;
@@ -75,6 +77,7 @@ class RecentViewMatch {
       price: effective ?? discount ?? price,
       discountPrice: discount,
       imageUrl: json['image_url'] as String?,
+      categoryId: (json['category_id'] as num?)?.toInt(),
       sellersInCategory: (json['sellers_in_category'] as num?)?.toInt() ?? 1,
     );
   }
