@@ -1110,6 +1110,70 @@ class AppStore extends ChangeNotifier {
     return (conversation: conversation, messages: messages);
   }
 
+  Future<ConversationModel> addGroupMembers(int conversationId, List<int> memberIds) async {
+    final res = await _api.post('/messages/$conversationId/members', data: {
+      'member_ids': memberIds,
+    });
+    final convJson = res.data['conversation'];
+    final conversation = ConversationModel.fromJson(Map<String, dynamic>.from(convJson as Map));
+    _upsertConversation(conversation);
+    notifyListeners();
+    return conversation;
+  }
+
+  Future<void> leaveGroup(int conversationId) async {
+    await _api.post('/messages/$conversationId/leave');
+    conversations = conversations.where((c) => c.id != conversationId).toList();
+    notifyListeners();
+  }
+
+  Future<ConversationModel> removeGroupMember(int conversationId, int userId) async {
+    final res = await _api.delete('/messages/$conversationId/members/$userId');
+    if (res.data is Map && res.data['conversation'] is Map) {
+      final conversation = ConversationModel.fromJson(
+        Map<String, dynamic>.from(res.data['conversation'] as Map),
+      );
+      _upsertConversation(conversation);
+      notifyListeners();
+      return conversation;
+    }
+    await loadConversations();
+    return conversations.firstWhere((c) => c.id == conversationId);
+  }
+
+  Future<ConversationModel> uploadGroupAvatar(
+    int conversationId,
+    String filePath, {
+    String? filename,
+    String? contentType,
+  }) async {
+    final name = (filename != null && filename.trim().isNotEmpty)
+        ? filename.trim()
+        : filePath.split(RegExp(r'[\\/]')).last;
+    final res = await _api.postMultipart(
+      '/messages/$conversationId/avatar',
+      fields: const {},
+      fileField: 'avatar',
+      filePath: filePath,
+      filename: name.isEmpty ? 'group.jpg' : name,
+      contentType: contentType,
+    );
+    final convJson = res.data is Map ? res.data['conversation'] : null;
+    final conversation = ConversationModel.fromJson(Map<String, dynamic>.from(convJson as Map));
+    _upsertConversation(conversation);
+    notifyListeners();
+    return conversation;
+  }
+
+  void _upsertConversation(ConversationModel conversation) {
+    final idx = conversations.indexWhere((c) => c.id == conversation.id);
+    if (idx >= 0) {
+      conversations = [...conversations]..[idx] = conversation;
+    } else {
+      conversations = [conversation, ...conversations];
+    }
+  }
+
   Future<ChatMessage> sendTransferMessage(
     int conversationId, {
     required double amount,

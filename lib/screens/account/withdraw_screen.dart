@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
+import '../../api/api_config.dart';
 import '../../data/ghana_banks.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
@@ -66,11 +68,12 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
         overview = data;
         loading = false;
       });
-      // Only seed the fields once, so a reload never overwrites typing.
+      // Only seed MoMo number once. Account name stays blank — user must enter
+      // the name registered on MoMo/bank (never prefill fee/minimum leftovers).
       if (!_prefilled) {
         _prefilled = true;
         numberCtrl.text = data.defaultMomoNumber ?? '';
-        nameCtrl.text = data.defaultAccountName ?? '';
+        nameCtrl.text = '';
       }
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -103,6 +106,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       network = type == 'bank' ? (ghanaBanks.isNotEmpty ? ghanaBanks.first.id : 'gcb') : 'mtn';
       // Don't carry a MoMo phone into the bank account field (or the reverse).
       numberCtrl.text = type == 'momo' ? (overview.defaultMomoNumber ?? '') : '';
+      nameCtrl.text = '';
     });
   }
 
@@ -128,6 +132,10 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     }
     if (name.isEmpty) {
       _toast(_isBank ? 'Enter the name on the bank account' : 'Enter the name on the MoMo account');
+      return;
+    }
+    if (RegExp(r'^\d+([.,]\d+)?$').hasMatch(name)) {
+      _toast('Account name must be the name on the account, not a number');
       return;
     }
     if (amount == null || amount < overview.minimum) {
@@ -449,6 +457,9 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                       if (overview.feeMode == 'percent' && overview.feePercent > 0) {
                         return '$base · ${overview.feePercent.toStringAsFixed(overview.feePercent % 1 == 0 ? 0 : 2)}% fee';
                       }
+                      if (_isBank && overview.bankTiers.isNotEmpty && typed <= 0) {
+                        return '$base · Bank fee by amount (GH₵10–1,000 → GH₵10 · GH₵10k–25k → GH₵20)';
+                      }
                       if (fee <= 0) return base;
                       return '$base · ${_isBank ? 'Bank' : 'MoMo'} fee ${_money.format(fee)}';
                     }(),
@@ -478,7 +489,10 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
             const Text('Withdrawal requests', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
             const SizedBox(height: 8),
             for (final item in overview.items) ...[
-              _WithdrawalRow(item: item),
+              _WithdrawalRow(
+                item: item,
+                onTap: () => _showWithdrawalDetails(context, item),
+              ),
               const SizedBox(height: 8),
             ],
           ],
@@ -738,9 +752,10 @@ class _NetworkTile extends StatelessWidget {
 }
 
 class _WithdrawalRow extends StatelessWidget {
-  const _WithdrawalRow({required this.item});
+  const _WithdrawalRow({required this.item, required this.onTap});
 
   final WithdrawalItem item;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -753,70 +768,336 @@ class _WithdrawalRow extends StatelessWidget {
     final stamp = DateTime.tryParse(item.processedAt ?? item.createdAt ?? '')?.toLocal();
     final isBank = item.payoutType == 'bank' || isGhanaBank(item.network);
 
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _PayoutMark(network: item.network, isBank: isBank),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: fill,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                item.statusLabel,
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: ink),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                item.momoNumber,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          stamp == null ? item.networkLabel : '${item.networkLabel} · ${_stamp.format(stamp)}',
+                          style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _money.format(item.amount),
+                        style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.accent),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'View details',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.accent),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 2),
+                  const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 20),
+                ],
+              ),
+              if ((item.rejectionReason ?? item.failureReason ?? '').isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  (item.rejectionReason ?? item.failureReason)!,
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFB91C1C), height: 1.3),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _showWithdrawalDetails(BuildContext context, WithdrawalItem item) {
+  final (fill, ink) = switch (item.status) {
+    'paid' => (const Color(0xFFECFDF5), const Color(0xFF047857)),
+    'rejected' => (const Color(0xFFFEF2F2), const Color(0xFFB91C1C)),
+    'processing' => (const Color(0xFFEFF6FF), const Color(0xFF1D4ED8)),
+    _ => (const Color(0xFFFFFBEB), const Color(0xFFB45309)),
+  };
+  final requested = DateTime.tryParse(item.createdAt ?? '')?.toLocal();
+  final processed = DateTime.tryParse(item.processedAt ?? '')?.toLocal();
+  final isBank = item.payoutType == 'bank' || isGhanaBank(item.network);
+  final accountLabel = isBank ? 'Account number' : 'MoMo number';
+  final channel = (item.payoutChannelLabel ?? '').trim().isNotEmpty
+      ? item.payoutChannelLabel!
+      : (isBank ? 'Bank transfer' : 'Mobile Money');
+  final reference = (item.reference ?? '').trim().isNotEmpty ? item.reference! : 'WD-${item.id}';
+  final proof = ApiConfig.resolveMediaUrl(item.proofUrl);
+
+  return showAppSheet(
+    context: context,
+    builder: (ctx) => SheetShell(
+      action: FilledButton(
+        onPressed: () => Navigator.pop(ctx),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.accent,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+        child: const Text('Close', style: TextStyle(fontWeight: FontWeight.w800)),
+      ),
+      children: [
+        Row(
+          children: [
+            _PayoutMark(network: item.network, isBank: isBank),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Withdrawal details',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: fill,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      item.statusLabel,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1E293B), Color(0xFF9A3412)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _money.format(item.amount),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 28,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${item.networkLabel} · ${item.momoNumber}',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontSize: 13),
+              ),
+              if (item.accountName.trim().isNotEmpty)
+                Text(
+                  item.accountName,
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 12),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _DetailTile(label: 'Reference', value: reference),
+        _DetailTile(label: 'Payout to', value: '$accountLabel · ${item.momoNumber}'),
+        _DetailTile(label: 'Account name', value: item.accountName.trim().isEmpty ? '—' : item.accountName),
+        _DetailTile(label: 'Network / bank', value: item.networkLabel),
+        _DetailTile(label: 'Payout channel', value: channel),
+        _DetailTile(label: 'Amount', value: _money.format(item.amount)),
+        if (item.fee > 0) _DetailTile(label: 'Fee', value: _money.format(item.fee)),
+        if (item.fee > 0) _DetailTile(label: 'Total debited', value: _money.format(item.debited)),
+        _DetailTile(
+          label: 'Requested',
+          value: requested == null ? '—' : _stamp.format(requested),
+        ),
+        _DetailTile(
+          label: 'Processed',
+          value: processed == null ? '—' : _stamp.format(processed),
+        ),
+        if ((item.adminNotes ?? '').trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _NoteBox(
+            title: 'Admin note',
+            body: item.adminNotes!.trim(),
+            color: const Color(0xFFECFDF5),
+            border: const Color(0xFFA7F3D0),
+            ink: const Color(0xFF065F46),
+          ),
+        ],
+        if ((item.rejectionReason ?? '').trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _NoteBox(
+            title: 'Rejection reason',
+            body: item.rejectionReason!.trim(),
+            color: const Color(0xFFFEF2F2),
+            border: const Color(0xFFFECACA),
+            ink: const Color(0xFF991B1B),
+          ),
+        ],
+        if ((item.failureReason ?? '').trim().isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _NoteBox(
+            title: 'Failure reason',
+            body: item.failureReason!.trim(),
+            color: const Color(0xFFFFFBEB),
+            border: const Color(0xFFFDE68A),
+            ink: const Color(0xFF92400E),
+          ),
+        ],
+        if (proof.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final uri = Uri.tryParse(proof);
+              if (uri == null) return;
+              final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+              if (!ok && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not open payout proof')),
+                );
+              }
+            },
+            icon: const Icon(Icons.download_rounded),
+            label: const Text('View / download payout proof'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.accent,
+              side: const BorderSide(color: Color(0xFFFDBA74)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+class _DetailTile extends StatelessWidget {
+  const _DetailTile({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+                color: AppColors.textMuted,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, height: 1.3),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoteBox extends StatelessWidget {
+  const _NoteBox({
+    required this.title,
+    required this.body,
+    required this.color,
+    required this.border,
+    required this.ink,
+  });
+
+  final String title;
+  final String body;
+  final Color color;
+  final Color border;
+  final Color ink;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        color: color,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _PayoutMark(network: item.network, isBank: isBank),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: fill,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            item.statusLabel,
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: ink),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            item.momoNumber,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      stamp == null ? item.networkLabel : '${item.networkLabel} · ${_stamp.format(stamp)}',
-                      style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _money.format(item.amount),
-                style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.accent),
-              ),
-            ],
-          ),
-          if ((item.rejectionReason ?? '').isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              item.rejectionReason!,
-              style: const TextStyle(fontSize: 12, color: Color(0xFFB91C1C), height: 1.3),
-            ),
-          ],
+          Text(title, style: TextStyle(fontWeight: FontWeight.w800, color: ink, fontSize: 13)),
+          const SizedBox(height: 4),
+          Text(body, style: TextStyle(color: ink, height: 1.35, fontSize: 13)),
         ],
       ),
     );

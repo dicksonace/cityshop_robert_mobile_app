@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -395,7 +397,16 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              _ProofPicker(proof: proof, onTap: _pickProof),
+              const Text(
+                'Upload payment proof',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              _ProofDropZone(
+                proof: proof,
+                onTap: _pickProof,
+                onClear: proof == null ? null : () => setState(() => proof = null),
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: noteCtrl,
@@ -545,65 +556,133 @@ class _NetworkTile extends StatelessWidget {
   }
 }
 
-class _ProofPicker extends StatelessWidget {
-  const _ProofPicker({required this.proof, required this.onTap});
+class _ProofDropZone extends StatelessWidget {
+  const _ProofDropZone({
+    required this.proof,
+    required this.onTap,
+    this.onClear,
+  });
 
   final XFile? proof;
   final VoidCallback onTap;
+  final VoidCallback? onClear;
 
   @override
   Widget build(BuildContext context) {
     final picked = proof != null;
 
-    return Material(
-      color: picked ? const Color(0xFFECFDF5) : AppColors.ringOrange,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-          decoration: BoxDecoration(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: picked ? AppColors.emerald : const Color(0xFFFDBA74)),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                picked ? Icons.check_circle : Icons.add_photo_alternate_outlined,
-                color: picked ? AppColors.emerald : AppColors.primary,
+            child: CustomPaint(
+              painter: _UploadDashedPainter(
+                color: picked ? const Color(0xFF6EE7B7) : const Color(0xFFCBD5E1),
               ),
-              const SizedBox(width: 12),
-              Expanded(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+                decoration: BoxDecoration(
+                  color: picked ? const Color(0xFFECFDF5) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Icon(
+                      picked ? Icons.check_circle_outline : Icons.cloud_upload_outlined,
+                      size: 36,
+                      color: picked ? AppColors.emerald : AppColors.textMuted,
+                    ),
+                    const SizedBox(height: 10),
                     Text(
-                      picked ? 'Screenshot attached' : 'Screenshot / receipt *',
+                      picked ? proof!.name : 'Tap to upload payment screenshot',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
                         color: picked ? AppColors.emerald : AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      picked
-                          ? proof!.name
-                          : 'Upload a screenshot of your MoMo or bank payment confirmation',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'JPG, PNG, WEBP, GIF · max 5MB',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textMuted),
-            ],
+            ),
           ),
         ),
-      ),
+        if (picked && onClear != null) ...[
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onClear,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.danger,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Remove screenshot', style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
+          ),
+        ],
+        if (picked) ...[
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(
+              File(proof!.path),
+              height: 140,
+              width: double.infinity,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ],
+      ],
     );
   }
+}
+
+class _UploadDashedPainter extends CustomPainter {
+  const _UploadDashedPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(14)).deflate(0.75),
+      );
+
+    const dash = 6.0;
+    const gap = 4.0;
+    for (final metric in path.computeMetrics()) {
+      var start = 0.0;
+      while (start < metric.length) {
+        final end = (start + dash).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(start, end), paint);
+        start = end + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_UploadDashedPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class _RequestRow extends StatelessWidget {

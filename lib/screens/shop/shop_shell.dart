@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
 import '../../api/api_config.dart';
@@ -43,9 +44,42 @@ class _ShopShellState extends State<ShopShell> {
   }
 
   @override
+  void didUpdateWidget(covariant ShopShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTab != widget.initialTab) {
+      _tab = widget.initialTab;
+    }
+  }
+
+  @override
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  /// Bag logo: home for buyers; seller/admin centre; login for guests.
+  Future<void> _openBrandHome() async {
+    final user = context.read<AppStore>().user;
+    if (user == null) {
+      context.push('/login');
+      return;
+    }
+    final role = (user.role ?? '').toLowerCase();
+    if (role == 'seller' || role == 'admin') {
+      final base = ApiConfig.webBaseUrl.endsWith('/')
+          ? ApiConfig.webBaseUrl.substring(0, ApiConfig.webBaseUrl.length - 1)
+          : ApiConfig.webBaseUrl;
+      final path = role == 'admin' ? '/admin/dashboard' : '/seller/dashboard';
+      final uri = Uri.parse('$base$path');
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open $path')),
+        );
+      }
+      return;
+    }
+    setState(() => _tab = 0);
   }
 
   @override
@@ -59,7 +93,10 @@ class _ShopShellState extends State<ShopShell> {
           child: IndexedStack(
             index: _tab,
             children: [
-              _ShopHome(searchController: _search),
+              _ShopHome(
+                searchController: _search,
+                onOpenBrandHome: _openBrandHome,
+              ),
               const WalletTab(),
               OrdersTab(
                 onOpenWallet: () => setState(() => _tab = 1),
@@ -135,9 +172,13 @@ class _ShopShellState extends State<ShopShell> {
 }
 
 class _ShopHome extends StatefulWidget {
-  const _ShopHome({required this.searchController});
+  const _ShopHome({
+    required this.searchController,
+    required this.onOpenBrandHome,
+  });
 
   final TextEditingController searchController;
+  final Future<void> Function() onOpenBrandHome;
 
   @override
   State<_ShopHome> createState() => _ShopHomeState();
@@ -256,7 +297,7 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
 
     return Column(
       children: [
-        _TopBar(user: store.user),
+        _TopBar(user: store.user, onOpenBrandHome: widget.onOpenBrandHome),
         Expanded(
           child: RefreshIndicator(
             color: AppColors.accent,
@@ -514,8 +555,9 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({this.user});
+  const _TopBar({this.user, required this.onOpenBrandHome});
   final AppUser? user;
+  final Future<void> Function() onOpenBrandHome;
 
   @override
   Widget build(BuildContext context) {
@@ -524,7 +566,23 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
       child: Row(
         children: [
-          const BrandMark(height: 32),
+          Tooltip(
+            message: user == null
+                ? 'Sign in'
+                : (user!.role == 'seller'
+                    ? 'Seller Centre'
+                    : user!.role == 'admin'
+                        ? 'Admin Dashboard'
+                        : 'Home'),
+            child: InkWell(
+              onTap: () => onOpenBrandHome(),
+              borderRadius: BorderRadius.circular(10),
+              child: const Padding(
+                padding: EdgeInsets.all(2),
+                child: BrandMark(height: 32),
+              ),
+            ),
+          ),
           Expanded(
             child: Center(
               child: TextButton.icon(
@@ -1280,7 +1338,12 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
       );
     }
 
+    final role = (user.role ?? '').toLowerCase();
     final links = <(IconData, String, String, String)>[
+      if (role == 'seller')
+        (Icons.dashboard_outlined, 'Seller Centre', 'Open your seller dashboard', '__seller_dashboard__'),
+      if (role == 'admin')
+        (Icons.admin_panel_settings_outlined, 'Admin Dashboard', 'Open admin centre', '__admin_dashboard__'),
       (Icons.notifications_outlined, 'Notifications', 'Orders, messages & updates', '/notifications'),
       (Icons.notifications_active_outlined, 'Allow phone alerts', 'Turn on popup notifications', '__enable_push__'),
       (Icons.person_outline, 'Profile settings', 'Photo & account details', '/profile/edit'),
@@ -1399,6 +1462,22 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
                           const SnackBar(
                             content: Text('Allow notifications in phone settings to get popups'),
                           ),
+                        );
+                      }
+                      return;
+                    }
+                    if (item.$4 == '__seller_dashboard__' || item.$4 == '__admin_dashboard__') {
+                      final base = ApiConfig.webBaseUrl.endsWith('/')
+                          ? ApiConfig.webBaseUrl.substring(0, ApiConfig.webBaseUrl.length - 1)
+                          : ApiConfig.webBaseUrl;
+                      final path = item.$4 == '__admin_dashboard__'
+                          ? '/admin/dashboard'
+                          : '/seller/dashboard';
+                      final uri = Uri.parse('$base$path');
+                      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      if (!ok && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Could not open $path')),
                         );
                       }
                       return;

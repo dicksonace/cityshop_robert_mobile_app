@@ -38,7 +38,7 @@ class ChatCallService extends ChangeNotifier {
   final void Function(ChatMessage message)? onCallLog;
   final void Function(String message)? onCallError;
 
-  static const _ringTtl = Duration(seconds: 120);
+  static const _ringTtl = Duration(seconds: 45);
   static const _offerMaxAge = Duration(minutes: 3);
   static const _mediaTimeout = Duration(seconds: 6);
 
@@ -190,29 +190,36 @@ class ChatCallService extends ChangeNotifier {
     return DateTime.now().difference(clock) > _ringTtl;
   }
 
-  void _armRingExpire() {
+  void _armOutgoingRingExpire() {
     _ringExpireTimer?.cancel();
-    final clock = _offerClock;
-    if (clock == null) return;
-    final remaining = _ringTtl - DateTime.now().difference(clock);
-    if (remaining <= Duration.zero) {
-      unawaited(_expireIncomingRing());
-      return;
-    }
-    _ringExpireTimer = Timer(remaining, () {
-      unawaited(_expireIncomingRing());
+    _ringExpireTimer = Timer(_ringTtl, () {
+      unawaited(_expireUnansweredCall());
     });
   }
 
-  Future<void> _expireIncomingRing() async {
-    if (_disposed || state != ChatCallState.incoming) return;
-    _session++;
-    _pendingOffer = null;
-    _pendingOfferReceivedAt = null;
-    _pendingOfferCreatedAt = null;
-    await _dismissUi();
-    unawaited(_tearDownMedia());
-    onCallError?.call('Missed call — the ring timed out. Ask them to call again.');
+  void _armIncomingRingExpire() {
+    _ringExpireTimer?.cancel();
+    final clock = _offerClock;
+    if (clock == null) {
+      _armOutgoingRingExpire();
+      return;
+    }
+    final remaining = _ringTtl - DateTime.now().difference(clock);
+    if (remaining <= Duration.zero) {
+      unawaited(_expireUnansweredCall());
+      return;
+    }
+    _ringExpireTimer = Timer(remaining, () {
+      unawaited(_expireUnansweredCall());
+    });
+  }
+
+  /// No answer: stop ringing on BOTH sides and write a missed / no-answer log.
+  Future<void> _expireUnansweredCall() async {
+    if (_disposed) return;
+    if (state != ChatCallState.incoming && state != ChatCallState.calling) return;
+    await endCall(ChatCallEndReason.missed);
+    onCallError?.call('No answer. Try calling again.');
   }
 
   Future<bool> _ensurePermissions(ChatCallKind callKind) async {
@@ -403,7 +410,14 @@ class ChatCallService extends ChangeNotifier {
 
   bool _sdpHasVideo(String? sdp) {
     if (sdp == null || sdp.isEmpty) return false;
-    return RegExp(r'^m=video\s', multiLine: true).hasMatch(sdp);
+    for (final line in sdp.split('\n')) {
+      final trimmed = line.trimRight();
+      if (!trimmed.startsWith('m=video ')) continue;
+      // Port 0 = rejected / inactive m-line — treat as no video.
+      final parts = trimmed.split(RegExp(r'\s+'));
+      if (parts.length > 1 && parts[1] != '0') return true;
+    }
+    return false;
   }
 
   List<String> _mLineKinds(String? sdp) {
@@ -528,9 +542,19 @@ class ChatCallService extends ChangeNotifier {
         await _pc!.addTrack(track, _localStream!);
       }
 
-      final offer = await _pc!.createOffer();
+      final offer = await _pc!.createOffer({
+        'offerToReceiveAudio': 1,
+        // Critical: without this, many stacks add a recvonly video m-line to
+        // audio-only calls, so the callee opens a camera ("video call").
+        'offerToReceiveVideo': callKind == ChatCallKind.video ? 1 : 0,
+      });
       await _pc!.setLocalDescription(offer);
       if (!_alive(session) || state != ChatCallState.calling) return;
+
+      var offerSdp = offer.sdp ?? '';
+      if (callKind == ChatCallKind.voice && _sdpHasVideo(offerSdp)) {
+        debugPrint('CALL_OFFER: stripping unexpected video intent for voice call');
+      }
 
       await _sendSignal(
         'call_offer',
@@ -539,12 +563,13 @@ class ChatCallService extends ChangeNotifier {
           // Plain strings only — never send a platform RTCSessionDescription object.
           'sdp': {
             'type': 'offer',
-            'sdp': offer.sdp ?? '',
+            'sdp': offerSdp,
           },
           'call_kind': callKind == ChatCallKind.video ? 'video' : 'voice',
         },
       );
       if (_alive(session) && state == ChatCallState.calling) {
+        _armOutgoingRingExpire();
         unawaited(_ringtone.startOutgoing());
       }
     } catch (e) {
@@ -593,11 +618,11 @@ class ChatCallService extends ChangeNotifier {
       throw StateError('That call has expired. Ask them to call again.');
     }
 
-    // Match media to the offer's m-lines (not just call_kind). Opening a camera
-    // for an audio-only offer creates an extra video m-line and WebRTC rejects
-    // the answer as an "invalid" signal.
+    // Prefer the caller's declared kind. A leftover recvonly video m-line on a
+    // voice offer must not force the camera open ("click call → video call").
     final offerNeedsVideo = _sdpHasVideo(offer.sdp);
-    final mediaKind = offerNeedsVideo ? ChatCallKind.video : ChatCallKind.voice;
+    final mediaKind = kind == ChatCallKind.video ? ChatCallKind.video : ChatCallKind.voice;
+    final openCamera = mediaKind == ChatCallKind.video;
     kind = mediaKind;
 
     final session = _session;
@@ -619,7 +644,7 @@ class ChatCallService extends ChangeNotifier {
         throw StateError('Caller hung up before you could join.');
       }
 
-      if (mediaKind == ChatCallKind.video) {
+      if (openCamera) {
         await _ensureVideoRenderers(session);
         if (!_alive(session)) {
           throw StateError('Caller hung up before you could join.');
@@ -653,7 +678,7 @@ class ChatCallService extends ChangeNotifier {
         throw StateError('Caller hung up before you could join.');
       }
       _localStream = stream;
-      if (mediaKind == ChatCallKind.video) {
+      if (openCamera) {
         localRenderer?.srcObject = _localStream;
       }
 
@@ -863,8 +888,16 @@ class ChatCallService extends ChangeNotifier {
       }
 
       await _ringtone.stop();
-      final fromMeta = meta['call_kind'] == 'video';
-      kind = (_sdpHasVideo(offer.sdp) || fromMeta) ? ChatCallKind.video : ChatCallKind.voice;
+      // Prefer explicit call_kind from the offer. SDP alone can falsely look like
+      // video when a voice offer still carries a rejected video m-line.
+      final metaKind = meta['call_kind']?.toString().toLowerCase();
+      if (metaKind == 'voice') {
+        kind = ChatCallKind.voice;
+      } else if (metaKind == 'video') {
+        kind = ChatCallKind.video;
+      } else {
+        kind = _sdpHasVideo(offer.sdp) ? ChatCallKind.video : ChatCallKind.voice;
+      }
       _callerId = msg.senderId;
       _callerName = peerName.isNotEmpty ? peerName : 'Caller';
       _pendingOffer = offer;
@@ -880,7 +913,7 @@ class ChatCallService extends ChangeNotifier {
       _pendingRemoteIce.clear();
       state = ChatCallState.incoming;
       notifyListeners();
-      _armRingExpire();
+      _armIncomingRingExpire();
       unawaited(_ringtone.startIncoming());
       return;
     }
@@ -923,6 +956,8 @@ class ChatCallService extends ChangeNotifier {
     if (msg.type == 'call_answer') {
       final answer = _sdpFromMeta(meta['sdp']);
       if (answer == null) return;
+      _ringExpireTimer?.cancel();
+      _ringExpireTimer = null;
       await _ringtone.stop();
       await _pc!.setRemoteDescription(
         RTCSessionDescription(answer.sdp, 'answer'),

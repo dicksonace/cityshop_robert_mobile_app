@@ -14,6 +14,7 @@ Map<String, dynamic> _overview({
   double available = 1040,
   bool hasPending = false,
   List<Map<String, dynamic>> items = const [],
+  Map<String, dynamic>? fee,
 }) =>
     {
       'data': items,
@@ -25,6 +26,7 @@ Map<String, dynamic> _overview({
         'has_pending': hasPending,
         'default_momo_number': '0539790093',
         'default_account_name': 'Robert Asare',
+        if (fee != null) 'withdrawal_fee': fee,
       },
     };
 
@@ -156,6 +158,7 @@ Future<void> _tapButton(WidgetTester tester, String label) async {
 
 /// Fills the amount and opens the review sheet.
 Future<void> _requestAmount(WidgetTester tester, String amount) async {
+  await tester.enterText(find.widgetWithText(TextField, 'Account name'), 'Robert Asare');
   await tester.enterText(find.widgetWithText(TextField, 'Amount (GH₵)'), amount);
   await _tapButton(tester, 'Review withdrawal');
 }
@@ -201,7 +204,7 @@ void main() {
     expect(find.text('Available to withdraw'), findsOneWidget);
     expect(find.text('GH₵1,040.00'), findsOneWidget);
     expect(find.widgetWithText(TextField, '0539790093'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Robert Asare'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Robert Asare'), findsNothing);
     expect(find.textContaining('Minimum GH₵10.00'), findsOneWidget);
   });
 
@@ -249,6 +252,7 @@ void main() {
     final api = _FakeApiClient();
     await _pumpWithdraw(tester, api);
 
+    await tester.enterText(find.widgetWithText(TextField, 'Account name'), 'Robert Asare');
     await tester.enterText(find.widgetWithText(TextField, 'Amount (GH₵)'), '500');
     await _tapButton(tester, 'Review withdrawal');
 
@@ -342,6 +346,26 @@ void main() {
     test('blocks withdrawing only when the balance is short', () {
       expect(WithdrawalOverview.fromJson(_overview(hasPending: true)).canWithdraw, isTrue);
       expect(WithdrawalOverview.fromJson(_overview(available: 9.99)).canWithdraw, isFalse);
+    });
+
+    test('applies bank fee bands by amount', () {
+      final overview = WithdrawalOverview.fromJson(_overview(fee: {
+        'enabled': true,
+        'amount': 10,
+        'applies_to': 'bank',
+        'mode': 'flat',
+        'percent': 0,
+        'bank_tiers': [
+          {'min': 10, 'max': 1000, 'fee': 10},
+          {'min': 10000, 'max': 25000, 'fee': 20},
+        ],
+      }));
+
+      expect(overview.feeFor('bank', 500), 10);
+      expect(overview.feeFor('bank', 5000), 10);
+      expect(overview.feeFor('bank', 15000), 20);
+      expect(overview.feeFor('momo', 15000), 0);
+      expect(overview.maxWithdrawable('bank'), 1030);
     });
   });
 }

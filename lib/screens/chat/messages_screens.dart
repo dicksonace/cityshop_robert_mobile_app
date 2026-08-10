@@ -252,13 +252,12 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
           final c = store.conversations[index];
           return ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            leading: c.isGroup
-                ? CircleAvatar(
-                    radius: 24,
-                    backgroundColor: AppColors.accent.withValues(alpha: 0.15),
-                    child: const Icon(Icons.groups_rounded, color: AppColors.accent),
-                  )
-                : _ConversationAvatar(name: c.otherName, avatar: c.otherAvatar, radius: 24),
+            leading: _ConversationAvatar(
+              name: c.otherName,
+              avatar: c.otherAvatar,
+              radius: 24,
+              fallbackIcon: c.isGroup ? Icons.groups_rounded : null,
+            ),
             title: Text(c.otherName, style: const TextStyle(fontWeight: FontWeight.w800)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1017,7 +1016,9 @@ class _ChatScreenState extends State<ChatScreen> {
           peerId: c.otherId,
           storeSlug: c.storeSlug,
           isSeller: c.isSeller || (c.storeSlug ?? '').trim().isNotEmpty,
-          canComplain: c.canComplain || c.isSeller || (c.storeSlug ?? '').trim().isNotEmpty,
+          isGroup: c.isGroup,
+          canComplain: !c.isGroup &&
+              (c.canComplain || c.isSeller || (c.storeSlug ?? '').trim().isNotEmpty),
           sellerId: c.sellerId ?? (c.isSeller ? c.otherId : null),
           productId: c.productId,
         ),
@@ -2514,11 +2515,13 @@ class _ConversationAvatar extends StatelessWidget {
     required this.name,
     required this.avatar,
     required this.radius,
+    this.fallbackIcon,
   });
 
   final String name;
   final String? avatar;
   final double radius;
+  final IconData? fallbackIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -2529,14 +2532,16 @@ class _ConversationAvatar extends StatelessWidget {
       backgroundColor: AppColors.ringOrange,
       backgroundImage: url.isNotEmpty ? CachedNetworkImageProvider(url) : null,
       child: url.isEmpty
-          ? Text(
-              initial,
-              style: TextStyle(
-                color: AppColors.accent,
-                fontWeight: FontWeight.w800,
-                fontSize: radius * 0.75,
-              ),
-            )
+          ? (fallbackIcon != null
+              ? Icon(fallbackIcon, color: AppColors.accent, size: radius)
+              : Text(
+                  initial,
+                  style: TextStyle(
+                    color: AppColors.accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: radius * 0.75,
+                  ),
+                ))
           : null,
     );
   }

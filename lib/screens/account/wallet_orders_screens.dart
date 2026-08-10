@@ -1064,7 +1064,7 @@ class _OrdersTabState extends State<OrdersTab> with AutoRefreshTab {
     final status = (order.status ?? '').toLowerCase();
     final pay = (order.paymentStatus ?? '').toLowerCase();
     final method = (order.paymentMethod ?? '').toLowerCase();
-    if (status == 'cancelled') return 'Order closed';
+    if (status == 'cancelled') return 'Processing';
     if (order.directPaymentRejected) return 'Payment declined';
     if (pay == 'pending' && method != 'cash' && !order.directPaymentUnderReview) {
       return 'Awaiting payment';

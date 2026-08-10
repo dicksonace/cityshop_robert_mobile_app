@@ -581,21 +581,37 @@ class WithdrawalItem {
     required this.status,
     required this.statusLabel,
     this.payoutType = 'momo',
+    this.payoutChannel,
+    this.payoutChannelLabel,
+    this.fee = 0,
+    this.totalDebited,
+    this.reference,
     this.rejectionReason,
+    this.failureReason,
+    this.adminNotes,
+    this.proofUrl,
     this.createdAt,
     this.processedAt,
   });
 
   final int id;
   final double amount;
+  final double fee;
+  final double? totalDebited;
   final String momoNumber;
   final String accountName;
   final String network;
   final String networkLabel;
   final String payoutType;
+  final String? payoutChannel;
+  final String? payoutChannelLabel;
+  final String? reference;
   final String status;
   final String statusLabel;
   final String? rejectionReason;
+  final String? failureReason;
+  final String? adminNotes;
+  final String? proofUrl;
   final String? createdAt;
   final String? processedAt;
 
@@ -603,22 +619,41 @@ class WithdrawalItem {
   bool get isPaid => status == 'paid';
   bool get isRejected => status == 'rejected';
 
+  double get debited => totalDebited ?? (amount + fee);
+
   factory WithdrawalItem.fromJson(Map<String, dynamic> json) {
     return WithdrawalItem(
       id: (json['id'] as num?)?.toInt() ?? 0,
       amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      fee: (json['fee'] as num?)?.toDouble() ?? 0,
+      totalDebited: (json['total_debited'] as num?)?.toDouble(),
       momoNumber: json['momo_number'] as String? ?? '',
       accountName: json['account_name'] as String? ?? '',
       network: json['network'] as String? ?? '',
       networkLabel: json['network_label'] as String? ?? '',
       payoutType: json['payout_type'] as String? ?? 'momo',
+      payoutChannel: json['payout_channel'] as String?,
+      payoutChannelLabel: json['payout_channel_label'] as String?,
+      reference: json['reference'] as String?,
       status: json['status'] as String? ?? 'pending',
       statusLabel: json['status_label'] as String? ?? 'Processing',
       rejectionReason: json['rejection_reason'] as String?,
+      failureReason: json['failure_reason'] as String?,
+      adminNotes: json['admin_notes'] as String?,
+      proofUrl: json['proof_url'] as String?,
       createdAt: json['created_at'] as String?,
       processedAt: json['processed_at'] as String?,
     );
   }
+}
+
+/// One bank withdrawal fee band (amount range → fixed fee).
+class BankFeeTier {
+  const BankFeeTier({required this.min, this.max, required this.fee});
+
+  final double min;
+  final double? max;
+  final double fee;
 }
 
 /// Withdrawal history plus the limits the withdraw screen enforces.
@@ -637,6 +672,7 @@ class WithdrawalOverview {
     this.feeMode = 'flat',
     this.feePercent = 0,
     this.autoPaystack = false,
+    this.bankTiers = const [],
   });
 
   final List<WithdrawalItem> items;
@@ -652,18 +688,41 @@ class WithdrawalOverview {
   final String feeMode;
   final double feePercent;
   final bool autoPaystack;
+  final List<BankFeeTier> bankTiers;
 
   bool get canWithdraw => availableBalance >= minimum;
+
+  static double feeFromBankTiers(double amount, List<BankFeeTier> tiers, [double fallback = 0]) {
+    if (amount <= 0 || tiers.isEmpty) return fallback < 0 ? 0 : fallback;
+    for (final tier in tiers) {
+      final max = tier.max;
+      if (amount + 0.0001 >= tier.min && (max == null || amount <= max + 0.0001)) {
+        return tier.fee;
+      }
+    }
+    if (amount < tiers.first.min) return tiers.first.fee;
+    for (var i = 0; i < tiers.length - 1; i++) {
+      final currMax = tiers[i].max;
+      final nextMin = tiers[i + 1].min;
+      if (currMax != null && amount > currMax && amount < nextMin) {
+        return tiers[i].fee;
+      }
+    }
+    return tiers.last.fee;
+  }
 
   double feeFor(String payoutType, [double amount = 0]) {
     if (!feeEnabled) return 0;
     if (feeMode == 'percent') {
       return feePercent > 0 ? double.parse((amount * feePercent / 100).toStringAsFixed(2)) : 0;
     }
-    if (feeAppliesTo == 'none' || feeAmount <= 0) return 0;
+    if (feeAppliesTo == 'none') return 0;
     final type = payoutType == 'bank' ? 'bank' : 'momo';
-    if (feeAppliesTo == 'all' || feeAppliesTo == type) return feeAmount;
-    return 0;
+    if (!(feeAppliesTo == 'all' || feeAppliesTo == type)) return 0;
+    if (type == 'bank' && bankTiers.isNotEmpty) {
+      return feeFromBankTiers(amount, bankTiers, feeAmount);
+    }
+    return feeAmount > 0 ? feeAmount : 0;
   }
 
   double maxWithdrawable(String payoutType) {
@@ -671,7 +730,22 @@ class WithdrawalOverview {
       final max = availableBalance / (1 + feePercent / 100);
       return (max * 100).floorToDouble() / 100;
     }
-    return (availableBalance - feeFor(payoutType)).clamp(0, availableBalance);
+    var lo = 0.0;
+    var hi = availableBalance;
+    for (var i = 0; i < 48; i++) {
+      final mid = (lo + hi) / 2;
+      final fee = feeFor(payoutType, mid);
+      if (mid + fee <= availableBalance + 1e-9) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    var amount = double.parse(lo.toStringAsFixed(2));
+    if (amount + feeFor(payoutType, amount) > availableBalance + 1e-9) {
+      amount = double.parse((amount - 0.01).toStringAsFixed(2));
+    }
+    return amount.clamp(0, availableBalance);
   }
 
   factory WithdrawalOverview.fromJson(Map<String, dynamic> json) {
@@ -680,6 +754,17 @@ class WithdrawalOverview {
     final bankRows = summary['banks'];
     final feeRaw = summary['withdrawal_fee'];
     final fee = feeRaw is Map ? Map<String, dynamic>.from(feeRaw) : const <String, dynamic>{};
+    final tierRows = fee['bank_tiers'];
+    final bankTiers = tierRows is List
+        ? tierRows.whereType<Map>().map((row) {
+            final map = Map<String, dynamic>.from(row);
+            return BankFeeTier(
+              min: (map['min'] as num?)?.toDouble() ?? 0,
+              max: map['max'] == null ? null : (map['max'] as num?)?.toDouble(),
+              fee: (map['fee'] as num?)?.toDouble() ?? 0,
+            );
+          }).toList()
+        : const <BankFeeTier>[];
     return WithdrawalOverview(
       items: data is List
           ? data
@@ -707,6 +792,7 @@ class WithdrawalOverview {
       feeMode: fee['mode'] as String? ?? 'flat',
       feePercent: (fee['percent'] as num?)?.toDouble() ?? 0,
       autoPaystack: fee['auto_paystack'] == true,
+      bankTiers: bankTiers,
     );
   }
 }
@@ -954,6 +1040,35 @@ class OrderModel {
   }
 }
 
+class ChatParticipant {
+  const ChatParticipant({
+    required this.id,
+    required this.name,
+    this.mobile,
+    this.avatar,
+    this.online = false,
+    this.isCreator = false,
+  });
+
+  final int id;
+  final String name;
+  final String? mobile;
+  final String? avatar;
+  final bool online;
+  final bool isCreator;
+
+  factory ChatParticipant.fromJson(Map<String, dynamic> json) {
+    return ChatParticipant(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name'] as String? ?? 'User',
+      mobile: json['mobile'] as String?,
+      avatar: json['avatar'] as String?,
+      online: json['online'] == true,
+      isCreator: json['is_creator'] == true,
+    );
+  }
+}
+
 class ConversationModel {
   const ConversationModel({
     required this.id,
@@ -966,6 +1081,8 @@ class ConversationModel {
     this.isSeller = false,
     this.isGroup = false,
     this.memberCount = 0,
+    this.createdBy,
+    this.participants = const [],
     this.canComplain = false,
     this.sellerId,
     this.productId,
@@ -992,6 +1109,8 @@ class ConversationModel {
   final bool isSeller;
   final bool isGroup;
   final int memberCount;
+  final int? createdBy;
+  final List<ChatParticipant> participants;
   /// True when the current user is the buyer in this chat (can report the seller).
   final bool canComplain;
   final int? sellerId;
@@ -1059,6 +1178,16 @@ class ConversationModel {
     final other = json['other'];
     final product = json['product'];
     final latest = json['latest_message'];
+    final participantsJson = json['participants'];
+    final participants = participantsJson is List
+        ? participantsJson
+            .whereType<Map>()
+            .map((e) => ChatParticipant.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : <ChatParticipant>[];
+    final groupAvatar = json['avatar'] as String?;
+    final otherAvatar = groupAvatar ?? (other is Map ? other['avatar'] as String? : null);
+
     return ConversationModel(
       id: json['id'] as int,
       otherId: other is Map ? other['id'] as int? : null,
@@ -1069,7 +1198,7 @@ class ConversationModel {
           : (other is Map
               ? (other['store_name'] as String? ?? other['name'] as String? ?? 'User')
               : 'User'),
-      otherAvatar: other is Map ? other['avatar'] as String? : null,
+      otherAvatar: otherAvatar,
       storeName: other is Map ? other['store_name'] as String? : null,
       storeSlug: other is Map
           ? ((other['store_slug'] as String?)?.trim().isNotEmpty == true
@@ -1086,8 +1215,11 @@ class ConversationModel {
                   ((other['seller_profile'] as Map)['slug'] as String?)?.trim().isNotEmpty == true)),
       isGroup: json['is_group'] == true,
       memberCount: (json['member_count'] as num?)?.toInt() ??
+          (participants.isNotEmpty ? participants.length : null) ??
           (other is Map ? (other['member_count'] as num?)?.toInt() : null) ??
           0,
+      createdBy: (json['created_by'] as num?)?.toInt(),
+      participants: participants,
       canComplain: json['can_complain'] == true ||
           (json['buyer_id'] != null &&
               json['seller_id'] != null &&
@@ -1125,18 +1257,25 @@ class ConversationModel {
     int? latestSenderId,
     String? lastMessageAt,
     int? unreadCount,
+    String? otherAvatar,
+    String? otherName,
+    int? memberCount,
+    List<ChatParticipant>? participants,
+    int? createdBy,
   }) {
     return ConversationModel(
       id: id,
-      otherName: otherName,
+      otherName: otherName ?? this.otherName,
       otherId: otherId,
-      otherAvatar: otherAvatar,
+      otherAvatar: otherAvatar ?? this.otherAvatar,
       storeName: storeName,
       storeSlug: storeSlug,
       otherMobile: otherMobile,
       isSeller: isSeller,
       isGroup: isGroup,
-      memberCount: memberCount,
+      memberCount: memberCount ?? this.memberCount,
+      createdBy: createdBy ?? this.createdBy,
+      participants: participants ?? this.participants,
       canComplain: canComplain,
       sellerId: sellerId,
       productId: productId ?? this.productId,
@@ -1355,8 +1494,11 @@ class ChatMessage {
         (meta is Map && meta['deleted_at'] != null);
     String? media(String key) {
       if (deleted) return null;
+      // Prefer top-level URL from formatMessage (rewritten for current APP_URL).
+      final top = json[key] as String?;
+      if (top != null && top.trim().isNotEmpty) return top;
       final fromMeta = meta is Map ? meta[key] as String? : null;
-      return fromMeta ?? json[key] as String?;
+      return fromMeta;
     }
 
     final productRaw = deleted
