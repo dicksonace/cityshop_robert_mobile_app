@@ -357,15 +357,15 @@ void main() {
         'percent': 0,
         'bank_tiers': [
           {'min': 10, 'max': 1000, 'fee': 10},
-          {'min': 10000, 'max': 25000, 'fee': 20},
+          {'min': 1001, 'max': 25000, 'fee': 20},
         ],
       }));
 
       expect(overview.feeFor('bank', 500), 10);
-      expect(overview.feeFor('bank', 5000), 10);
+      expect(overview.feeFor('bank', 5000), 20);
       expect(overview.feeFor('bank', 15000), 20);
       expect(overview.feeFor('momo', 15000), 0);
-      expect(overview.maxWithdrawable('bank'), 1030);
+      expect(overview.maxWithdrawable('bank'), 1020);
     });
   });
 }

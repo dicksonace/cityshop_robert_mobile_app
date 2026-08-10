@@ -704,11 +704,12 @@ class WithdrawalOverview {
       }
     }
     if (amount < tiers.first.min) return tiers.first.fee;
+    // Between bands → next (higher) fee so GH₵5,000 is not stuck on the GH₵10 band.
     for (var i = 0; i < tiers.length - 1; i++) {
       final currMax = tiers[i].max;
       final nextMin = tiers[i + 1].min;
       if (currMax != null && amount > currMax && amount < nextMin) {
-        return tiers[i].fee;
+        return tiers[i + 1].fee;
       }
     }
     return tiers.last.fee;
