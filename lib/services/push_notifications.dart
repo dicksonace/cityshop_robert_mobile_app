@@ -37,19 +37,27 @@ class PushNotifications {
   String? _fcmToken;
   int _lastShownId = 0;
   void Function(String route)? _onOpenRoute;
+  String Function()? _currentPath;
+  bool _appInForeground = true;
 
   bool get isReady => _ready;
   bool get fcmReady => _fcmReady;
 
-  Future<void> init(AppStore store, {void Function(String route)? onOpenRoute}) async {
+  Future<void> init(
+    AppStore store, {
+    void Function(String route)? onOpenRoute,
+    String Function()? currentPath,
+  }) async {
     if (_ready) {
       _store = store;
       _onOpenRoute = onOpenRoute;
+      _currentPath = currentPath ?? _currentPath;
       return;
     }
 
     _store = store;
     _onOpenRoute = onOpenRoute;
+    _currentPath = currentPath;
 
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings(
@@ -186,7 +194,7 @@ class PushNotifications {
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 35), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 12), (_) {
       unawaited(pollAndNotify());
     });
   }
@@ -220,9 +228,24 @@ class PushNotifications {
     // Avoid dumping a huge backlog on first enable — show the newest few.
     final toShow = fresh.length > 5 ? fresh.sublist(fresh.length - 5) : fresh;
     for (final item in toShow) {
+      if (_shouldSuppress(item)) continue;
       await showLocal(item);
     }
     await _rememberShown(fresh.last.id);
+  }
+
+  void setAppInForeground(bool inForeground) {
+    _appInForeground = inForeground;
+  }
+
+  bool _shouldSuppress(AppNotificationItem item) {
+    if (!_appInForeground) return false;
+    final path = _currentPath?.call() ?? '';
+    final conversationId = item.conversationId;
+    if (conversationId != null && path == '/messages/$conversationId') {
+      return true;
+    }
+    return false;
   }
 
   Future<void> showLocal(AppNotificationItem item) async {

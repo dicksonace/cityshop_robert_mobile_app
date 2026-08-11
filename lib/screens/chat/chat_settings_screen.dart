@@ -356,7 +356,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                           [
                             if (m.isCreator) 'Admin',
                             if ((m.mobile ?? '').trim().isNotEmpty) m.mobile!.trim(),
-                            if (m.online) 'Online',
+                            m.presenceLabel,
                           ].where((e) => e.isNotEmpty).join(' · '),
                           style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                         ),

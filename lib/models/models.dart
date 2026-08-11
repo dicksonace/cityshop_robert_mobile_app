@@ -348,6 +348,7 @@ class AppUser {
     required this.name,
     required this.email,
     this.mobile,
+    this.country,
     this.role,
     this.region,
     this.city,
@@ -359,6 +360,7 @@ class AppUser {
   final String name;
   final String email;
   final String? mobile;
+  final String? country;
   final String? role;
   final String? region;
   final String? city;
@@ -371,6 +373,7 @@ class AppUser {
       name: json['name'] as String? ?? '',
       email: json['email'] as String? ?? '',
       mobile: json['mobile'] as String?,
+      country: json['country'] as String?,
       role: json['role'] as String?,
       region: json['region'] as String?,
       city: json['city'] as String?,
@@ -823,11 +826,11 @@ class OrderItemModel {
     this.autoConfirmIn,
     this.canRequestRefund = false,
     this.canReview = false,
+    this.buyerReview,
+    this.dispute,
     this.vehicleNumber,
     this.driverPhone,
     this.packageImageUrl,
-    this.buyerReview,
-    this.dispute,
   });
 
   final int id;
@@ -843,17 +846,16 @@ class OrderItemModel {
   final String? autoConfirmIn;
   final bool canRequestRefund;
   final bool canReview;
+  final Map<String, dynamic>? buyerReview;
+  final Map<String, dynamic>? dispute;
   final String? vehicleNumber;
   final String? driverPhone;
   final String? packageImageUrl;
-  final Map<String, dynamic>? buyerReview;
-  final Map<String, dynamic>? dispute;
 
   bool get hasDeliveryDetails {
-    final vehicle = vehicleNumber?.trim() ?? '';
-    final phone = driverPhone?.trim() ?? '';
-    final photo = packageImageUrl?.trim() ?? '';
-    return vehicle.isNotEmpty || phone.isNotEmpty || photo.isNotEmpty;
+    return (vehicleNumber != null && vehicleNumber!.trim().isNotEmpty) ||
+        (driverPhone != null && driverPhone!.trim().isNotEmpty) ||
+        (packageImageUrl != null && packageImageUrl!.trim().isNotEmpty);
   }
 
   double get displayTotal {
@@ -884,11 +886,11 @@ class OrderItemModel {
       autoConfirmIn: json['auto_confirm_in'] as String?,
       canRequestRefund: json['can_request_refund'] == true,
       canReview: json['can_review'] == true,
-      vehicleNumber: (json['vehicle_number'] as String?)?.trim(),
-      driverPhone: (json['driver_phone'] as String?)?.trim(),
-      packageImageUrl: (json['package_image_url'] as String?)?.trim(),
       buyerReview: review is Map ? Map<String, dynamic>.from(review) : null,
       dispute: dispute is Map ? Map<String, dynamic>.from(dispute) : null,
+      vehicleNumber: json['vehicle_number']?.toString(),
+      driverPhone: json['driver_phone']?.toString(),
+      packageImageUrl: json['package_image_url'] as String?,
     );
   }
 }
@@ -1074,6 +1076,7 @@ class ChatParticipant {
     this.mobile,
     this.avatar,
     this.online = false,
+    this.lastSeenAt,
     this.isCreator = false,
   });
 
@@ -1082,7 +1085,13 @@ class ChatParticipant {
   final String? mobile;
   final String? avatar;
   final bool online;
+  final String? lastSeenAt;
   final bool isCreator;
+
+  String get presenceLabel {
+    if (online) return 'Online';
+    return formatChatLastSeen(lastSeenAt);
+  }
 
   factory ChatParticipant.fromJson(Map<String, dynamic> json) {
     return ChatParticipant(
@@ -1091,9 +1100,23 @@ class ChatParticipant {
       mobile: json['mobile'] as String?,
       avatar: json['avatar'] as String?,
       online: json['online'] == true,
+      lastSeenAt: json['last_seen_at'] as String?,
       isCreator: json['is_creator'] == true,
     );
   }
+}
+
+String formatChatLastSeen(String? iso) {
+  if (iso == null || iso.trim().isEmpty) return 'Offline';
+  final dt = DateTime.tryParse(iso);
+  if (dt == null) return 'Offline';
+  final diff = DateTime.now().difference(dt.toLocal());
+  if (diff.inMinutes < 1) return 'Last seen just now';
+  if (diff.inMinutes < 60) return 'Last seen ${diff.inMinutes} min ago';
+  if (diff.inHours < 24) return 'Last seen ${diff.inHours}h ago';
+  if (diff.inDays == 1) return 'Last seen yesterday';
+  if (diff.inDays < 7) return 'Last seen ${diff.inDays} days ago';
+  return 'Last seen ${dt.toLocal().day}/${dt.toLocal().month}/${dt.toLocal().year}';
 }
 
 class ConversationModel {
@@ -1124,6 +1147,9 @@ class ConversationModel {
     this.lastMessageAt,
     this.blocked = false,
     this.iBlocked = false,
+    this.online = false,
+    this.lastSeenAt,
+    this.onlineCount = 0,
   });
 
   final int id;
@@ -1153,6 +1179,20 @@ class ConversationModel {
   final String? lastMessageAt;
   final bool blocked;
   final bool iBlocked;
+  final bool online;
+  final String? lastSeenAt;
+  final int onlineCount;
+
+  String get presenceLabel {
+    if (isGroup) {
+      if (onlineCount > 0) {
+        return onlineCount == 1 ? '1 online' : '$onlineCount online';
+      }
+      return 'Offline';
+    }
+    if (online) return 'Online';
+    return formatChatLastSeen(lastSeenAt);
+  }
 
   /// What the conversation list shows when the last message carries no text.
   String previewFor(int? viewerId) {
@@ -1268,6 +1308,11 @@ class ConversationModel {
       lastMessageAt: json['last_message_at'] as String?,
       blocked: json['blocked'] == true,
       iBlocked: json['i_blocked'] == true,
+      online: other is Map && other['online'] == true,
+      lastSeenAt: other is Map ? other['last_seen_at'] as String? : null,
+      onlineCount: other is Map
+          ? ((other['online_count'] as num?)?.toInt() ?? (other['online'] == true ? 1 : 0))
+          : 0,
     );
   }
 
@@ -1289,6 +1334,9 @@ class ConversationModel {
     int? memberCount,
     List<ChatParticipant>? participants,
     int? createdBy,
+    bool? online,
+    String? lastSeenAt,
+    int? onlineCount,
   }) {
     return ConversationModel(
       id: id,
@@ -1317,6 +1365,9 @@ class ConversationModel {
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       blocked: blocked ?? this.blocked,
       iBlocked: iBlocked ?? this.iBlocked,
+      online: online ?? this.online,
+      lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+      onlineCount: onlineCount ?? this.onlineCount,
     );
   }
 }

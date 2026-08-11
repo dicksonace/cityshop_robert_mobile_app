@@ -353,6 +353,29 @@ void main() {
       expect(parse(null).preview, 'Start the conversation');
     });
 
+    test('shows Online and Offline on chats', () {
+      final online = ConversationModel.fromJson({
+        'id': 1,
+        'other': const {'id': 9, 'name': 'Ada', 'online': true},
+      });
+      expect(online.online, isTrue);
+      expect(online.presenceLabel, 'Online');
+
+      final offline = ConversationModel.fromJson({
+        'id': 1,
+        'other': const {'id': 9, 'name': 'Ada', 'online': false},
+      });
+      expect(offline.presenceLabel, 'Offline');
+
+      final group = ConversationModel.fromJson({
+        'id': 2,
+        'is_group': true,
+        'name': 'Friends',
+        'other': const {'online': true, 'online_count': 2, 'is_group': true},
+      });
+      expect(group.presenceLabel, '2 online');
+    });
+
     test('reads the product slug, price and photo the strip needs', () {
       final c = parse(null, product: _honda);
 

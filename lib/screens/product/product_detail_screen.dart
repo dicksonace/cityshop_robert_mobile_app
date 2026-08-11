@@ -18,6 +18,15 @@ import '../../widgets/image_viewer.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
+String _specificationLabel(String key) {
+  return key
+      .replaceAll('_', ' ')
+      .split(RegExp(r'\s+'))
+      .where((w) => w.isNotEmpty)
+      .map((w) => '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
+      .join(' ');
+}
+
 class ProductDetailScreen extends StatefulWidget {
   const ProductDetailScreen({super.key, required this.slug});
 
@@ -40,9 +49,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   bool showAddedToast = false;
   Timer? _addedToastTimer;
 
-  /// Whether this buyer's like was already counted in the fetched total, so the
-  /// displayed count can follow the heart without refetching the product.
-  bool likeCounted = false;
+  /// Live like total — bumped locally on tap so the count does not wait on the API.
+  int likeCount = 0;
 
   @override
   void initState() {
@@ -85,7 +93,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         related = detail.related;
         reviews = detail.reviews;
         reviewable = detail.reviewable;
-        likeCounted = store.wishlistProductIds.contains(detail.product.id);
+        likeCount = detail.product.wishlistAdds;
+        if (store.wishlistProductIds.contains(detail.product.id) && likeCount < 1) {
+          likeCount = 1;
+        }
         loading = false;
       });
     } catch (e) {
@@ -138,20 +149,23 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Future<void> _toggleWish() async {
     final store = context.read<AppStore>();
     final p = product;
-    if (p == null) return;
+    if (p == null || wishBusy) return;
     if (!store.isLoggedIn) {
       context.push('/login');
       return;
     }
-    setState(() => wishBusy = true);
+    final wasLiked = store.wishlistProductIds.contains(p.id);
+    wishBusy = true;
+    setState(() {
+      likeCount = wasLiked ? (likeCount - 1).clamp(0, 1 << 30) : likeCount + 1;
+    });
     try {
-      final on = await store.toggleWishlist(p.id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(on ? 'Saved to wishlist' : 'Removed from wishlist')),
-      );
+      await store.toggleWishlist(p.id);
     } on ApiException catch (e) {
       if (!mounted) return;
+      setState(() {
+        likeCount = wasLiked ? likeCount + 1 : (likeCount - 1).clamp(0, 1 << 30);
+      });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => wishBusy = false);
@@ -232,7 +246,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         title: Text(p?.name ?? 'Product'),
         actions: [
           IconButton(
-            onPressed: wishBusy ? null : _toggleWish,
+            onPressed: _toggleWish,
             icon: Icon(
               wishlisted ? Icons.favorite : Icons.favorite_border,
               color: wishlisted ? AppColors.danger : null,
@@ -302,7 +316,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         reviews: reviews,
                         reviewable: reviewable,
                         qty: qty,
-                        likeCount: p.wishlistAdds + (wishlisted ? 1 : 0) - (likeCounted ? 1 : 0),
+                        likeCount: likeCount,
+                        liked: wishlisted,
                         onQtyChanged: (q) => setState(() => qty = q),
                         onMessage: _messageSeller,
                         onReviewPosted: _load,
@@ -386,6 +401,7 @@ class _Body extends StatelessWidget {
     this.reviewable,
     required this.qty,
     required this.likeCount,
+    required this.liked,
     required this.onQtyChanged,
     required this.onMessage,
     required this.onReviewPosted,
@@ -397,6 +413,7 @@ class _Body extends StatelessWidget {
   final Map<String, dynamic>? reviewable;
   final int qty;
   final int likeCount;
+  final bool liked;
   final ValueChanged<int> onQtyChanged;
   final VoidCallback onMessage;
   final Future<void> Function() onReviewPosted;
@@ -454,7 +471,11 @@ class _Body extends StatelessWidget {
                   const SizedBox(width: 4),
                   Text('${product.views} views', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                   const SizedBox(width: 10),
-                  Icon(Icons.favorite_border, size: 16, color: Colors.grey.shade600),
+                  Icon(
+                    liked ? Icons.favorite : Icons.favorite_border,
+                    size: 16,
+                    color: liked ? AppColors.danger : Colors.grey.shade600,
+                  ),
                   const SizedBox(width: 4),
                   Text('$likeCount likes', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                 ],
@@ -515,7 +536,7 @@ class _Body extends StatelessWidget {
                         Expanded(
                           flex: 2,
                           child: Text(
-                            '${e.key}',
+                            _specificationLabel(e.key),
                             style: const TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600),
                           ),
                         ),

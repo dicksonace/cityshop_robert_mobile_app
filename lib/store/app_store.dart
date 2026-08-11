@@ -30,6 +30,7 @@ class AppStore extends ChangeNotifier {
   bool filterFreeShip = false;
   String sort = 'recommended';
   int totalProducts = 0;
+  int _shopLoadGen = 0;
 
   List<CartItem> cartItems = [];
   double cartSubtotal = 0;
@@ -132,6 +133,7 @@ class AppStore extends ChangeNotifier {
     if (inGhana != null) filterInGhana = inGhana;
     if (freeShip != null) filterFreeShip = freeShip;
     if (sortBy != null) sort = sortBy;
+    final gen = ++_shopLoadGen;
     notifyListeners();
 
     try {
@@ -152,8 +154,11 @@ class AppStore extends ChangeNotifier {
         maxAttempts: maxAttempts,
       );
 
+      if (gen != _shopLoadGen) return;
+
       if (catsFuture != null) {
         final catsRes = await catsFuture;
+        if (gen != _shopLoadGen) return;
         final list = catsRes.data is Map ? catsRes.data['data'] : catsRes.data;
         if (list is List) {
           categories = list
@@ -179,12 +184,16 @@ class AppStore extends ChangeNotifier {
         }
       }
     } on ApiException catch (e) {
+      if (gen != _shopLoadGen) return;
       shopError = e.message;
     } catch (e) {
+      if (gen != _shopLoadGen) return;
       shopError = e.toString();
     } finally {
-      loadingShop = false;
-      notifyListeners();
+      if (gen == _shopLoadGen) {
+        loadingShop = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -421,6 +430,7 @@ class AppStore extends ChangeNotifier {
     required String name,
     String? email,
     required String mobile,
+    required String country,
     required String password,
     required String passwordConfirmation,
   }) async {
@@ -428,6 +438,7 @@ class AppStore extends ChangeNotifier {
       'name': name,
       if (email != null && email.isNotEmpty) 'email': email,
       'mobile': mobile,
+      'country': country,
       'password': password,
       'password_confirmation': passwordConfirmation,
       'device_name': ApiConfig.deviceName,
@@ -673,7 +684,7 @@ class AppStore extends ChangeNotifier {
       final wishlisted = res.data is Map ? res.data['wishlisted'] as bool? ?? !was : !was;
       if (wishlisted == was) _setWishlisted(productId, wishlisted);
       if (wishlisted || wishlist.isEmpty) {
-        await loadWishlist();
+        unawaited(loadWishlist());
       }
       return wishlisted;
     } catch (_) {
@@ -1454,7 +1465,8 @@ class AppStore extends ChangeNotifier {
     return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
   }
 
-  Future<({List<ChatMessage> messages, List<int> readMessageIds})> pollMessages(
+  Future<({List<ChatMessage> messages, List<int> readMessageIds, Map<String, dynamic>? other})>
+      pollMessages(
     int conversationId,
     int afterId,
   ) async {
@@ -1474,7 +1486,9 @@ class AppStore extends ChangeNotifier {
     final readMessageIds = readIds is List
         ? readIds.whereType<num>().map((e) => e.toInt()).toList()
         : <int>[];
-    return (messages: messages, readMessageIds: readMessageIds);
+    final otherRaw = data['other'];
+    final other = otherRaw is Map ? Map<String, dynamic>.from(otherRaw) : null;
+    return (messages: messages, readMessageIds: readMessageIds, other: other);
   }
 
   Future<RealtimeConfig?> fetchRealtimeConfig() async {

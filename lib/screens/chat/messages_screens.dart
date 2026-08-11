@@ -256,12 +256,24 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
               name: c.otherName,
               avatar: c.otherAvatar,
               radius: 24,
+              online: c.isGroup ? c.onlineCount > 0 : c.online,
               fallbackIcon: c.isGroup ? Icons.groups_rounded : null,
             ),
             title: Text(c.otherName, style: const TextStyle(fontWeight: FontWeight.w800)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 2),
+                Text(
+                  c.presenceLabel,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: (c.isGroup ? c.onlineCount > 0 : c.online)
+                        ? const Color(0xFF16A34A)
+                        : AppColors.textMuted,
+                  ),
+                ),
                 if (c.isGroup) ...[
                   const SizedBox(height: 2),
                   Text(
@@ -286,7 +298,7 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
                 ),
               ],
             ),
-            isThreeLine: c.productName != null,
+            isThreeLine: true,
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -518,8 +530,28 @@ class _ChatScreenState extends State<ChatScreen> {
         }),
         ...fresh,
       ];
-      if (!changed) return;
-      setState(() => messages = merged);
+      var presenceChanged = false;
+      final other = polled.other;
+      if (other != null && conversation != null) {
+        final nextOnline = other['online'] == true;
+        final nextLastSeen = other['last_seen_at'] as String?;
+        final nextCount = (other['online_count'] as num?)?.toInt() ??
+            (nextOnline ? 1 : 0);
+        if (nextOnline != conversation!.online ||
+            nextLastSeen != conversation!.lastSeenAt ||
+            nextCount != conversation!.onlineCount) {
+          presenceChanged = true;
+          conversation = conversation!.copyWith(
+            online: nextOnline,
+            lastSeenAt: nextLastSeen,
+            onlineCount: nextCount,
+          );
+        }
+      }
+      if (!changed && !presenceChanged) return;
+      setState(() {
+        messages = merged;
+      });
       if (fresh.any((m) => !m.isSignalling)) _jumpToEnd();
     } catch (_) {}
   }
@@ -1126,6 +1158,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
       appBar: AppBar(
+        toolbarHeight: 64,
         titleSpacing: 0,
         automaticallyImplyLeading: false,
         leading: IconButton(
@@ -1147,14 +1180,40 @@ class _ChatScreenState extends State<ChatScreen> {
                 name: title,
                 avatar: conversation?.otherAvatar,
                 radius: 18,
+                online: conversation == null
+                    ? false
+                    : (conversation!.isGroup
+                        ? conversation!.onlineCount > 0
+                        : conversation!.online),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                    ),
+                    if (conversation != null)
+                      Text(
+                        conversation!.presenceLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: (conversation!.isGroup
+                                  ? conversation!.onlineCount > 0
+                                  : conversation!.online)
+                              ? const Color(0xFF16A34A)
+                              : AppColors.textMuted,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],
@@ -1346,7 +1405,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                         ],
                                       ),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           if (m.replyTo != null && !m.isDeleted)
                                             _ReplyQuote(
@@ -1404,17 +1464,14 @@ class _ChatScreenState extends State<ChatScreen> {
                                               mine: m.mine,
                                             )
                                           else
-                                            Align(
-                                              alignment: Alignment.centerLeft,
-                                              child: Text(
-                                                m.isDeleted ? 'Message deleted' : m.body,
-                                                style: TextStyle(
-                                                  color: m.isDeleted
-                                                      ? AppColors.textMuted
-                                                      : (m.mine ? Colors.white : AppColors.textPrimary),
-                                                  fontStyle: m.isDeleted ? FontStyle.italic : FontStyle.normal,
-                                                  height: 1.35,
-                                                ),
+                                            Text(
+                                              m.isDeleted ? 'Message deleted' : m.body,
+                                              style: TextStyle(
+                                                color: m.isDeleted
+                                                    ? AppColors.textMuted
+                                                    : (m.mine ? Colors.white : AppColors.textPrimary),
+                                                fontStyle: m.isDeleted ? FontStyle.italic : FontStyle.normal,
+                                                height: 1.35,
                                               ),
                                             ),
                                           if (m.createdAt != null) ...[
@@ -1425,7 +1482,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 bottom: m.isProduct || m.isTransfer || m.isFile ? 8 : 0,
                                                 left: m.isProduct || m.isTransfer || m.isFile ? 8 : 0,
                                               ),
-                                              child: Row(
+                                              child: Align(
+                                                alignment: Alignment.centerRight,
+                                                widthFactor: 1,
+                                                child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   Text(
@@ -1448,6 +1508,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                                     ),
                                                   ],
                                                 ],
+                                              ),
                                               ),
                                             ),
                                           ],
@@ -2516,33 +2577,58 @@ class _ConversationAvatar extends StatelessWidget {
     required this.avatar,
     required this.radius,
     this.fallbackIcon,
+    this.online = false,
   });
 
   final String name;
   final String? avatar;
   final double radius;
   final IconData? fallbackIcon;
+  final bool online;
 
   @override
   Widget build(BuildContext context) {
     final url = ApiConfig.resolveMediaUrl(avatar);
     final initial = name.isNotEmpty ? name[0].toUpperCase() : 'S';
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: AppColors.ringOrange,
-      backgroundImage: url.isNotEmpty ? CachedNetworkImageProvider(url) : null,
-      child: url.isEmpty
-          ? (fallbackIcon != null
-              ? Icon(fallbackIcon, color: AppColors.accent, size: radius)
-              : Text(
-                  initial,
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontWeight: FontWeight.w800,
-                    fontSize: radius * 0.75,
-                  ),
-                ))
-          : null,
+    final dot = (radius * 0.38).clamp(8.0, 12.0);
+    return SizedBox(
+      width: radius * 2,
+      height: radius * 2,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CircleAvatar(
+            radius: radius,
+            backgroundColor: AppColors.ringOrange,
+            backgroundImage: url.isNotEmpty ? CachedNetworkImageProvider(url) : null,
+            child: url.isEmpty
+                ? (fallbackIcon != null
+                    ? Icon(fallbackIcon, color: AppColors.accent, size: radius)
+                    : Text(
+                        initial,
+                        style: TextStyle(
+                          color: AppColors.accent,
+                          fontWeight: FontWeight.w800,
+                          fontSize: radius * 0.75,
+                        ),
+                      ))
+                : null,
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Container(
+              width: dot,
+              height: dot,
+              decoration: BoxDecoration(
+                color: online ? const Color(0xFF22C55E) : const Color(0xFFD1D5DB),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2817,6 +2903,7 @@ class _ChatVoiceState extends State<_ChatVoice> {
   StreamSubscription<void>? _completeSub;
   bool _playing = false;
   bool _loading = false;
+  bool _sourceReady = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   double _speed = 1;

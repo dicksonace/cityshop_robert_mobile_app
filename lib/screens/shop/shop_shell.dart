@@ -189,6 +189,7 @@ class _ShopHome extends StatefulWidget {
 
 class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
   int _matchesTick = 0;
+  Timer? _searchDebounce;
 
   @override
   int? get tabIndex => 0;
@@ -200,9 +201,41 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
   bool get tabAlreadyHasData => context.read<AppStore>().products.isNotEmpty;
 
   @override
+  void initState() {
+    super.initState();
+    widget.searchController.addListener(_onSearchTextChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    widget.searchController.removeListener(_onSearchTextChanged);
+    super.dispose();
+  }
+
+  void _onSearchTextChanged() {
+    if (!mounted) return;
+    setState(() {});
+    final q = widget.searchController.text.trim();
+    _searchDebounce?.cancel();
+    final store = context.read<AppStore>();
+    if (q.isEmpty) {
+      if (store.searchQuery.isNotEmpty || store.imageSearchActive) {
+        store.loadShop(search: '');
+      }
+      return;
+    }
+    if (q == store.searchQuery.trim()) return;
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      context.read<AppStore>().loadShop(search: widget.searchController.text);
+    });
+  }
+
+  @override
   Future<void> refreshTabData({required bool background}) async {
     final store = context.read<AppStore>();
-    await store.loadShop();
+    await store.loadShop(search: widget.searchController.text);
     if (!mounted || background) return;
     // Recreating the picks-for-you strip is jarring mid-browse, so only do it
     // when the shopper asked for a refresh.
@@ -378,9 +411,21 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
                                       contentPadding: EdgeInsets.symmetric(vertical: 14),
                                     ),
                                     textInputAction: TextInputAction.search,
-                                    onSubmitted: (q) => store.loadShop(search: q),
+                                    onSubmitted: (q) {
+                                      _searchDebounce?.cancel();
+                                      store.loadShop(search: q);
+                                    },
                                   ),
                                 ),
+                                if (widget.searchController.text.isNotEmpty)
+                                  IconButton(
+                                    tooltip: 'Clear search',
+                                    onPressed: () {
+                                      _searchDebounce?.cancel();
+                                      widget.searchController.clear();
+                                    },
+                                    icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
+                                  ),
                                 Tooltip(
                                   message: 'Search by photo',
                                   child: IconButton(
@@ -396,7 +441,10 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
                                     child: InkWell(
                                       onTap: store.loadingShop
                                           ? null
-                                          : () => store.loadShop(search: widget.searchController.text),
+                                          : () {
+                                              _searchDebounce?.cancel();
+                                              store.loadShop(search: widget.searchController.text);
+                                            },
                                       borderRadius: BorderRadius.circular(10),
                                       child: const SizedBox(
                                         width: 44,

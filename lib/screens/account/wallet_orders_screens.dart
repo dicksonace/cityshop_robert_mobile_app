@@ -2303,10 +2303,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                             const SizedBox(height: 10),
                                             Container(
                                               width: double.infinity,
-                                              padding: const EdgeInsets.all(12),
+                                              padding: const EdgeInsets.all(14),
                                               decoration: BoxDecoration(
                                                 color: const Color(0xFFEFF6FF),
-                                                borderRadius: BorderRadius.circular(12),
+                                                borderRadius: BorderRadius.circular(14),
                                                 border: Border.all(color: const Color(0xFFBFDBFE)),
                                               ),
                                               child: Column(
@@ -2316,35 +2316,38 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                                     'Delivery details',
                                                     style: TextStyle(
                                                       fontWeight: FontWeight.w800,
-                                                      fontSize: 13,
+                                                      fontSize: 14,
                                                       color: Color(0xFF1E3A8A),
                                                     ),
                                                   ),
-                                                  if ((item.driverPhone ?? '').isNotEmpty) ...[
-                                                    const SizedBox(height: 6),
+                                                  if ((item.driverPhone ?? '').trim().isNotEmpty) ...[
+                                                    const SizedBox(height: 8),
                                                     InkWell(
                                                       onTap: () => _callPhone(item.driverPhone!),
                                                       child: Text(
-                                                        'Driver phone: ${item.driverPhone}',
+                                                        'Driver: ${item.driverPhone}',
                                                         style: const TextStyle(
-                                                          color: Color(0xFF1E40AF),
                                                           fontWeight: FontWeight.w700,
+                                                          color: Color(0xFF1D4ED8),
                                                           decoration: TextDecoration.underline,
                                                         ),
                                                       ),
                                                     ),
                                                   ],
-                                                  if ((item.vehicleNumber ?? '').isNotEmpty) ...[
+                                                  if ((item.vehicleNumber ?? '').trim().isNotEmpty) ...[
                                                     const SizedBox(height: 4),
                                                     Text(
                                                       'Vehicle: ${item.vehicleNumber}',
-                                                      style: const TextStyle(color: Color(0xFF1E3A8A)),
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.w600,
+                                                        color: Color(0xFF1E3A8A),
+                                                      ),
                                                     ),
                                                   ],
-                                                  if ((item.packageImageUrl ?? '').isNotEmpty) ...[
-                                                    const SizedBox(height: 8),
+                                                  if ((item.packageImageUrl ?? '').trim().isNotEmpty) ...[
+                                                    const SizedBox(height: 10),
                                                     ClipRRect(
-                                                      borderRadius: BorderRadius.circular(8),
+                                                      borderRadius: BorderRadius.circular(10),
                                                       child: CachedNetworkImage(
                                                         imageUrl: item.packageImageUrl!,
                                                         height: 96,

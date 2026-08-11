@@ -42,6 +42,7 @@ class _CityShopAppState extends State<CityShopApp> with WidgetsBindingObserver {
       onOpenRoute: (route) {
         router.go(route);
       },
+      currentPath: () => router.routeInformationProvider.value.uri.path,
     );
     unawaited(_bootstrapPush());
   }
@@ -64,7 +65,9 @@ class _CityShopAppState extends State<CityShopApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && widget.store.isLoggedIn) {
+    PushNotifications.instance.setAppInForeground(state == AppLifecycleState.resumed);
+    if (widget.store.isLoggedIn &&
+        (state == AppLifecycleState.resumed || state == AppLifecycleState.paused)) {
       unawaited(PushNotifications.instance.pollAndNotify());
     }
   }
