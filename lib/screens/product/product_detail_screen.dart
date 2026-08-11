@@ -440,32 +440,8 @@ class _Body extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    _money.format(product.effectivePrice),
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.accent,
-                    ),
-                  ),
-                  if (hasDiscount) ...[
-                    const SizedBox(width: 8),
-                    Text(
-                      _money.format(product.price),
-                      style: const TextStyle(
-                        decoration: TextDecoration.lineThrough,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  const Icon(Icons.star, size: 16, color: Colors.amber),
+                  const Icon(Icons.star_rounded, size: 16, color: Color(0xFFFBBF24)),
                   const SizedBox(width: 4),
                   Text(
                     product.rating > 0
@@ -480,56 +456,30 @@ class _Body extends StatelessWidget {
                   const SizedBox(width: 10),
                   Icon(Icons.favorite_border, size: 16, color: Colors.grey.shade600),
                   const SizedBox(width: 4),
-                  Text('$likeCount', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  Text('$likeCount likes', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                 ],
               ),
-              const SizedBox(height: 14),
-              _SellerCard(product: product, onMessage: onMessage),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (product.inGhana)
-                    Chip(
-                      label: const Text('In Ghana'),
-                      backgroundColor: AppColors.emerald.withValues(alpha: 0.12),
-                      side: BorderSide.none,
-                    ),
-                  if (product.freeShipping)
-                    Chip(
-                      avatar: const Icon(Icons.local_shipping, size: 16, color: AppColors.emerald),
-                      label: const Text('Free delivery'),
-                      backgroundColor: AppColors.emerald.withValues(alpha: 0.12),
-                      side: BorderSide.none,
-                    ),
-                  if (product.shipsNationwide)
-                    const Chip(label: Text('Ships nationwide'), side: BorderSide.none),
-                  if (product.pickupAvailable)
-                    const Chip(label: Text('Pickup available'), side: BorderSide.none),
-                  if (product.isNegotiable)
-                    const Chip(label: Text('Negotiable'), side: BorderSide.none),
-                  if (product.isPreorder)
-                    const Chip(label: Text('Pre-order'), side: BorderSide.none),
-                  if (product.cashOnDelivery)
-                    const Chip(label: Text('Cash on delivery'), side: BorderSide.none),
-                  Chip(
-                    label: Text('${product.quantity} in stock'),
-                    side: BorderSide.none,
-                    backgroundColor: const Color(0xFFF1F5F9),
-                  ),
-                ],
-              ),
-              if (product.deliveryFee != null || product.deliveryDays != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  [
-                    if (product.deliveryFee != null) 'Delivery: ${_money.format(product.deliveryFee)}',
-                    if (product.deliveryDays != null) '${product.deliveryDays} day(s)',
-                  ].join(' · '),
-                  style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+              Text(
+                _money.format(product.effectivePrice),
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.accent,
                 ),
-              ],
+              ),
+              if (hasDiscount)
+                Text(
+                  _money.format(product.price),
+                  style: const TextStyle(
+                    decoration: TextDecoration.lineThrough,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              const SizedBox(height: 14),
+              _DeliveryPickupCard(product: product),
+              const SizedBox(height: 12),
+              _SellerCard(product: product, onMessage: onMessage),
               const SizedBox(height: 16),
               Row(
                 children: [
@@ -548,20 +498,10 @@ class _Body extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              if (product.brand != null && product.brand!.isNotEmpty)
-                Text('Brand: ${product.brand}', style: const TextStyle(color: AppColors.textSecondary)),
-              if (product.condition != null && product.condition!.isNotEmpty)
+              if (product.condition != null && product.condition!.isNotEmpty) ...[
+                const SizedBox(height: 8),
                 Text('Condition: ${product.condition}', style: const TextStyle(color: AppColors.textSecondary)),
-              const SizedBox(height: 14),
-              const Text('Description', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              const SizedBox(height: 8),
-              Text(
-                product.description?.trim().isNotEmpty == true
-                    ? product.description!
-                    : 'No description provided.',
-                style: const TextStyle(height: 1.45, color: AppColors.textSecondary),
-              ),
+              ],
               if (product.specifications.isNotEmpty) ...[
                 const SizedBox(height: 18),
                 const Text('Specifications', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
@@ -1466,6 +1406,271 @@ class _GalleryNavButton extends StatelessWidget {
           height: 40,
           child: Icon(icon, color: AppColors.textPrimary),
         ),
+      ),
+    );
+  }
+}
+
+class _DeliveryPickupCard extends StatelessWidget {
+  const _DeliveryPickupCard({required this.product});
+
+  final Product product;
+
+  @override
+  Widget build(BuildContext context) {
+    final description = product.description?.trim();
+    final paidDelivery = !product.freeShipping && product.deliveryFee != null && product.deliveryFee! > 0;
+    final days = product.deliveryDays;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFF8FAFC), Colors.white],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (description != null && description.isNotEmpty)
+                      ? description
+                      : 'No description provided.',
+                  style: TextStyle(
+                    height: 1.45,
+                    fontSize: 15,
+                    color: (description != null && description.isNotEmpty)
+                        ? const Color(0xFF334155)
+                        : AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (product.brand != null && product.brand!.isNotEmpty)
+                      _pill(
+                        label: 'Brand · ${product.brand}',
+                        background: Colors.white,
+                        foreground: const Color(0xFF334155),
+                        border: const Color(0xFFE2E8F0),
+                      ),
+                    _pill(
+                      icon: Icons.inventory_2_outlined,
+                      label: product.quantity > 0 ? '${product.quantity} in stock' : 'Out of stock',
+                      background: product.quantity > 0 ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
+                      foreground: product.quantity > 0 ? const Color(0xFF047857) : const Color(0xFFB91C1C),
+                      border: product.quantity > 0 ? const Color(0xFFD1FAE5) : const Color(0xFFFECACA),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(left: 4, bottom: 8),
+                  child: Text(
+                    'DELIVERY & PICKUP',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+                if (product.freeShipping)
+                  const _ServiceRow(
+                    icon: Icons.local_shipping_outlined,
+                    iconBackground: Color(0xFFD1FAE5),
+                    iconColor: Color(0xFF059669),
+                    background: Color(0xFFECFDF5),
+                    border: Color(0xFFA7F3D0),
+                    title: 'Free delivery',
+                    subtitle: 'Seller covers shipping to you',
+                    titleColor: Color(0xFF065F46),
+                    subtitleColor: Color(0xFF047857),
+                  )
+                else if (paidDelivery)
+                  _ServiceRow(
+                    icon: Icons.local_shipping_outlined,
+                    iconBackground: const Color(0xFFE0F2FE),
+                    iconColor: const Color(0xFF0284C7),
+                    background: const Color(0xFFF0F9FF),
+                    border: const Color(0xFFBAE6FD),
+                    title: 'Paid delivery: ${_money.format(product.deliveryFee)}',
+                    subtitle: days != null
+                        ? 'Delivery Time: ${days}day${days == 1 ? '' : 's'}'
+                        : 'Delivery fee added at checkout',
+                    titleColor: const Color(0xFF075985),
+                    subtitleColor: const Color(0xFF0369A1),
+                  )
+                else
+                  const _ServiceRow(
+                    icon: Icons.local_shipping_outlined,
+                    iconBackground: Color(0xFFF1F5F9),
+                    iconColor: Color(0xFF475569),
+                    background: Colors.white,
+                    border: Color(0xFFF1F5F9),
+                    title: 'Delivery arranged with seller',
+                    subtitle: 'Chat to agree on delivery details',
+                    titleColor: Color(0xFF334155),
+                    subtitleColor: Color(0xFF64748B),
+                  ),
+                if (product.shipsNationwide) ...[
+                  const SizedBox(height: 8),
+                  const _ServiceRow(
+                    icon: Icons.location_on_outlined,
+                    iconBackground: Color(0xFFE0E7FF),
+                    iconColor: Color(0xFF4F46E5),
+                    background: Color(0xFFEEF2FF),
+                    border: Color(0xFFC7D2FE),
+                    title: 'Ships nationwide across Ghana',
+                    subtitle: "Available beyond the seller's local area",
+                    titleColor: Color(0xFF312E81),
+                    subtitleColor: Color(0xFF4338CA),
+                  ),
+                ],
+                if (product.pickupAvailable) ...[
+                  const SizedBox(height: 8),
+                  _ServiceRow(
+                    icon: Icons.storefront_outlined,
+                    iconBackground: const Color(0xFFF97316),
+                    iconColor: Colors.white,
+                    background: const Color(0xFFFFF7ED),
+                    border: const Color(0xFFFED7AA),
+                    title: 'Pickup available from the seller shop',
+                    subtitle: product.storeName != null && product.storeName!.trim().isNotEmpty
+                        ? 'Collect in person at ${product.storeName}'
+                        : 'Collect in person from the seller',
+                    titleColor: const Color(0xFF7C2D12),
+                    subtitleColor: const Color(0xFF9A3412),
+                  ),
+                ],
+                if (product.cashOnDelivery) ...[
+                  const SizedBox(height: 8),
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: Text(
+                      'Cash on delivery available',
+                      style: TextStyle(color: Color(0xFF0F766E), fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                  ),
+                ],
+                if (product.isNegotiable) ...[
+                  const SizedBox(height: 6),
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4),
+                    child: Text(
+                      'Price is negotiable — chat the seller',
+                      style: TextStyle(color: Color(0xFFB45309), fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pill({
+    IconData? icon,
+    required String label,
+    required Color background,
+    required Color foreground,
+    required Color border,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 14, color: foreground),
+            const SizedBox(width: 6),
+          ],
+          Text(label, style: TextStyle(color: foreground, fontWeight: FontWeight.w700, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ServiceRow extends StatelessWidget {
+  const _ServiceRow({
+    required this.icon,
+    required this.iconBackground,
+    required this.iconColor,
+    required this.background,
+    required this.border,
+    required this.title,
+    required this.subtitle,
+    required this.titleColor,
+    required this.subtitleColor,
+  });
+
+  final IconData icon;
+  final Color iconBackground;
+  final Color iconColor;
+  final Color background;
+  final Color border;
+  final String title;
+  final String subtitle;
+  final Color titleColor;
+  final Color subtitleColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(color: iconBackground, shape: BoxShape.circle),
+            child: Icon(icon, size: 18, color: iconColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: titleColor)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: TextStyle(fontSize: 12, height: 1.3, color: subtitleColor)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
