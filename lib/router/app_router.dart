@@ -23,6 +23,7 @@ import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
 import '../screens/shop/shop_shell.dart';
 import '../screens/wallet/qr_pay_screens.dart';
+import '../screens/live/watch_live_screen.dart';
 import '../screens/store/seller_store_screen.dart';
 import '../store/app_store.dart';
 import '../models/models.dart';
@@ -41,6 +42,7 @@ bool _isDeepLinkPath(String path) {
       path.startsWith('/product/') ||
       path.startsWith('/stores/') ||
       path.startsWith('/store/') ||
+      path.startsWith('/live/') ||
       path.startsWith('/orders/') ||
       path.startsWith('/messages/');
 }
@@ -138,6 +140,10 @@ GoRouter createRouter(AppStore store) {
       GoRoute(
         path: '/stores/:slug',
         builder: (_, state) => SellerStoreScreen(slug: state.pathParameters['slug']!),
+      ),
+      GoRoute(
+        path: '/live/:slug',
+        builder: (_, state) => WatchLiveScreen(slug: state.pathParameters['slug']!),
       ),
       GoRoute(
         path: '/orders/:id',

@@ -283,6 +283,28 @@ class AppStore extends ChangeNotifier {
     await RecentViews.record(id: product.id, categoryId: product.categoryId);
   }
 
+  Future<List<LivestreamCard>> fetchLiveNow() async {
+    final res = await _api.get('/livestreams');
+    final body = res.data;
+    final list = body is Map ? body['data'] : body;
+    if (list is! List) return const [];
+    return list
+        .whereType<Map>()
+        .map((e) => LivestreamCard.fromJson(Map<String, dynamic>.from(e)))
+        .where((e) => e.storeSlug.isNotEmpty)
+        .toList();
+  }
+
+  Future<LivestreamCard?> fetchLivestream(String slug) async {
+    final res = await _api.get('/livestreams/$slug');
+    final body = res.data;
+    final data = body is Map ? body['data'] : body;
+    if (data is! Map) return null;
+    final card = LivestreamCard.fromJson(Map<String, dynamic>.from(data));
+    if (card.storeSlug.isEmpty && card.room == null) return null;
+    return card;
+  }
+
   Future<({SellerStore store, List<Product> products})> fetchSellerStore(
     String slug, {
     String? search,

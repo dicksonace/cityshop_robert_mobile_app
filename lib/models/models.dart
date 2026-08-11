@@ -252,6 +252,57 @@ class Product {
   }
 }
 
+class LivestreamRoom {
+  const LivestreamRoom({
+    required this.domain,
+    required this.roomName,
+    this.provider = 'jitsi',
+  });
+
+  final String domain;
+  final String roomName;
+  final String provider;
+
+  factory LivestreamRoom.fromJson(Map<String, dynamic> json) {
+    return LivestreamRoom(
+      domain: json['domain'] as String? ?? 'meet.jit.si',
+      roomName: json['room_name'] as String? ?? '',
+      provider: json['provider'] as String? ?? 'jitsi',
+    );
+  }
+}
+
+class LivestreamCard {
+  const LivestreamCard({
+    required this.id,
+    required this.storeName,
+    required this.storeSlug,
+    this.title,
+    this.shopPhoto,
+    this.room,
+  });
+
+  final int id;
+  final String storeName;
+  final String storeSlug;
+  final String? title;
+  final String? shopPhoto;
+  final LivestreamRoom? room;
+
+  factory LivestreamCard.fromJson(Map<String, dynamic> json) {
+    final photo = json['shop_photo'] as String?;
+    final roomJson = json['room'];
+    return LivestreamCard(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      storeName: json['store_name'] as String? ?? 'Store',
+      storeSlug: json['store_slug'] as String? ?? json['slug'] as String? ?? '',
+      title: json['title'] as String?,
+      shopPhoto: photo == null || photo.trim().isEmpty ? null : photo.trim(),
+      room: roomJson is Map ? LivestreamRoom.fromJson(Map<String, dynamic>.from(roomJson)) : null,
+    );
+  }
+}
+
 class SellerStore {
   const SellerStore({
     required this.sellerId,
@@ -276,6 +327,8 @@ class SellerStore {
     this.whatsapp,
     this.digitalAddress,
     this.residentialAddress,
+    this.isLive = false,
+    this.livestream,
   });
 
   final int sellerId;
@@ -300,6 +353,8 @@ class SellerStore {
   final String? whatsapp;
   final String? digitalAddress;
   final String? residentialAddress;
+  final bool isLive;
+  final LivestreamCard? livestream;
 
   String? get location {
     final parts = [city, region].whereType<String>().where((s) => s.trim().isNotEmpty);
@@ -315,6 +370,10 @@ class SellerStore {
     }
 
     final photo = json['shop_photo'] as String?;
+    final liveJson = json['livestream'];
+    final livestream = liveJson is Map
+        ? LivestreamCard.fromJson(Map<String, dynamic>.from(liveJson))
+        : null;
     return SellerStore(
       sellerId: (json['seller_id'] as num?)?.toInt() ?? 0,
       storeName: json['store_name'] as String? ?? 'Store',
@@ -338,6 +397,40 @@ class SellerStore {
       whatsapp: json['whatsapp'] as String?,
       digitalAddress: json['digital_address'] as String?,
       residentialAddress: json['residential_address'] as String?,
+      isLive: json['is_live'] == true || livestream != null,
+      livestream: livestream,
+    );
+  }
+
+  SellerStore copyWith({
+    int? followerCount,
+    bool? isFollowing,
+  }) {
+    return SellerStore(
+      sellerId: sellerId,
+      storeName: storeName,
+      slug: slug,
+      sellerName: sellerName,
+      shopPhoto: shopPhoto,
+      description: description,
+      businessAddress: businessAddress,
+      isBusinessRegistered: isBusinessRegistered,
+      approvedAt: approvedAt,
+      rating: rating,
+      totalSales: totalSales,
+      productCount: productCount,
+      reviewCount: reviewCount,
+      followerCount: followerCount ?? this.followerCount,
+      isFollowing: isFollowing ?? this.isFollowing,
+      city: city,
+      region: region,
+      email: email,
+      mobile: mobile,
+      whatsapp: whatsapp,
+      digitalAddress: digitalAddress,
+      residentialAddress: residentialAddress,
+      isLive: isLive,
+      livestream: livestream,
     );
   }
 }

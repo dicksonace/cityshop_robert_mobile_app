@@ -364,6 +364,7 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
                     ),
                   ),
                 ),
+                SliverToBoxAdapter(child: _LiveNowStrip(key: ValueKey('live-$_matchesTick'))),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
@@ -984,6 +985,176 @@ class _Stat extends StatelessWidget {
           TextSpan(
             text: ' $label',
             style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Horizontal “Live now” stores — same idea as web home.
+class _LiveNowStrip extends StatefulWidget {
+  const _LiveNowStrip({super.key});
+
+  @override
+  State<_LiveNowStrip> createState() => _LiveNowStripState();
+}
+
+class _LiveNowStripState extends State<_LiveNowStrip> {
+  List<LivestreamCard> _lives = const [];
+  bool _loaded = false;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveNowStrip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.key != widget.key) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    if (_loading) return;
+    _loading = true;
+    try {
+      final items = await context.read<AppStore>().fetchLiveNow();
+      if (!mounted) return;
+      setState(() {
+        _lives = items;
+        _loaded = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loaded = true);
+    } finally {
+      _loading = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_loaded || _lives.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'LIVE NOW',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.7,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 148,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _lives.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) {
+                final live = _lives[i];
+                final photo = ApiConfig.resolveMediaUrl(live.shopPhoto);
+                return InkWell(
+                  onTap: () => context.push('/live/${live.storeSlug}'),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    width: 132,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFECACA)),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              if (photo.isNotEmpty)
+                                CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover)
+                              else
+                                Container(
+                                  color: const Color(0xFFF3F4F6),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    live.storeName.isNotEmpty ? live.storeName[0].toUpperCase() : 'S',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 28,
+                                      color: Color(0xFFD1D5DB),
+                                    ),
+                                  ),
+                                ),
+                              Positioned(
+                                left: 8,
+                                top: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFDC2626),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: const Text(
+                                    'LIVE',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                live.storeName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                              ),
+                              Text(
+                                (live.title ?? '').trim().isNotEmpty ? live.title! : 'Live from the store',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

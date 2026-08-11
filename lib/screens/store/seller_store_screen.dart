@@ -90,31 +90,11 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
       final following = await app.toggleFollowSeller(s.sellerId);
       if (!mounted) return;
       setState(() {
-        store = SellerStore(
-          sellerId: s.sellerId,
-          storeName: s.storeName,
-          slug: s.slug,
-          sellerName: s.sellerName,
-          shopPhoto: s.shopPhoto,
-          description: s.description,
-          businessAddress: s.businessAddress,
-          isBusinessRegistered: s.isBusinessRegistered,
-          approvedAt: s.approvedAt,
-          rating: s.rating,
-          totalSales: s.totalSales,
-          productCount: s.productCount,
-          reviewCount: s.reviewCount,
+        store = s.copyWith(
           followerCount: following
               ? s.followerCount + (s.isFollowing ? 0 : 1)
               : (s.followerCount - (s.isFollowing ? 1 : 0)).clamp(0, 1 << 30),
           isFollowing: following,
-          city: s.city,
-          region: s.region,
-          email: s.email,
-          mobile: s.mobile,
-          whatsapp: s.whatsapp,
-          digitalAddress: s.digitalAddress,
-          residentialAddress: s.residentialAddress,
         );
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -295,16 +275,40 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                                           mainAxisAlignment: MainAxisAlignment.end,
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Text(
-                                              s?.storeName ?? 'Store',
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 22,
-                                                height: 1.15,
-                                              ),
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 6,
+                                              crossAxisAlignment: WrapCrossAlignment.center,
+                                              children: [
+                                                Text(
+                                                  s?.storeName ?? 'Store',
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 22,
+                                                    height: 1.15,
+                                                  ),
+                                                ),
+                                                if (s?.isLive == true)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFDC2626),
+                                                      borderRadius: BorderRadius.circular(999),
+                                                    ),
+                                                    child: const Text(
+                                                      'LIVE',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.w900,
+                                                        fontSize: 11,
+                                                        letterSpacing: 0.5,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
                                             ),
                                             const SizedBox(height: 6),
                                             Text(
@@ -356,6 +360,25 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              if (s != null && s.isLive) ...[
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFDC2626),
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    onPressed: () => context.push('/live/${s.slug}'),
+                                    icon: const Icon(Icons.videocam, size: 18),
+                                    label: Text(
+                                      (s.livestream?.title ?? '').trim().isNotEmpty
+                                          ? 'Watch live · ${s.livestream!.title}'
+                                          : 'Watch live',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
                               Row(
                                 children: [
                                   Expanded(
