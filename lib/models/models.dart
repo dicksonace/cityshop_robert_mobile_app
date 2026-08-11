@@ -823,6 +823,9 @@ class OrderItemModel {
     this.autoConfirmIn,
     this.canRequestRefund = false,
     this.canReview = false,
+    this.vehicleNumber,
+    this.driverPhone,
+    this.packageImageUrl,
     this.buyerReview,
     this.dispute,
   });
@@ -840,8 +843,18 @@ class OrderItemModel {
   final String? autoConfirmIn;
   final bool canRequestRefund;
   final bool canReview;
+  final String? vehicleNumber;
+  final String? driverPhone;
+  final String? packageImageUrl;
   final Map<String, dynamic>? buyerReview;
   final Map<String, dynamic>? dispute;
+
+  bool get hasDeliveryDetails {
+    final vehicle = vehicleNumber?.trim() ?? '';
+    final phone = driverPhone?.trim() ?? '';
+    final photo = packageImageUrl?.trim() ?? '';
+    return vehicle.isNotEmpty || phone.isNotEmpty || photo.isNotEmpty;
+  }
 
   double get displayTotal {
     if (lineTotal > 0) return lineTotal;
@@ -871,6 +884,9 @@ class OrderItemModel {
       autoConfirmIn: json['auto_confirm_in'] as String?,
       canRequestRefund: json['can_request_refund'] == true,
       canReview: json['can_review'] == true,
+      vehicleNumber: (json['vehicle_number'] as String?)?.trim(),
+      driverPhone: (json['driver_phone'] as String?)?.trim(),
+      packageImageUrl: (json['package_image_url'] as String?)?.trim(),
       buyerReview: review is Map ? Map<String, dynamic>.from(review) : null,
       dispute: dispute is Map ? Map<String, dynamic>.from(dispute) : null,
     );

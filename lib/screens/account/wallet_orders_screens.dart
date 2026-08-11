@@ -2299,6 +2299,64 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                             label: _prettyStatus(item.status ?? o.status),
                                             color: _fulfillmentBadgeColor(item.status ?? o.status),
                                           ),
+                                          if (item.hasDeliveryDetails) ...[
+                                            const SizedBox(height: 10),
+                                            Container(
+                                              width: double.infinity,
+                                              padding: const EdgeInsets.all(12),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFEFF6FF),
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(color: const Color(0xFFBFDBFE)),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  const Text(
+                                                    'Delivery details',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.w800,
+                                                      fontSize: 13,
+                                                      color: Color(0xFF1E3A8A),
+                                                    ),
+                                                  ),
+                                                  if ((item.driverPhone ?? '').isNotEmpty) ...[
+                                                    const SizedBox(height: 6),
+                                                    InkWell(
+                                                      onTap: () => _callPhone(item.driverPhone!),
+                                                      child: Text(
+                                                        'Driver phone: ${item.driverPhone}',
+                                                        style: const TextStyle(
+                                                          color: Color(0xFF1E40AF),
+                                                          fontWeight: FontWeight.w700,
+                                                          decoration: TextDecoration.underline,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                  if ((item.vehicleNumber ?? '').isNotEmpty) ...[
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      'Vehicle: ${item.vehicleNumber}',
+                                                      style: const TextStyle(color: Color(0xFF1E3A8A)),
+                                                    ),
+                                                  ],
+                                                  if ((item.packageImageUrl ?? '').isNotEmpty) ...[
+                                                    const SizedBox(height: 8),
+                                                    ClipRRect(
+                                                      borderRadius: BorderRadius.circular(8),
+                                                      child: CachedNetworkImage(
+                                                        imageUrl: item.packageImageUrl!,
+                                                        height: 96,
+                                                        width: 96,
+                                                        fit: BoxFit.cover,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                           if (_canConfirm(item)) ...[
                                             const SizedBox(height: 10),
                                             Container(
