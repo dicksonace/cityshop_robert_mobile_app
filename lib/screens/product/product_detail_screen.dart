@@ -31,6 +31,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Product? product;
   List<Product> related = [];
   List<Map<String, dynamic>> reviews = [];
+  Map<String, dynamic>? reviewable;
   String? error;
   bool loading = true;
   bool adding = false;
@@ -83,6 +84,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         product = detail.product;
         related = detail.related;
         reviews = detail.reviews;
+        reviewable = detail.reviewable;
         likeCounted = store.wishlistProductIds.contains(detail.product.id);
         loading = false;
       });
@@ -298,10 +300,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         product: p!,
                         related: related,
                         reviews: reviews,
+                        reviewable: reviewable,
                         qty: qty,
                         likeCount: p.wishlistAdds + (wishlisted ? 1 : 0) - (likeCounted ? 1 : 0),
                         onQtyChanged: (q) => setState(() => qty = q),
                         onMessage: _messageSeller,
+                        onReviewPosted: _load,
                       ),
           ),
           if (showAddedToast)
@@ -379,19 +383,23 @@ class _Body extends StatelessWidget {
     required this.product,
     required this.related,
     required this.reviews,
+    this.reviewable,
     required this.qty,
     required this.likeCount,
     required this.onQtyChanged,
     required this.onMessage,
+    required this.onReviewPosted,
   });
 
   final Product product;
   final List<Product> related;
   final List<Map<String, dynamic>> reviews;
+  final Map<String, dynamic>? reviewable;
   final int qty;
   final int likeCount;
   final ValueChanged<int> onQtyChanged;
   final VoidCallback onMessage;
+  final Future<void> Function() onReviewPosted;
 
   @override
   Widget build(BuildContext context) {
@@ -580,40 +588,12 @@ class _Body extends StatelessWidget {
                   ),
                 ),
               ],
-              if (reviews.isNotEmpty) ...[
-                const SizedBox(height: 22),
-                const Text('Reviews', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                const SizedBox(height: 8),
-                ...reviews.take(5).map((r) {
-                  final user = r['user'];
-                  final name = user is Map ? (user['name'] as String? ?? 'Buyer') : 'Buyer';
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            const Spacer(),
-                            Text('★ ${(r['rating'] as num?)?.toStringAsFixed(1) ?? '-'}'),
-                          ],
-                        ),
-                        if ((r['comment'] as String?)?.isNotEmpty == true) ...[
-                          const SizedBox(height: 4),
-                          Text('${r['comment']}', style: const TextStyle(color: AppColors.textSecondary)),
-                        ],
-                      ],
-                    ),
-                  );
-                }),
-              ],
+              const SizedBox(height: 22),
+              _ProductReviews(
+                reviews: reviews,
+                reviewable: reviewable,
+                onPosted: onReviewPosted,
+              ),
               if (related.isNotEmpty) ...[
                 const SizedBox(height: 22),
                 const Text('Related products', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
@@ -690,6 +670,295 @@ class _Body extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+final _reviewDate = DateFormat('d MMM yyyy');
+
+class _ProductReviews extends StatefulWidget {
+  const _ProductReviews({
+    required this.reviews,
+    this.reviewable,
+    required this.onPosted,
+  });
+
+  final List<Map<String, dynamic>> reviews;
+  final Map<String, dynamic>? reviewable;
+  final Future<void> Function() onPosted;
+
+  @override
+  State<_ProductReviews> createState() => _ProductReviewsState();
+}
+
+class _ProductReviewsState extends State<_ProductReviews> {
+  final _comment = TextEditingController();
+  int _rating = 5;
+  bool _posting = false;
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    super.dispose();
+  }
+
+  String _formatDate(dynamic raw) {
+    if (raw is! String || raw.isEmpty) return '';
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return '';
+    return _reviewDate.format(parsed.toLocal());
+  }
+
+  Future<void> _post() async {
+    final reviewable = widget.reviewable;
+    if (reviewable == null) return;
+    final orderId = (reviewable['order_id'] as num?)?.toInt() ?? 0;
+    final itemId = (reviewable['order_item_id'] as num?)?.toInt() ?? 0;
+    final comment = _comment.text.trim();
+    if (orderId < 1 || itemId < 1) return;
+    if (comment.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add a comment before posting your review.')),
+      );
+      return;
+    }
+    setState(() => _posting = true);
+    try {
+      await context.read<AppStore>().submitReview(
+            orderId: orderId,
+            orderItemId: itemId,
+            rating: _rating,
+            comment: comment,
+          );
+      if (!mounted) return;
+      _comment.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Thanks for your review!')),
+      );
+      await widget.onPosted();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  Widget _stars(int rating, {double size = 16, ValueChanged<int>? onChanged}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 1; i <= 5; i++)
+          GestureDetector(
+            onTap: onChanged == null ? null : () => onChanged(i),
+            child: Icon(
+              i <= rating ? Icons.star_rounded : Icons.star_outline_rounded,
+              size: size,
+              color: i <= rating ? const Color(0xFFFBBF24) : const Color(0xFFE5E7EB),
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final loggedIn = context.watch<AppStore>().isLoggedIn;
+    final reviews = widget.reviews;
+    final average = reviews.isEmpty
+        ? 0.0
+        : reviews.fold<double>(0, (sum, r) => sum + ((r['rating'] as num?)?.toDouble() ?? 0)) /
+            reviews.length;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.chat_bubble_outline, size: 18, color: AppColors.accent),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Customer Reviews & Ratings',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                ),
+              ),
+              if (reviews.isNotEmpty) ...[
+                _stars(average.round()),
+                const SizedBox(width: 6),
+                Text(
+                  '${average.toStringAsFixed(1)} · ${reviews.length}',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Rate with stars and leave a written comment after your order is delivered.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
+          ),
+          if (loggedIn && widget.reviewable != null) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFFED7AA), width: 2),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Write your review', style: TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'You purchased this item — tap stars to rate, then add your comment.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.35),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _stars(_rating, size: 28, onChanged: (n) => setState(() => _rating = n)),
+                      const SizedBox(width: 8),
+                      Text(
+                        '$_rating/5',
+                        style: const TextStyle(
+                          color: Color(0xFFD97706),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _comment,
+                    minLines: 3,
+                    maxLines: 5,
+                    maxLength: 1000,
+                    decoration: const InputDecoration(
+                      hintText: 'Share your experience — quality, delivery, would you recommend it?',
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 44,
+                    child: ElevatedButton(
+                      onPressed: _posting ? null : _post,
+                      child: Text(_posting ? 'Posting…' : 'Post Review'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (loggedIn) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('How to leave a review', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  const Text(
+                    '1. Buy this product and complete checkout\n'
+                    '2. Wait until the seller marks your order as Delivered\n'
+                    '3. Come back here — a star rating and comment box will appear',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+                  ),
+                  TextButton(
+                    onPressed: () => context.go('/shop?tab=orders'),
+                    child: const Text('View your orders →'),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () => context.push('/login'),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF9FAFB),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text.rich(
+                  TextSpan(
+                    text: 'Sign in',
+                    style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w700),
+                    children: [
+                      TextSpan(
+                        text: ' to leave a review after purchase.',
+                        style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w400),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+          if (reviews.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Text(
+                'No reviews yet. Be the first to share your experience!',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+            )
+          else
+            ...reviews.map((r) {
+              final user = r['user'];
+              final name = user is Map ? (user['name'] as String? ?? 'Customer') : 'Customer';
+              final rating = (r['rating'] as num?)?.round() ?? 0;
+              final comment = (r['comment'] as String?)?.trim() ?? '';
+              final date = _formatDate(r['created_at']);
+              return Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(height: 1),
+                    const SizedBox(height: 14),
+                    Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _stars(rating),
+                        if (date.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(date, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                        ],
+                      ],
+                    ),
+                    if (comment.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        comment,
+                        style: const TextStyle(color: AppColors.textSecondary, height: 1.4),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
     );
   }
 }

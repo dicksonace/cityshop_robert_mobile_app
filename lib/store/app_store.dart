@@ -301,6 +301,7 @@ class AppStore extends ChangeNotifier {
     Product product,
     List<Product> related,
     List<Map<String, dynamic>> reviews,
+    Map<String, dynamic>? reviewable,
     bool isFollowingSeller,
   })> fetchProductDetail(String slug) async {
     final res = await _api.get('/products/$slug');
@@ -320,6 +321,17 @@ class AppStore extends ChangeNotifier {
         ? reviewsJson.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
         : <Map<String, dynamic>>[];
 
+    final reviewableRaw = body['reviewable'];
+    Map<String, dynamic>? reviewable;
+    if (reviewableRaw is Map) {
+      final map = Map<String, dynamic>.from(reviewableRaw);
+      final orderId = (map['order_id'] as num?)?.toInt() ?? 0;
+      final itemId = (map['order_item_id'] as num?)?.toInt() ?? 0;
+      if (orderId > 0 && itemId > 0) {
+        reviewable = {'order_id': orderId, 'order_item_id': itemId};
+      }
+    }
+
     final product = Product.fromJson(Map<String, dynamic>.from(data as Map));
     final isFollowingSeller = body['is_following_seller'] == true;
     if (isFollowingSeller && product.sellerId != null) {
@@ -330,6 +342,7 @@ class AppStore extends ChangeNotifier {
       product: product,
       related: related,
       reviews: reviews,
+      reviewable: reviewable,
       isFollowingSeller: isFollowingSeller,
     );
   }
