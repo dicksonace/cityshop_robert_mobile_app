@@ -1397,10 +1397,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                                   ),
                                                 ),
                                               ),
-                                          ] else if (m.isVoice)
+                                          ] else if (m.type == 'voice' && !m.isDeleted)
                                             _ChatVoice(
-                                              url: m.voiceUrl!,
-                                              durationLabel: m.durationLabel,
+                                              url: m.voiceUrl ?? '',
+                                              durationSeconds: m.durationSeconds,
                                               mine: m.mine,
                                             )
                                           else
@@ -2780,15 +2780,30 @@ class _ChatVideoState extends State<_ChatVideo> {
   }
 }
 
+class _VoicePlayback {
+  static _ChatVoiceState? active;
+
+  static void claim(_ChatVoiceState next) {
+    if (active != null && active != next) {
+      unawaited(active!.stopFromOutside());
+    }
+    active = next;
+  }
+
+  static void release(_ChatVoiceState state) {
+    if (active == state) active = null;
+  }
+}
+
 class _ChatVoice extends StatefulWidget {
   const _ChatVoice({
     required this.url,
-    required this.durationLabel,
+    required this.durationSeconds,
     required this.mine,
   });
 
   final String url;
-  final String durationLabel;
+  final int? durationSeconds;
   final bool mine;
 
   @override
@@ -2797,59 +2812,198 @@ class _ChatVoice extends StatefulWidget {
 
 class _ChatVoiceState extends State<_ChatVoice> {
   final _player = AudioPlayer();
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration>? _durationSub;
+  StreamSubscription<void>? _completeSub;
   bool _playing = false;
+  bool _loading = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  double _speed = 1;
+
+  static String _clock(Duration value) {
+    final total = value.inSeconds.clamp(0, 99 * 60);
+    final minutes = total ~/ 60;
+    final seconds = total % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
 
   @override
   void initState() {
     super.initState();
-    _player.onPlayerComplete.listen((_) {
-      if (mounted) setState(() => _playing = false);
+    if ((widget.durationSeconds ?? 0) > 0) {
+      _duration = Duration(seconds: widget.durationSeconds!);
+    }
+    _positionSub = _player.onPositionChanged.listen((value) {
+      if (!mounted) return;
+      setState(() => _position = value);
+    });
+    _durationSub = _player.onDurationChanged.listen((value) {
+      if (!mounted || value.inMilliseconds <= 0) return;
+      setState(() => _duration = value);
+    });
+    _completeSub = _player.onPlayerComplete.listen((_) {
+      if (!mounted) return;
+      setState(() {
+        _playing = false;
+        _loading = false;
+        _position = Duration.zero;
+      });
+      _VoicePlayback.release(this);
     });
   }
 
   @override
   void dispose() {
+    _VoicePlayback.release(this);
+    _positionSub?.cancel();
+    _durationSub?.cancel();
+    _completeSub?.cancel();
     _player.dispose();
     super.dispose();
   }
 
-  Future<void> _toggle() async {
-    if (_playing) {
+  Future<void> stopFromOutside() async {
+    try {
       await _player.stop();
-      setState(() => _playing = false);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _playing = false;
+      _loading = false;
+      _position = Duration.zero;
+    });
+  }
+
+  Future<void> _toggle() async {
+    if (widget.url.trim().isEmpty) return;
+    if (_playing) {
+      await _player.pause();
+      if (mounted) setState(() => _playing = false);
       return;
     }
-    final resolved = ApiConfig.resolveMediaUrl(widget.url);
-    await _player.play(UrlSource(resolved));
-    setState(() => _playing = true);
+    _VoicePlayback.claim(this);
+    setState(() => _loading = true);
+    try {
+      if (_position.inMilliseconds == 0) {
+        final resolved = ApiConfig.resolveMediaUrl(widget.url);
+        await _player.play(UrlSource(resolved));
+      } else {
+        await _player.resume();
+      }
+      await _player.setPlaybackRate(_speed);
+      if (!mounted) return;
+      setState(() {
+        _playing = true;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _playing = false;
+        _loading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not play this voice note')),
+      );
+    }
+  }
+
+  Future<void> _seek(double value) async {
+    final total = _duration.inMilliseconds;
+    if (total <= 0) return;
+    final next = Duration(milliseconds: (value * total).round());
+    await _player.seek(next);
+    if (mounted) setState(() => _position = next);
+  }
+
+  Future<void> _cycleSpeed() async {
+    final next = _speed == 1 ? 1.5 : _speed == 1.5 ? 2.0 : 1.0;
+    setState(() => _speed = next);
+    try {
+      await _player.setPlaybackRate(next);
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
     final fg = widget.mine ? Colors.white : AppColors.textPrimary;
+    final muted = widget.mine ? Colors.white70 : AppColors.textMuted;
+    final bar = widget.mine ? Colors.white : AppColors.accent;
+    final track = widget.mine ? Colors.white24 : const Color(0xFFE5E7EB);
+    final total = _duration.inMilliseconds > 0
+        ? _duration
+        : Duration(seconds: widget.durationSeconds ?? 0);
+    final progress = total.inMilliseconds <= 0
+        ? 0.0
+        : (_position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+    final missing = widget.url.trim().isEmpty;
+
     return SizedBox(
-      width: 200,
+      width: 228,
       child: Row(
         children: [
-          IconButton(
-            onPressed: _toggle,
-            icon: Icon(_playing ? Icons.pause_circle_filled : Icons.play_circle_filled, color: fg, size: 34),
+          Material(
+            color: widget.mine ? Colors.white : AppColors.accent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: missing || _loading ? null : _toggle,
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: _loading
+                    ? Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: widget.mine ? AppColors.accent : Colors.white,
+                        ),
+                      )
+                    : Icon(
+                        _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        color: widget.mine ? AppColors.accent : Colors.white,
+                        size: 26,
+                      ),
+              ),
+            ),
           ),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: widget.mine ? Colors.white54 : AppColors.border,
-                    borderRadius: BorderRadius.circular(99),
+                SliderTheme(
+                  data: SliderThemeData(
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                    overlayShape: SliderComponentShape.noOverlay,
+                    activeTrackColor: bar,
+                    inactiveTrackColor: track,
+                    thumbColor: bar,
+                  ),
+                  child: Slider(
+                    value: progress,
+                    onChanged: missing ? null : _seek,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.durationLabel.isEmpty ? 'Voice message' : widget.durationLabel,
-                  style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w600),
+                Row(
+                  children: [
+                    Text(
+                      missing
+                          ? 'Unavailable'
+                          : '${_clock(_position)} / ${_clock(total)}',
+                      style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: missing ? null : _cycleSpeed,
+                      child: Text(
+                        '${_speed == 1 ? '1' : _speed == 1.5 ? '1.5' : '2'}x',
+                        style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
