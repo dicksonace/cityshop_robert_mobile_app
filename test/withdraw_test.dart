@@ -234,7 +234,41 @@ void main() {
     await _requestAmount(tester, '2000');
 
     expect(api.posts, isEmpty);
-    expect(find.text('You can withdraw at most GH₵1,040.00'), findsOneWidget);
+    expect(find.textContaining('Insufficient balance. Available:'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Review withdrawal'), findsOneWidget);
+    final button = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Review withdrawal'));
+    expect(button.onPressed, isNull);
+  });
+
+  testWidgets('bank amount plus fee shows the needs-total banner', (tester) async {
+    final api = _FakeApiClient(
+      overview: _overview(
+        available: 6062.40,
+        fee: {
+          'enabled': true,
+          'amount': 10,
+          'applies_to': 'bank',
+          'mode': 'flat',
+          'percent': 0,
+          'bank_tiers': [
+            {'min': 10, 'max': 999.99, 'fee': 10},
+            {'min': 1000, 'max': 25000, 'fee': 20},
+          ],
+        },
+      ),
+    );
+    await _pumpWithdraw(tester, api);
+
+    await tester.tap(find.text('Bank'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Account name'), 'Robert Asare');
+    await tester.enterText(find.widgetWithText(TextField, 'Amount (GH₵)'), '25580');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Needs GH₵25,600.00 (incl. GH₵20.00 fee). Available GH₵6,062.40'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a missing MoMo number is caught before submitting', (tester) async {

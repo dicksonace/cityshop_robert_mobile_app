@@ -15,6 +15,7 @@ import '../../widgets/bank_picker_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/momo_widgets.dart';
 import '../../widgets/payment_pin_sheet.dart';
+import '../../widgets/withdrawal_balance_alert.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 final _stamp = DateFormat('d MMM yyyy, h:mm a');
@@ -45,6 +46,9 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   @override
   void initState() {
     super.initState();
+    amountCtrl.addListener(() {
+      if (mounted) setState(() {});
+    });
     _load();
   }
 
@@ -145,11 +149,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     final fee = overview.feeFor(payoutType, amount);
     final total = amount + fee;
     if (total > overview.availableBalance) {
-      _toast(
-        fee > 0
-            ? 'Needs ${_money.format(total)} (incl. ${_money.format(fee)} fee). Available ${_money.format(overview.availableBalance)}'
-            : 'You can withdraw at most ${_money.format(overview.availableBalance)}',
-      );
       return;
     }
 
@@ -317,6 +316,8 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   Widget _body(BuildContext context) {
     final tooSmall = overview.availableBalance < overview.minimum;
     final banks = overview.banks.isNotEmpty ? overview.banks : ghanaBanks;
+    final typedAmount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+    final activeFee = overview.feeFor(payoutType, typedAmount);
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -444,6 +445,11 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                 ),
                 const SizedBox(height: 12),
+                WithdrawalBalanceAlert(
+                  amount: typedAmount,
+                  fee: activeFee,
+                  available: overview.availableBalance,
+                ),
                 TextField(
                   controller: amountCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -475,7 +481,15 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                       foregroundColor: Colors.white,
                       disabledBackgroundColor: const Color(0xFFFED7AA),
                     ),
-                    onPressed: submitting ? null : _submit,
+                    onPressed: submitting ||
+                            withdrawalBalanceMessage(
+                                  amount: typedAmount,
+                                  fee: activeFee,
+                                  available: overview.availableBalance,
+                                ) !=
+                                null
+                        ? null
+                        : _submit,
                     child: Text(
                       submitting ? 'Sending…' : 'Review withdrawal',
                       style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
