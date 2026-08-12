@@ -139,16 +139,33 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        titleSpacing: 8,
+        title: Row(
           children: [
-            Text(
-              live?.storeName ?? 'Live',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            StoreAvatar(
+              name: live?.storeName ?? 'Live',
+              photo: live?.shopPhoto,
+              radius: 18,
             ),
-            Text(
-              live?.title?.trim().isNotEmpty == true ? live!.title! : 'Live from the store',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white70),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    live?.storeName ?? 'Live',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  Text(
+                    live?.title?.trim().isNotEmpty == true ? live!.title! : 'Live from the store',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white70),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -194,14 +211,38 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
                       left: 12,
                       top: 12,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFDC2626),
+                          color: Colors.black.withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: Colors.white24),
                         ),
-                        child: const Text(
-                          'LIVE',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            StoreAvatar(
+                              name: live?.storeName ?? 'Live',
+                              photo: live?.shopPhoto,
+                              radius: 12,
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDC2626),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: const Text(
+                                'LIVE',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                  letterSpacing: 0.6,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
