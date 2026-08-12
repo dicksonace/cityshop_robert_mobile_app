@@ -15,6 +15,7 @@ import '../../utils/order_receipt_printer.dart';
 import '../../utils/wallet_statement_printer.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/image_viewer.dart';
 import '../../widgets/tab_refresh.dart';
 import '../../widgets/wallet_receipt_sheet.dart';
 import '../cart/paystack_payment_screen.dart';
@@ -2346,13 +2347,43 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                                   ],
                                                   if ((item.packageImageUrl ?? '').trim().isNotEmpty) ...[
                                                     const SizedBox(height: 10),
-                                                    ClipRRect(
+                                                    InkWell(
+                                                      onTap: () => showImageViewer(
+                                                        context,
+                                                        urls: [item.packageImageUrl!],
+                                                      ),
                                                       borderRadius: BorderRadius.circular(10),
-                                                      child: CachedNetworkImage(
-                                                        imageUrl: item.packageImageUrl!,
-                                                        height: 96,
-                                                        width: 96,
-                                                        fit: BoxFit.cover,
+                                                      child: Stack(
+                                                        children: [
+                                                          ClipRRect(
+                                                            borderRadius: BorderRadius.circular(10),
+                                                            child: CachedNetworkImage(
+                                                              imageUrl: item.packageImageUrl!,
+                                                              height: 96,
+                                                              width: 96,
+                                                              fit: BoxFit.cover,
+                                                            ),
+                                                          ),
+                                                          Positioned(
+                                                            right: 4,
+                                                            bottom: 4,
+                                                            child: Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors.black.withValues(alpha: 0.7),
+                                                                borderRadius: BorderRadius.circular(6),
+                                                              ),
+                                                              child: const Text(
+                                                                'View',
+                                                                style: TextStyle(
+                                                                  color: Colors.white,
+                                                                  fontSize: 10,
+                                                                  fontWeight: FontWeight.w800,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
                                                       ),
                                                     ),
                                                   ],
