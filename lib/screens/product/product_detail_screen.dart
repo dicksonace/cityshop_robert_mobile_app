@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -221,6 +222,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
+  Future<void> _copyProductLink() async {
+    final p = product;
+    final slug = p?.slug.isNotEmpty == true ? p!.slug : widget.slug;
+    final url = ApiConfig.productShareUrl(slug);
+    await Clipboard.setData(ClipboardData(text: url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Link copied'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<void> _shareProduct() async {
     final p = product;
     final slug = p?.slug.isNotEmpty == true ? p!.slug : widget.slug;
@@ -266,6 +281,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             onSelected: (value) async {
               if (value == 'share') {
                 await _shareProduct();
+              } else if (value == 'copy') {
+                await _copyProductLink();
               } else if (value == 'follow') {
                 await _toggleFollowSeller();
               }
@@ -280,6 +297,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     contentPadding: EdgeInsets.zero,
                     leading: Icon(Icons.share_outlined),
                     title: Text('Share this ad'),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'copy',
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.copy_outlined),
+                    title: Text('Copy'),
                   ),
                 ),
                 if (sellerId != null)
