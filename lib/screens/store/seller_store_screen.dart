@@ -361,23 +361,12 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (s != null && s.isLive) ...[
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFFDC2626),
-                                      foregroundColor: Colors.white,
-                                    ),
-                                    onPressed: () => context.push('/live/${s.slug}'),
-                                    icon: const Icon(Icons.videocam, size: 18),
-                                    label: Text(
-                                      (s.livestream?.title ?? '').trim().isNotEmpty
-                                          ? 'Watch live · ${s.livestream!.title}'
-                                          : 'Watch live',
-                                    ),
-                                  ),
+                                _StoreLivePill(
+                                  store: s,
+                                  photoUrl: photoUrl,
+                                  onTap: () => context.push('/live/${s.slug}'),
                                 ),
-                                const SizedBox(height: 10),
+                                const SizedBox(height: 12),
                               ],
                               Row(
                                 children: [
@@ -861,5 +850,111 @@ class _SellerProfileSheet extends StatelessWidget {
     );
     if (onTap == null) return child;
     return InkWell(onTap: onTap, child: child);
+  }
+}
+
+class _StoreLivePill extends StatelessWidget {
+  const _StoreLivePill({
+    required this.store,
+    required this.onTap,
+    this.photoUrl,
+  });
+
+  final SellerStore store;
+  final VoidCallback onTap;
+  final String? photoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = (store.livestream?.title ?? '').trim().isNotEmpty
+        ? store.livestream!.title!.trim()
+        : store.storeName;
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: const Color(0xFFFED7AA), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: const Color(0xFFFFF7ED),
+                    backgroundImage:
+                        photoUrl != null ? CachedNetworkImageProvider(photoUrl!) : null,
+                    child: photoUrl == null
+                        ? Text(
+                            store.storeName.isNotEmpty ? store.storeName[0].toUpperCase() : 'S',
+                            style: const TextStyle(
+                              color: AppColors.accent,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          )
+                        : null,
+                  ),
+                  Positioned(
+                    right: -1,
+                    top: -1,
+                    child: Container(
+                      width: 11,
+                      height: 11,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDC2626),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'LIVE',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
