@@ -956,7 +956,9 @@ class _ProductReviewsState extends State<_ProductReviews> {
               final name = user is Map ? (user['name'] as String? ?? 'Customer') : 'Customer';
               final rating = (r['rating'] as num?)?.round() ?? 0;
               final comment = (r['comment'] as String?)?.trim() ?? '';
+              final sellerReply = (r['seller_reply'] as String?)?.trim() ?? '';
               final date = _formatDate(r['created_at']);
+              final replyDate = _formatDate(r['seller_replied_at']);
               return Padding(
                 padding: const EdgeInsets.only(top: 14),
                 child: Column(
@@ -980,6 +982,47 @@ class _ProductReviewsState extends State<_ProductReviews> {
                       Text(
                         comment,
                         style: const TextStyle(color: AppColors.textSecondary, height: 1.4),
+                      ),
+                    ],
+                    if (sellerReply.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Seller reply',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                if (replyDate.isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    replyDate,
+                                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              sellerReply,
+                              style: const TextStyle(color: AppColors.textSecondary, height: 1.4, fontSize: 13),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ],
