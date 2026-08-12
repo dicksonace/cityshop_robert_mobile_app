@@ -97,6 +97,7 @@ class Product {
     this.reviewCount = 0,
     this.views = 0,
     this.wishlistAdds = 0,
+    this.videoPlays = 0,
     this.inGhana = false,
     this.freeShipping = false,
     this.deliveryFee,
@@ -136,6 +137,7 @@ class Product {
   final int reviewCount;
   final int views;
   final int wishlistAdds;
+  final int videoPlays;
   final bool inGhana;
   final bool freeShipping;
   final double? deliveryFee;
@@ -204,6 +206,7 @@ class Product {
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
       views: (json['views'] as num?)?.toInt() ?? 0,
       wishlistAdds: (json['wishlist_adds'] as num?)?.toInt() ?? 0,
+      videoPlays: (json['video_plays'] as num?)?.toInt() ?? 0,
       inGhana: json['in_ghana'] as bool? ?? false,
       freeShipping: json['free_shipping'] as bool? ?? false,
       deliveryFee: (json['delivery_fee'] as num?)?.toDouble(),

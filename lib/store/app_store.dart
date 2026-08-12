@@ -283,6 +283,17 @@ class AppStore extends ChangeNotifier {
     await RecentViews.record(id: product.id, categoryId: product.categoryId);
   }
 
+  Future<int?> recordProductVideoPlay(String slug) async {
+    try {
+      final res = await _api.post('/products/$slug/video-play');
+      final body = res.data;
+      if (body is Map && body['video_plays'] != null) {
+        return (body['video_plays'] as num).toInt();
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<List<LivestreamCard>> fetchLiveNow() async {
     final res = await _api.get('/livestreams');
     final body = res.data;

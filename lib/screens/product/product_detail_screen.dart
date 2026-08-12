@@ -52,6 +52,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   /// Live like total — bumped locally on tap so the count does not wait on the API.
   int likeCount = 0;
+  int videoPlayCount = 0;
 
   @override
   void initState() {
@@ -95,6 +96,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         reviews = detail.reviews;
         reviewable = detail.reviewable;
         likeCount = detail.product.wishlistAdds;
+        videoPlayCount = detail.product.videoPlays;
         if (store.wishlistProductIds.contains(detail.product.id) && likeCount < 1) {
           likeCount = 1;
         }
@@ -145,6 +147,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     } finally {
       if (mounted) setState(() => adding = false);
     }
+  }
+
+  Future<void> _recordVideoPlay() async {
+    final p = product;
+    if (p == null || p.videoUrl == null || p.videoUrl!.isEmpty) return;
+    setState(() => videoPlayCount += 1);
+    final count = await context.read<AppStore>().recordProductVideoPlay(p.slug);
+    if (!mounted || count == null) return;
+    setState(() => videoPlayCount = count);
   }
 
   Future<void> _toggleWish() async {
@@ -343,9 +354,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         reviewable: reviewable,
                         qty: qty,
                         likeCount: likeCount,
+                        videoPlayCount: videoPlayCount,
                         liked: wishlisted,
                         onQtyChanged: (q) => setState(() => qty = q),
                         onToggleWish: _toggleWish,
+                        onVideoPlay: _recordVideoPlay,
                         onMessage: _messageSeller,
                         onReviewPosted: _load,
                       ),
@@ -428,9 +441,11 @@ class _Body extends StatelessWidget {
     this.reviewable,
     required this.qty,
     required this.likeCount,
+    required this.videoPlayCount,
     required this.liked,
     required this.onQtyChanged,
     required this.onToggleWish,
+    required this.onVideoPlay,
     required this.onMessage,
     required this.onReviewPosted,
   });
@@ -441,9 +456,11 @@ class _Body extends StatelessWidget {
   final Map<String, dynamic>? reviewable;
   final int qty;
   final int likeCount;
+  final int videoPlayCount;
   final bool liked;
   final ValueChanged<int> onQtyChanged;
   final VoidCallback onToggleWish;
+  final VoidCallback onVideoPlay;
   final VoidCallback onMessage;
   final Future<void> Function() onReviewPosted;
 
@@ -463,6 +480,7 @@ class _Body extends StatelessWidget {
           videoUrl: product.videoUrl,
           videoDuration: product.videoDuration,
           discountPct: hasDiscount ? discountPct : null,
+          onVideoPlay: onVideoPlay,
         ),
         Padding(
           padding: const EdgeInsets.all(20),
@@ -499,6 +517,15 @@ class _Body extends StatelessWidget {
                   Icon(Icons.visibility_outlined, size: 16, color: Colors.grey.shade600),
                   const SizedBox(width: 4),
                   Text('${product.views} views', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  if (product.videoUrl != null && product.videoUrl!.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    Icon(Icons.play_circle_outline, size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$videoPlayCount ${videoPlayCount == 1 ? 'play' : 'plays'}',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    ),
+                  ],
                   const SizedBox(width: 10),
                   GestureDetector(
                     onTap: onToggleWish,
@@ -980,6 +1007,7 @@ class _ProductImageGallery extends StatefulWidget {
     this.videoUrl,
     this.videoDuration,
     this.discountPct,
+    this.onVideoPlay,
   });
 
   final List<ProductImage> images;
@@ -987,6 +1015,7 @@ class _ProductImageGallery extends StatefulWidget {
   final String? videoUrl;
   final int? videoDuration;
   final int? discountPct;
+  final VoidCallback? onVideoPlay;
 
   @override
   State<_ProductImageGallery> createState() => _ProductImageGalleryState();
@@ -1000,6 +1029,7 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
   bool _videoReady = false;
   bool _videoFailed = false;
   bool _muted = false;
+  bool _videoPlayRecorded = false;
 
   List<_GalleryItem> get _items {
     final items = <_GalleryItem>[];
@@ -1036,6 +1066,14 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
   }
 
   @override
+  void didUpdateWidget(covariant _ProductImageGallery oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      _videoPlayRecorded = false;
+    }
+  }
+
+  @override
   void dispose() {
     _pageController.dispose();
     _thumbsController.dispose();
@@ -1052,6 +1090,10 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
   }
 
   void _onVideoTick() {
+    if (_videoController?.value.isPlaying == true && !_videoPlayRecorded) {
+      _videoPlayRecorded = true;
+      widget.onVideoPlay?.call();
+    }
     if (mounted) setState(() {});
   }
 
