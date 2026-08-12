@@ -710,7 +710,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final canReply = !message.isEvent && conversation?.blocked != true;
     final canDelete = message.canDelete ||
         (message.mine && !message.isDeleted && deletable.contains(message.type));
-    const canForwardMessage = !message.isEvent &&
+    final canForwardMessage = !message.isEvent &&
         !message.isSignalling &&
         !message.isTransfer &&
         forwardable.contains(message.type);
