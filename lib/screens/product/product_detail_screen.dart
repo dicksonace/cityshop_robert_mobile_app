@@ -155,18 +155,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       return;
     }
     final wasLiked = store.wishlistProductIds.contains(p.id);
-    wishBusy = true;
     setState(() {
+      wishBusy = true;
       likeCount = wasLiked ? (likeCount - 1).clamp(0, 1 << 30) : likeCount + 1;
     });
     try {
       await store.toggleWishlist(p.id);
-    } on ApiException catch (e) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         likeCount = wasLiked ? likeCount + 1 : (likeCount - 1).clamp(0, 1 << 30);
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      final message = e is ApiException ? e.message : 'Could not update wishlist';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => wishBusy = false);
     }
@@ -319,6 +320,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         likeCount: likeCount,
                         liked: wishlisted,
                         onQtyChanged: (q) => setState(() => qty = q),
+                        onToggleWish: _toggleWish,
                         onMessage: _messageSeller,
                         onReviewPosted: _load,
                       ),
@@ -403,6 +405,7 @@ class _Body extends StatelessWidget {
     required this.likeCount,
     required this.liked,
     required this.onQtyChanged,
+    required this.onToggleWish,
     required this.onMessage,
     required this.onReviewPosted,
   });
@@ -415,6 +418,7 @@ class _Body extends StatelessWidget {
   final int likeCount;
   final bool liked;
   final ValueChanged<int> onQtyChanged;
+  final VoidCallback onToggleWish;
   final VoidCallback onMessage;
   final Future<void> Function() onReviewPosted;
 
@@ -471,13 +475,25 @@ class _Body extends StatelessWidget {
                   const SizedBox(width: 4),
                   Text('${product.views} views', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                   const SizedBox(width: 10),
-                  Icon(
-                    liked ? Icons.favorite : Icons.favorite_border,
-                    size: 16,
-                    color: liked ? AppColors.danger : Colors.grey.shade600,
+                  GestureDetector(
+                    onTap: onToggleWish,
+                    behavior: HitTestBehavior.opaque,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          liked ? Icons.favorite : Icons.favorite_border,
+                          size: 16,
+                          color: liked ? AppColors.danger : Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$likeCount ${likeCount == 1 ? 'like' : 'likes'}',
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 4),
-                  Text('$likeCount likes', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                 ],
               ),
               const SizedBox(height: 12),
