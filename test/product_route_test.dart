@@ -58,6 +58,14 @@ void main() {
     expect(find.text('Page Not Found'), findsNothing);
   });
 
+  testWidgets('an app-shared product link opens the product in the app', (tester) async {
+    final router = await pumpApp(tester);
+
+    expect(await _follow(tester, router, '/app/products/honda-civic-2016'), '/products/honda-civic-2016');
+    expect(await _follow(tester, router, '/app/store/city-unlock'), '/stores/city-unlock');
+    expect(await _follow(tester, router, '/app/live/city-unlock'), '/live/city-unlock');
+  });
+
   testWidgets('the plural product link is untouched', (tester) async {
     final router = await pumpApp(tester);
 

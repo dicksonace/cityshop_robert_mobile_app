@@ -25,21 +25,24 @@ class ApiConfig {
   static String get webBaseUrl =>
       useLocalBackend ? localWebBaseUrl : productionWebBaseUrl;
 
-  /// Public product page URL (web + app deep link).
+  /// Link the app shares — opens the CityShop app when installed, otherwise the website.
   static String productShareUrl(String slug) {
-    final base = webBaseUrl.endsWith('/')
-        ? webBaseUrl.substring(0, webBaseUrl.length - 1)
-        : webBaseUrl;
-    return '$base/products/$slug';
+    return '${_webOrigin()}/app/products/$slug';
   }
 
-  /// Public storefront URL (web + app deep link).
-  /// Web route is `/store/{slug}` (singular).
+  /// Public storefront URL the app shares (opens the app when installed).
   static String storeShareUrl(String slug) {
-    final base = webBaseUrl.endsWith('/')
+    return '${_webOrigin()}/app/store/$slug';
+  }
+
+  static String liveShareUrl(String slug) {
+    return '${_webOrigin()}/app/live/$slug';
+  }
+
+  static String _webOrigin() {
+    return webBaseUrl.endsWith('/')
         ? webBaseUrl.substring(0, webBaseUrl.length - 1)
         : webBaseUrl;
-    return '$base/store/$slug';
   }
 
   /// Turn relative storage paths into absolute URLs for images/videos.

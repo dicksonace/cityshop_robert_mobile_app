@@ -43,8 +43,58 @@ bool _isDeepLinkPath(String path) {
       path.startsWith('/stores/') ||
       path.startsWith('/store/') ||
       path.startsWith('/live/') ||
+      path.startsWith('/app/') ||
       path.startsWith('/orders/') ||
       path.startsWith('/messages/');
+}
+
+String? _rewriteIncomingPath(Uri uri) {
+  // cityshop://products/{slug} → /products/{slug}
+  const deepLinkHosts = {'products', 'product', 'stores', 'store', 'live', 'app'};
+  if (uri.scheme == 'cityshop' && deepLinkHosts.contains(uri.host)) {
+    if (uri.host == 'app') {
+      final target = _appLinkToInAppPath(uri.path);
+      if (target == null) return null;
+      if (uri.hasQuery) return '$target?${uri.query}';
+      return target;
+    }
+    final host = switch (uri.host) {
+      'store' => 'stores',
+      'product' => 'products',
+      _ => uri.host,
+    };
+    final path = uri.path.isEmpty ? '' : uri.path;
+    final target = '/$host$path';
+    if (uri.hasQuery) return '$target?${uri.query}';
+    return target;
+  }
+
+  if (uri.path.startsWith('/app/')) {
+    final target = _appLinkToInAppPath(uri.path);
+    if (target == null) return null;
+    if (uri.hasQuery) return '$target?${uri.query}';
+    return target;
+  }
+
+  return null;
+}
+
+String? _appLinkToInAppPath(String path) {
+  var rest = path;
+  if (rest.startsWith('/app/')) {
+    rest = rest.substring(4);
+  }
+  if (rest.startsWith('/product/') && !rest.startsWith('/products/')) {
+    rest = '/products/${rest.substring('/product/'.length)}';
+  } else if (rest.startsWith('/store/') && !rest.startsWith('/stores/')) {
+    rest = '/stores/${rest.substring('/store/'.length)}';
+  }
+  if (rest.startsWith('/products/') ||
+      rest.startsWith('/stores/') ||
+      rest.startsWith('/live/')) {
+    return rest;
+  }
+  return null;
 }
 
 String _locationWithQuery(GoRouterState state) {
@@ -201,28 +251,19 @@ GoRouter createRouter(AppStore store) {
     ],
     redirect: (context, state) {
       final uri = state.uri;
-
-      // cityshop://products/{slug} → /products/{slug}
-      const deepLinkHosts = {'products', 'product', 'stores', 'store'};
-      if (uri.scheme == 'cityshop' && deepLinkHosts.contains(uri.host) && uri.path.isNotEmpty) {
-        final host = switch (uri.host) {
-          'store' => 'stores',
-          'product' => 'products',
-          _ => uri.host,
-        };
-        final target = '/$host${uri.path}';
-        if (uri.hasQuery) return '$target?${uri.query}';
-        return target;
+      final rewritten = _rewriteIncomingPath(uri);
+      if (rewritten != null && rewritten != _locationWithQuery(state)) {
+        return rewritten;
       }
 
       final loc = state.matchedLocation;
-      final path = uri.path;
+      final path = rewritten ?? uri.path;
 
       // Keep product/store deep links alive while splash boots — but never trap
       // the user on splash if they already skipped (finishBoot clears this).
       if (store.booting) {
         if (_isDeepLinkPath(path)) {
-          pendingAfterBoot = _locationWithQuery(state);
+          pendingAfterBoot = rewritten ?? _locationWithQuery(state);
         }
         if (loc == '/splash') return null;
         // Allow Skip intro / forced entry into the main shell.

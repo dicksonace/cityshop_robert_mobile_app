@@ -40,29 +40,30 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- App Links: open product/store pages from cityunlock.net -->
+            <!-- App Links: only /app/... so web product/store URLs stay in the browser. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="https" android:host="cityunlock.net" android:pathPrefix="/products"/>
-                <data android:scheme="https" android:host="cityunlock.net" android:pathPrefix="/store"/>
-                <data android:scheme="https" android:host="cityunlock.net" android:pathPrefix="/stores"/>
-                <data android:scheme="https" android:host="www.cityunlock.net" android:pathPrefix="/products"/>
-                <data android:scheme="https" android:host="www.cityunlock.net" android:pathPrefix="/store"/>
-                <data android:scheme="https" android:host="www.cityunlock.net" android:pathPrefix="/stores"/>
+                <data android:scheme="https" android:host="cityunlock.net" android:pathPrefix="/app/"/>
+                <data android:scheme="https" android:host="www.cityunlock.net" android:pathPrefix="/app/"/>
             </intent-filter>
-            <!-- Custom scheme fallback: cityshop://products/{slug} -->
+            <!-- Custom scheme: cityshop://products/{slug} -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="cityshop" android:host="products" android:pathPrefix="/"/>
+                <data android:scheme="cityshop" android:host="product" android:pathPrefix="/"/>
                 <data android:scheme="cityshop" android:host="store" android:pathPrefix="/"/>
                 <data android:scheme="cityshop" android:host="stores" android:pathPrefix="/"/>
+                <data android:scheme="cityshop" android:host="live" android:pathPrefix="/"/>
+                <data android:scheme="cityshop" android:host="app" android:pathPrefix="/"/>
                 <data android:scheme="cityshop" android:pathPrefix="/products"/>
                 <data android:scheme="cityshop" android:pathPrefix="/store"/>
                 <data android:scheme="cityshop" android:pathPrefix="/stores"/>
+                <data android:scheme="cityshop" android:pathPrefix="/live"/>
+                <data android:scheme="cityshop" android:pathPrefix="/app"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
