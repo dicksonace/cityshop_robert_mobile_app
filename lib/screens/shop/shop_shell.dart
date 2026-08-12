@@ -91,6 +91,9 @@ class _ShopShellState extends State<ShopShell> {
 
     return Scaffold(
       body: SafeArea(
+        // Keep the bottom inset for the tab bar. If SafeArea eats it here,
+        // Android's system buttons sit on top of Shop / Wallet / Chat.
+        bottom: false,
         child: ActiveTab(
           index: _tab,
           child: IndexedStack(
@@ -124,7 +127,12 @@ class _ShopShellState extends State<ShopShell> {
             );
           }),
         ),
-        child: NavigationBar(
+        child: ColoredBox(
+          color: Colors.white,
+          child: SafeArea(
+            top: false,
+            maintainBottomViewPadding: true,
+            child: NavigationBar(
           selectedIndex: _tab,
           onDestinationSelected: (i) {
             setState(() => _tab = i);
@@ -168,6 +176,8 @@ class _ShopShellState extends State<ShopShell> {
               label: 'Profile',
             ),
           ],
+          ),
+          ),
         ),
       ),
     );
