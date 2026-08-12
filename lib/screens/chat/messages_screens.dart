@@ -1795,29 +1795,77 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         if (recordingVoice)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            padding: const EdgeInsets.fromLTRB(8, 10, 12, 4),
                             child: Row(
                               children: [
-                                const Icon(Icons.mic, color: AppColors.danger),
+                                IconButton(
+                                  tooltip: 'Stop & send',
+                                  onPressed: () => _stopVoice(send: true),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: AppColors.danger,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.all(12),
+                                  ),
+                                  icon: const Icon(Icons.stop_rounded),
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: Text(
-                                    'Recording… ${_formatRecord(recordSeconds)}',
-                                    style: const TextStyle(fontWeight: FontWeight.w700),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFEF2F2),
+                                      borderRadius: BorderRadius.circular(24),
+                                      border: Border.all(color: const Color(0xFFFECACA)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: const BoxDecoration(
+                                            color: AppColors.danger,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Recording ${_formatRecord(recordSeconds)}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFFB91C1C),
+                                            ),
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed: () => _stopVoice(send: false),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: const Color(0xFFB91C1C),
+                                            padding: EdgeInsets.zero,
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          child: const Text('Cancel'),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                                TextButton(
-                                  onPressed: () => _stopVoice(send: false),
-                                  child: const Text('Cancel'),
-                                ),
-                                FilledButton(
+                                const SizedBox(width: 8),
+                                IconButton.filled(
+                                  tooltip: 'Send voice note',
                                   onPressed: () => _stopVoice(send: true),
-                                  style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
-                                  child: const Text('Send'),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: AppColors.danger,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.all(12),
+                                  ),
+                                  icon: const Icon(Icons.send_rounded, color: Colors.white),
                                 ),
                               ],
                             ),
                           ),
+                        if (!recordingVoice)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
                           child: Row(
@@ -1826,7 +1874,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                 tooltip: showAttachPanel ? 'Close' : 'Attach',
                                 onPressed: (sending ||
                                         uploadingMedia ||
-                                        recordingVoice ||
                                         sendingProduct ||
                                         conversation?.blocked == true)
                                     ? null
@@ -1849,9 +1896,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   focusNode: _focus,
                                   minLines: 1,
                                   maxLines: 4,
-                                  enabled: !uploadingMedia &&
-                                      !recordingVoice &&
-                                      conversation?.blocked != true,
+                                  enabled: !uploadingMedia && conversation?.blocked != true,
                                   textInputAction: TextInputAction.send,
                                   onTap: () {
                                     if (showAttachPanel) setState(() => showAttachPanel = false);
@@ -1861,9 +1906,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         ? 'Chat blocked'
                                         : uploadingMedia
                                             ? 'Sending…'
-                                            : recordingVoice
-                                                ? 'Recording voice…'
-                                                : 'Type a message…',
+                                            : 'Type a message…',
                                     filled: true,
                                     fillColor: AppColors.background,
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1887,7 +1930,6 @@ class _ChatScreenState extends State<ChatScreen> {
                               IconButton.filled(
                                 onPressed: (sending ||
                                         uploadingMedia ||
-                                        recordingVoice ||
                                         conversation?.blocked == true)
                                     ? null
                                     : _send,
