@@ -22,8 +22,11 @@ import '../../services/chat_call_service.dart';
 import '../../services/document_picker.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chat_text_links.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/chat_call_overlay.dart';
+import '../../widgets/chat_link_text.dart';
+import '../../widgets/chat_shared_link_preview.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 import '../../widgets/tab_refresh.dart';
@@ -664,6 +667,41 @@ class _ChatScreenState extends State<ChatScreen> {
     _focus.requestFocus();
   }
 
+  Widget _messageBody(ChatMessage message, {required bool mine}) {
+    if (message.isDeleted) {
+      return Text(
+        'Message deleted',
+        style: TextStyle(
+          color: AppColors.textMuted,
+          fontStyle: FontStyle.italic,
+          height: 1.35,
+        ),
+      );
+    }
+
+    final link = firstCityShopLinkIn(message.body);
+    final text = ChatLinkText(
+      text: message.body,
+      mine: mine,
+      style: TextStyle(
+        color: mine ? Colors.white : AppColors.textPrimary,
+        height: 1.35,
+      ),
+    );
+
+    if (link == null || message.isProduct) {
+      return text;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ChatSharedLinkPreview(link: link, mine: mine),
+        text,
+      ],
+    );
+  }
+
   Future<void> _openMessageActions(ChatMessage message) async {
     if (message.isDeleted) return;
     const deletable = {'text', 'image', 'video', 'voice', 'product'};
@@ -678,7 +716,11 @@ class _ChatScreenState extends State<ChatScreen> {
         !message.isTransfer &&
         forwardable.contains(message.type) &&
         (conversation?.participants.any((p) => p.id != myId) ?? false);
-    if (!canReply && !canDelete && !canForward) return;
+    final canCopy = !message.isDeleted &&
+        !message.isEvent &&
+        !message.isSignalling &&
+        message.body.trim().isNotEmpty;
+    if (!canReply && !canDelete && !canForward && !canCopy) return;
 
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -707,6 +749,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   title: const Text('Forward to members', style: TextStyle(fontWeight: FontWeight.w700)),
                   onTap: () => Navigator.pop(ctx, 'forward'),
                 ),
+              if (canCopy)
+                ListTile(
+                  leading: const Icon(Icons.copy_rounded, color: AppColors.accent),
+                  title: const Text('Copy', style: TextStyle(fontWeight: FontWeight.w700)),
+                  onTap: () => Navigator.pop(ctx, 'copy'),
+                ),
               if (canDelete)
                 ListTile(
                   leading: const Icon(Icons.delete_outline, color: AppColors.danger),
@@ -724,6 +772,12 @@ class _ChatScreenState extends State<ChatScreen> {
       _startReply(message);
     } else if (action == 'forward') {
       await _forwardToMembers(message);
+    } else if (action == 'copy') {
+      await Clipboard.setData(ClipboardData(text: message.body.trim()));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Copied')),
+      );
     } else if (action == 'delete') {
       await _deleteMessage(message);
     }
@@ -1568,8 +1622,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                                                 child: Align(
                                                   alignment: Alignment.centerLeft,
-                                                  child: Text(
-                                                    m.body.trim(),
+                                                  child: ChatLinkText(
+                                                    text: m.body.trim(),
+                                                    mine: m.mine,
                                                     style: TextStyle(
                                                       color: m.mine ? Colors.white : AppColors.textPrimary,
                                                       height: 1.35,
@@ -1584,8 +1639,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                                                 child: Align(
                                                   alignment: Alignment.centerLeft,
-                                                  child: Text(
-                                                    m.body.trim(),
+                                                  child: ChatLinkText(
+                                                    text: m.body.trim(),
+                                                    mine: m.mine,
                                                     style: TextStyle(
                                                       color: m.mine ? Colors.white : AppColors.textPrimary,
                                                       height: 1.35,
@@ -1600,16 +1656,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                               mine: m.mine,
                                             )
                                           else
-                                            Text(
-                                              m.isDeleted ? 'Message deleted' : m.body,
-                                              style: TextStyle(
-                                                color: m.isDeleted
-                                                    ? AppColors.textMuted
-                                                    : (m.mine ? Colors.white : AppColors.textPrimary),
-                                                fontStyle: m.isDeleted ? FontStyle.italic : FontStyle.normal,
-                                                height: 1.35,
-                                              ),
-                                            ),
+                                            _messageBody(m, mine: m.mine),
                                           if (m.createdAt != null) ...[
                                             const SizedBox(height: 4),
                                             Padding(
