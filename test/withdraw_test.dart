@@ -362,10 +362,29 @@ void main() {
       }));
 
       expect(overview.feeFor('bank', 500), 10);
+      expect(overview.feeFor('bank', 1000), 20);
+      expect(overview.feeFor('bank', 1500), 20);
       expect(overview.feeFor('bank', 5000), 20);
       expect(overview.feeFor('bank', 15000), 20);
       expect(overview.feeFor('momo', 15000), 0);
       expect(overview.maxWithdrawable('bank'), 1020);
+    });
+
+    test('upgrades a single GH₵10 bank band from GH₵1,000', () {
+      final overview = WithdrawalOverview.fromJson(_overview(fee: {
+        'enabled': true,
+        'amount': 10,
+        'applies_to': 'bank',
+        'mode': 'flat',
+        'percent': 0,
+        'bank_tiers': [
+          {'min': 10, 'max': 1000, 'fee': 10},
+        ],
+      }));
+
+      expect(overview.feeFor('bank', 500), 10);
+      expect(overview.feeFor('bank', 1000), 20);
+      expect(overview.feeFor('bank', 1500), 20);
     });
 
     test('uses default bank bands when API omits bank_tiers', () {
@@ -378,6 +397,8 @@ void main() {
       }));
 
       expect(overview.feeFor('bank', 500), 10);
+      expect(overview.feeFor('bank', 1000), 20);
+      expect(overview.feeFor('bank', 1500), 20);
       expect(overview.feeFor('bank', 5000), 20);
     });
   });

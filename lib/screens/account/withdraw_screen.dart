@@ -458,7 +458,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                         return '$base · ${overview.feePercent.toStringAsFixed(overview.feePercent % 1 == 0 ? 0 : 2)}% fee';
                       }
                       if (_isBank && overview.bankTiers.isNotEmpty && typed <= 0) {
-                        return '$base · Bank fee by amount (GH₵10–1,000 → GH₵10 · GH₵10k–25k → GH₵20)';
+                        return '$base · Bank fee by amount (below GH₵1,000 → GH₵10 · from GH₵1,000 → GH₵20)';
                       }
                       if (fee <= 0) return base;
                       return '$base · ${_isBank ? 'Bank' : 'MoMo'} fee ${_money.format(fee)}';

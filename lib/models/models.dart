@@ -813,9 +813,20 @@ class WithdrawalOverview {
 
   /// CityShop default when the API has not sent bank_tiers yet.
   static const List<BankFeeTier> defaultBankTiers = [
-    BankFeeTier(min: 10, max: 1000, fee: 10),
-    BankFeeTier(min: 1001, max: 25000, fee: 20),
+    BankFeeTier(min: 10, max: 999.99, fee: 10),
+    BankFeeTier(min: 1000, max: 25000, fee: 20),
   ];
+
+  static List<BankFeeTier> _normalizeBankTiers(List<BankFeeTier> tiers) {
+    if (tiers.isEmpty) return defaultBankTiers;
+    final onlyDefaultFees = tiers.every((tier) => tier.fee == 10 || tier.fee == 20);
+    if (!onlyDefaultFees) return tiers;
+    final feeAt999 = feeFromBankTiers(999, tiers, 10);
+    final feeAt1000 = feeFromBankTiers(1000, tiers, 10);
+    final feeAt1500 = feeFromBankTiers(1500, tiers, 10);
+    if (feeAt999 == 10 && feeAt1000 >= 20 && feeAt1500 >= 20) return tiers;
+    return defaultBankTiers;
+  }
 
   double feeFor(String payoutType, [double amount = 0]) {
     if (!feeEnabled) return 0;
@@ -862,7 +873,7 @@ class WithdrawalOverview {
     final feeRaw = summary['withdrawal_fee'];
     final fee = feeRaw is Map ? Map<String, dynamic>.from(feeRaw) : const <String, dynamic>{};
     final tierRows = fee['bank_tiers'];
-    final bankTiers = tierRows is List
+    final bankTiers = _normalizeBankTiers(tierRows is List
         ? tierRows.whereType<Map>().map((row) {
             final map = Map<String, dynamic>.from(row);
             return BankFeeTier(
@@ -871,7 +882,7 @@ class WithdrawalOverview {
               fee: (map['fee'] as num?)?.toDouble() ?? 0,
             );
           }).toList()
-        : const <BankFeeTier>[];
+        : const <BankFeeTier>[]);
     return WithdrawalOverview(
       items: data is List
           ? data
