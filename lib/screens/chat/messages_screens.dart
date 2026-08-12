@@ -710,17 +710,18 @@ class _ChatScreenState extends State<ChatScreen> {
     final canReply = !message.isEvent && conversation?.blocked != true;
     final canDelete = message.canDelete ||
         (message.mine && !message.isDeleted && deletable.contains(message.type));
-    final canForward = conversation?.isGroup == true &&
-        !message.isEvent &&
+    const canForwardMessage = !message.isEvent &&
         !message.isSignalling &&
         !message.isTransfer &&
-        forwardable.contains(message.type) &&
+        forwardable.contains(message.type);
+    final canForward = conversation?.isGroup == true &&
+        canForwardMessage &&
         (conversation?.participants.any((p) => p.id != myId) ?? false);
     final canCopy = !message.isDeleted &&
         !message.isEvent &&
         !message.isSignalling &&
         message.body.trim().isNotEmpty;
-    if (!canReply && !canDelete && !canForward && !canCopy) return;
+    if (!canReply && !canDelete && !canForwardMessage && !canCopy) return;
 
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -743,11 +744,26 @@ class _ChatScreenState extends State<ChatScreen> {
                       : null,
                   onTap: () => Navigator.pop(ctx, 'reply'),
                 ),
-              if (canForward)
+              if (canForwardMessage)
                 ListTile(
-                  leading: const Icon(Icons.shortcut_rounded, color: AppColors.accent),
-                  title: const Text('Forward to members', style: TextStyle(fontWeight: FontWeight.w700)),
-                  onTap: () => Navigator.pop(ctx, 'forward'),
+                  leading: Icon(
+                    Icons.shortcut_rounded,
+                    color: canForward ? AppColors.accent : AppColors.textMuted,
+                  ),
+                  title: Text(
+                    'Forward to members',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: canForward ? AppColors.textPrimary : AppColors.textMuted,
+                    ),
+                  ),
+                  subtitle: canForward
+                      ? null
+                      : const Text(
+                          'Group chats only',
+                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                  onTap: () => Navigator.pop(ctx, canForward ? 'forward' : 'forward_hint'),
                 ),
               if (canCopy)
                 ListTile(
@@ -772,6 +788,12 @@ class _ChatScreenState extends State<ChatScreen> {
       _startReply(message);
     } else if (action == 'forward') {
       await _forwardToMembers(message);
+    } else if (action == 'forward_hint') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Forward to members is only available in group chats.'),
+        ),
+      );
     } else if (action == 'copy') {
       await Clipboard.setData(ClipboardData(text: message.body.trim()));
       if (!mounted) return;
@@ -916,23 +938,24 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         messages = [...messages, msg];
         pendingProduct = null;
-        conversation = ConversationModel(
-          id: conversation?.id ?? widget.conversationId,
-          otherName: conversation?.otherName ?? 'Seller',
-          otherId: conversation?.otherId,
-          otherAvatar: conversation?.otherAvatar,
-          storeName: conversation?.storeName,
-          otherMobile: conversation?.otherMobile,
-          productId: product.id,
-          productName: product.name,
-          productSlug: product.slug,
-          productImage: product.imageUrl,
-          productPrice: product.price,
-          latestBody: conversation?.latestBody,
-          latestType: 'product',
-          unreadCount: conversation?.unreadCount ?? 0,
-          lastMessageAt: conversation?.lastMessageAt,
-        );
+        conversation = conversation?.copyWith(
+              productId: product.id,
+              productName: product.name,
+              productSlug: product.slug,
+              productImage: product.imageUrl,
+              productPrice: product.price,
+              latestType: 'product',
+            ) ??
+            ConversationModel(
+              id: widget.conversationId,
+              otherName: 'Seller',
+              productId: product.id,
+              productName: product.name,
+              productSlug: product.slug,
+              productImage: product.imageUrl,
+              productPrice: product.price,
+              latestType: 'product',
+            );
       });
       _jumpToEnd();
     } on ApiException catch (e) {
