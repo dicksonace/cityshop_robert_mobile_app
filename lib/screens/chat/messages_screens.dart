@@ -714,9 +714,11 @@ class _ChatScreenState extends State<ChatScreen> {
         !message.isSignalling &&
         !message.isTransfer &&
         forwardable.contains(message.type);
-    final canForward = conversation?.isGroup == true &&
+    final canForwardInGroup = conversation?.isGroup == true &&
         canForwardMessage &&
         (conversation?.participants.any((p) => p.id != myId) ?? false);
+    final canForwardFromDirect = conversation?.isGroup != true && canForwardMessage;
+    final canForward = canForwardInGroup || canForwardFromDirect;
     final canCopy = !message.isDeleted &&
         !message.isEvent &&
         !message.isSignalling &&
@@ -757,10 +759,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       color: canForward ? AppColors.textPrimary : AppColors.textMuted,
                     ),
                   ),
-                  subtitle: canForward
+                  subtitle: conversation?.isGroup == true
                       ? null
                       : const Text(
-                          'Group chats only',
+                          'People from your groups',
                           style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                         ),
                   onTap: () => Navigator.pop(ctx, canForward ? 'forward' : 'forward_hint'),
@@ -790,8 +792,12 @@ class _ChatScreenState extends State<ChatScreen> {
       await _forwardToMembers(message);
     } else if (action == 'forward_hint') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Forward to members is only available in group chats.'),
+        SnackBar(
+          content: Text(
+            conversation?.isGroup == true
+                ? 'No members to forward to'
+                : 'Join a group chat first to forward messages to members.',
+          ),
         ),
       );
     } else if (action == 'copy') {
@@ -806,14 +812,33 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _forwardToMembers(ChatMessage message) async {
-    final group = conversation;
-    final myId = context.read<AppStore>().user?.id;
-    if (group == null || !group.isGroup || myId == null) return;
+    final current = conversation;
+    final store = context.read<AppStore>();
+    final myId = store.user?.id;
+    if (current == null || myId == null) return;
 
-    final members = group.participants.where((p) => p.id != myId).toList();
+    List<ChatParticipant> members;
+    if (current.isGroup) {
+      members = current.participants.where((p) => p.id != myId).toList();
+    } else {
+      try {
+        members = await store.fetchForwardTargets();
+      } on ApiException catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        return;
+      }
+    }
+
     if (members.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No members to forward to')),
+        SnackBar(
+          content: Text(
+            current.isGroup
+                ? 'No members to forward to'
+                : 'Join a group chat first to forward messages to members.',
+          ),
+        ),
       );
       return;
     }
@@ -835,13 +860,13 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          'Forward to members',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                          current.isGroup ? 'Forward to members' : 'Forward to people from your groups',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                         ),
                       ),
                     ),

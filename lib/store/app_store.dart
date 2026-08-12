@@ -1320,6 +1320,17 @@ class AppStore extends ChangeNotifier {
     return (res.data['sent'] as num?)?.toInt() ?? memberIds.length;
   }
 
+  Future<List<ChatParticipant>> fetchForwardTargets() async {
+    final res = await _api.get('/messages/forward-targets');
+    final data = res.data is Map ? res.data['data'] : null;
+    if (data is! List) return const [];
+    return data
+        .whereType<Map>()
+        .map((e) => ChatParticipant.fromJson(Map<String, dynamic>.from(e)))
+        .where((p) => p.id > 0)
+        .toList();
+  }
+
   Future<ChatMessage> sendMessage(
     int conversationId,
     String body, {
