@@ -2346,44 +2346,36 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                                     ),
                                                   ],
                                                   if ((item.packageImageUrl ?? '').trim().isNotEmpty) ...[
-                                                    const SizedBox(height: 10),
+                                                    const SizedBox(height: 6),
+                                                    InkWell(
+                                                      onTap: () => showImageViewer(
+                                                        context,
+                                                        urls: [item.packageImageUrl!],
+                                                      ),
+                                                      child: const Text(
+                                                        'View package image',
+                                                        style: TextStyle(
+                                                          fontWeight: FontWeight.w800,
+                                                          color: Color(0xFF1D4ED8),
+                                                          decoration: TextDecoration.underline,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 8),
                                                     InkWell(
                                                       onTap: () => showImageViewer(
                                                         context,
                                                         urls: [item.packageImageUrl!],
                                                       ),
                                                       borderRadius: BorderRadius.circular(10),
-                                                      child: Stack(
-                                                        children: [
-                                                          ClipRRect(
-                                                            borderRadius: BorderRadius.circular(10),
-                                                            child: CachedNetworkImage(
-                                                              imageUrl: item.packageImageUrl!,
-                                                              height: 96,
-                                                              width: 96,
-                                                              fit: BoxFit.cover,
-                                                            ),
-                                                          ),
-                                                          Positioned(
-                                                            right: 4,
-                                                            bottom: 4,
-                                                            child: Container(
-                                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                              decoration: BoxDecoration(
-                                                                color: Colors.black.withValues(alpha: 0.7),
-                                                                borderRadius: BorderRadius.circular(6),
-                                                              ),
-                                                              child: const Text(
-                                                                'View',
-                                                                style: TextStyle(
-                                                                  color: Colors.white,
-                                                                  fontSize: 10,
-                                                                  fontWeight: FontWeight.w800,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
+                                                      child: ClipRRect(
+                                                        borderRadius: BorderRadius.circular(10),
+                                                        child: CachedNetworkImage(
+                                                          imageUrl: item.packageImageUrl!,
+                                                          height: 96,
+                                                          width: 96,
+                                                          fit: BoxFit.cover,
+                                                        ),
                                                       ),
                                                     ),
                                                   ],
