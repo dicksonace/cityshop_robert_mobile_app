@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -25,6 +27,7 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
   String? _error;
   LivestreamCard? _live;
   WebViewController? _controller;
+  Timer? _statusTimer;
 
   @override
   void initState() {
@@ -32,10 +35,41 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _statusTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startStatusPolling() {
+    _statusTimer?.cancel();
+    _statusTimer = Timer.periodic(const Duration(seconds: 10), (_) => _checkStillLive());
+  }
+
+  Future<void> _checkStillLive() async {
+    if (!mounted || _controller == null) return;
+    try {
+      final live = await context.read<AppStore>().fetchLivestream(widget.slug);
+      if (!mounted) return;
+      if (live == null || live.room == null || live.room!.roomName.isEmpty) {
+        _statusTimer?.cancel();
+        setState(() {
+          _controller = null;
+          _live = live;
+          _error = 'This live has ended.';
+        });
+      }
+    } catch (_) {
+      // keep watching; retry next tick
+    }
+  }
+
   Future<void> _load() async {
+    _statusTimer?.cancel();
     setState(() {
       _loading = true;
       _error = null;
+      _controller = null;
     });
     try {
       final live = await context.read<AppStore>().fetchLivestream(widget.slug);
@@ -64,6 +98,7 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
         _controller = controller;
         _loading = false;
       });
+      _startStatusPolling();
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -122,7 +157,7 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
     },
     interfaceConfigOverwrite: {
       SHOW_JITSI_WATERMARK: false,
-      TOOLBAR_BUTTONS: ["microphone", "tileview", "fullscreen"]
+      TOOLBAR_BUTTONS: ["microphone", "camera", "tileview", "fullscreen"]
     }
   });
 </script>

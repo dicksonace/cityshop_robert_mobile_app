@@ -1014,11 +1014,19 @@ class _LiveNowStripState extends State<_LiveNowStrip> {
   List<LivestreamCard> _lives = const [];
   bool _loaded = false;
   bool _loading = false;
+  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _poll = Timer.periodic(const Duration(seconds: 15), (_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
   }
 
   @override

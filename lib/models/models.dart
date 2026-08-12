@@ -408,6 +408,9 @@ class SellerStore {
   SellerStore copyWith({
     int? followerCount,
     bool? isFollowing,
+    bool? isLive,
+    LivestreamCard? livestream,
+    bool clearLivestream = false,
   }) {
     return SellerStore(
       sellerId: sellerId,
@@ -432,8 +435,8 @@ class SellerStore {
       whatsapp: whatsapp,
       digitalAddress: digitalAddress,
       residentialAddress: residentialAddress,
-      isLive: isLive,
-      livestream: livestream,
+      isLive: isLive ?? this.isLive,
+      livestream: clearLivestream ? null : (livestream ?? this.livestream),
     );
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,6 +32,7 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
   SellerStore? store;
   List<Product> products = [];
   final searchCtrl = TextEditingController();
+  Timer? _livePoll;
 
   @override
   void initState() {
@@ -39,8 +42,40 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
 
   @override
   void dispose() {
+    _livePoll?.cancel();
     searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _syncLivePolling() {
+    _livePoll?.cancel();
+    if (store?.isLive != true) return;
+    _livePoll = Timer.periodic(const Duration(seconds: 10), (_) => _refreshLiveStatus());
+  }
+
+  Future<void> _refreshLiveStatus() async {
+    final current = store;
+    if (!mounted || current == null) return;
+    try {
+      final live = await context.read<AppStore>().fetchLivestream(widget.slug);
+      if (!mounted) return;
+      final stillLive = live != null && live.room != null && live.room!.roomName.isNotEmpty;
+      if (stillLive == current.isLive && (stillLive ? live?.id == current.livestream?.id : true)) {
+        return;
+      }
+      setState(() {
+        store = current.copyWith(
+          isLive: stillLive,
+          livestream: stillLive ? live : null,
+          clearLivestream: !stillLive,
+        );
+      });
+      if (!stillLive) {
+        _livePoll?.cancel();
+      }
+    } catch (_) {
+      // keep current badge
+    }
   }
 
   Future<void> _load({String? search}) async {
@@ -63,6 +98,7 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
         products = result.products;
         loading = false;
       });
+      _syncLivePolling();
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
