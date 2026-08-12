@@ -1297,6 +1297,18 @@ class AppStore extends ChangeNotifier {
     await _api.delete('/blocks/$userId');
   }
 
+  Future<int> forwardMessageToMembers({
+    required int conversationId,
+    required int messageId,
+    required List<int> memberIds,
+  }) async {
+    final res = await _api.post(
+      '/messages/$conversationId/messages/$messageId/forward',
+      data: {'member_ids': memberIds},
+    );
+    return (res.data['sent'] as num?)?.toInt() ?? memberIds.length;
+  }
+
   Future<ChatMessage> sendMessage(
     int conversationId,
     String body, {

@@ -667,10 +667,18 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _openMessageActions(ChatMessage message) async {
     if (message.isDeleted) return;
     const deletable = {'text', 'image', 'video', 'voice', 'product'};
+    const forwardable = {'text', 'image', 'video', 'voice', 'product', 'file'};
+    final myId = context.read<AppStore>().user?.id;
     final canReply = !message.isEvent && conversation?.blocked != true;
     final canDelete = message.canDelete ||
         (message.mine && !message.isDeleted && deletable.contains(message.type));
-    if (!canReply && !canDelete) return;
+    final canForward = conversation?.isGroup == true &&
+        !message.isEvent &&
+        !message.isSignalling &&
+        !message.isTransfer &&
+        forwardable.contains(message.type) &&
+        (conversation?.participants.any((p) => p.id != myId) ?? false);
+    if (!canReply && !canDelete && !canForward) return;
 
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -693,6 +701,12 @@ class _ChatScreenState extends State<ChatScreen> {
                       : null,
                   onTap: () => Navigator.pop(ctx, 'reply'),
                 ),
+              if (canForward)
+                ListTile(
+                  leading: const Icon(Icons.shortcut_rounded, color: AppColors.accent),
+                  title: const Text('Forward to members', style: TextStyle(fontWeight: FontWeight.w700)),
+                  onTap: () => Navigator.pop(ctx, 'forward'),
+                ),
               if (canDelete)
                 ListTile(
                   leading: const Icon(Icons.delete_outline, color: AppColors.danger),
@@ -708,8 +722,130 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted || action == null) return;
     if (action == 'reply') {
       _startReply(message);
+    } else if (action == 'forward') {
+      await _forwardToMembers(message);
     } else if (action == 'delete') {
       await _deleteMessage(message);
+    }
+  }
+
+  Future<void> _forwardToMembers(ChatMessage message) async {
+    final group = conversation;
+    final myId = context.read<AppStore>().user?.id;
+    if (group == null || !group.isGroup || myId == null) return;
+
+    final members = group.participants.where((p) => p.id != myId).toList();
+    if (members.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No members to forward to')),
+      );
+      return;
+    }
+
+    final selected = <int>{};
+    final picked = await showModalBottomSheet<Set<int>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: StatefulBuilder(
+            builder: (ctx, setSheetState) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Forward to members',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.sizeOf(ctx).height * 0.5,
+                      ),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: members.length,
+                        itemBuilder: (context, index) {
+                          final member = members[index];
+                          final checked = selected.contains(member.id);
+                          return CheckboxListTile(
+                            value: checked,
+                            onChanged: (on) {
+                              setSheetState(() {
+                                if (on == true) {
+                                  selected.add(member.id);
+                                } else {
+                                  selected.remove(member.id);
+                                }
+                              });
+                            },
+                            secondary: _ConversationAvatar(
+                              name: member.name,
+                              avatar: member.avatar,
+                              radius: 20,
+                              online: member.online,
+                            ),
+                            title: Text(member.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            controlAffinity: ListTileControlAffinity.trailing,
+                          );
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: selected.isEmpty
+                              ? null
+                              : () => Navigator.pop(ctx, Set<int>.from(selected)),
+                          style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
+                          child: Text(
+                            selected.isEmpty
+                                ? 'Choose members'
+                                : 'Send to ${selected.length} ${selected.length == 1 ? 'member' : 'members'}',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    if (!mounted || picked == null || picked.isEmpty) return;
+
+    try {
+      final sent = await context.read<AppStore>().forwardMessageToMembers(
+            conversationId: widget.conversationId,
+            messageId: message.id,
+            memberIds: picked.toList(),
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(sent == 1 ? 'Forwarded to 1 member' : 'Forwarded to $sent members'),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     }
   }
 
