@@ -240,7 +240,7 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
-  testWidgets('bank amount plus fee shows the needs-total banner', (tester) async {
+  testWidgets('bank amount over balance shows the insufficient banner', (tester) async {
     final api = _FakeApiClient(
       overview: _overview(
         available: 6062.40,
@@ -266,7 +266,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.textContaining('Needs GH₵25,600.00 (incl. GH₵20.00 fee). Available GH₵6,062.40'),
+      find.text('Insufficient balance. Available: GH₵6,062.40'),
       findsOneWidget,
     );
   });

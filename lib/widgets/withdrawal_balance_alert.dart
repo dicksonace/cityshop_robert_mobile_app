@@ -13,11 +13,6 @@ String? withdrawalBalanceMessage({
   final total = amount + fee;
   if (total <= available + 1e-9) return null;
 
-  if (fee > 0) {
-    return 'Needs ${_money.format(total)} (incl. ${_money.format(fee)} fee). '
-        'Available ${_money.format(available)}';
-  }
-
   return 'Insufficient balance. Available: ${_money.format(available)}';
 }
 
