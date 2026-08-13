@@ -268,7 +268,7 @@ class LivestreamRoom {
 
   factory LivestreamRoom.fromJson(Map<String, dynamic> json) {
     return LivestreamRoom(
-      domain: json['domain'] as String? ?? 'meet.jit.si',
+      domain: json['domain'] as String? ?? 'meet.ffmuc.net',
       roomName: json['room_name'] as String? ?? '',
       provider: json['provider'] as String? ?? 'jitsi',
     );
@@ -283,6 +283,7 @@ class LivestreamCard {
     this.title,
     this.shopPhoto,
     this.room,
+    this.hostJoined = false,
   });
 
   final int id;
@@ -291,6 +292,7 @@ class LivestreamCard {
   final String? title;
   final String? shopPhoto;
   final LivestreamRoom? room;
+  final bool hostJoined;
 
   factory LivestreamCard.fromJson(Map<String, dynamic> json) {
     final photo = json['shop_photo'] as String?;
@@ -302,6 +304,7 @@ class LivestreamCard {
       title: json['title'] as String?,
       shopPhoto: photo == null || photo.trim().isEmpty ? null : photo.trim(),
       room: roomJson is Map ? LivestreamRoom.fromJson(Map<String, dynamic>.from(roomJson)) : null,
+      hostJoined: json['host_joined'] == true,
     );
   }
 }

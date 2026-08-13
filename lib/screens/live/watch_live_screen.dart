@@ -27,6 +27,7 @@ class WatchLiveScreen extends StatefulWidget {
 class _WatchLiveScreenState extends State<WatchLiveScreen> {
   bool _loading = true;
   bool _joining = false;
+  bool _waitingForHost = false;
   String? _error;
   LivestreamCard? _live;
   WebViewController? _controller;
@@ -57,24 +58,45 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
     }
   }
 
-  void _startStatusPolling() {
+  void _startStatusPolling({required bool waitingForHost}) {
     _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(seconds: 10), (_) => _checkStillLive());
+    _statusTimer = Timer.periodic(
+      Duration(seconds: waitingForHost ? 3 : 10),
+      (_) => _checkStillLive(),
+    );
   }
 
   Future<void> _checkStillLive() async {
-    if (!mounted || _controller == null) return;
+    if (!mounted) return;
     try {
       final live = await context.read<AppStore>().fetchLivestream(widget.slug);
       if (!mounted) return;
-      if (live == null || live.room == null || live.room!.roomName.isEmpty) {
+      if (live == null) {
         _statusTimer?.cancel();
         setState(() {
           _controller = null;
           _joining = false;
-          _live = live;
+          _waitingForHost = false;
+          _live = null;
           _error = 'This live has ended.';
         });
+        return;
+      }
+      if (_waitingForHost && live.room != null && live.room!.roomName.isNotEmpty) {
+        _statusTimer?.cancel();
+        await _openRoom(live);
+        return;
+      }
+      if (_controller != null && (live.room == null || live.room!.roomName.isEmpty)) {
+        _statusTimer?.cancel();
+        setState(() {
+          _controller = null;
+          _joining = false;
+          _waitingForHost = true;
+          _live = live;
+          _error = null;
+        });
+        _startStatusPolling(waitingForHost: true);
       }
     } catch (_) {
       // keep watching; retry next tick
@@ -93,94 +115,34 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
     setState(() {
       _loading = true;
       _joining = false;
+      _waitingForHost = false;
       _error = null;
       _controller = null;
     });
     try {
       final live = await context.read<AppStore>().fetchLivestream(widget.slug);
       if (!mounted) return;
-      if (live == null || live.room == null || live.room!.roomName.isEmpty) {
+      if (live == null) {
         setState(() {
-          _live = live;
+          _live = null;
           _loading = false;
+          _waitingForHost = false;
           _error = 'This store is not live right now.';
         });
         return;
       }
-
-      final mic = await Permission.microphone.request();
-      final cam = await Permission.camera.request();
-      if (!mounted) return;
-      if (!mic.isGranted || !cam.isGranted) {
+      if (live.room == null || live.room!.roomName.isEmpty) {
         setState(() {
           _live = live;
           _loading = false;
-          _error =
-              'Camera and microphone permission are required to watch and join live. Enable them in Settings, then try again.';
+          _waitingForHost = true;
+          _error = null;
         });
+        _startStatusPolling(waitingForHost: true);
         return;
       }
 
-      final size = _viewport ?? MediaQuery.sizeOf(context);
-      // Leave room for the app bar; Jitsi needs a real pixel height in WebView (100% often collapses to blank).
-      final meetHeight = (size.height - 120).clamp(320.0, 2400.0).round();
-      final meetWidth = size.width.round();
-
-      final controller = WebViewController.fromPlatformCreationParams(_webViewParams());
-      await _configureWebView(controller);
-      controller
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(Colors.black)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onWebResourceError: (error) {
-              if (!mounted) return;
-              // Ignore subresource noise; only surface main-frame failures.
-              if (error.isForMainFrame ?? true) {
-                setState(() {
-                  _joining = false;
-                  _error = 'Could not load the live video. Check your connection and try again.';
-                });
-              }
-            },
-          ),
-        )
-        ..addJavaScriptChannel(
-          'CityShopLive',
-          onMessageReceived: (message) {
-            if (!mounted) return;
-            final msg = message.message.trim();
-            if (msg == 'joined') {
-              setState(() {
-                _joining = false;
-                _error = null;
-              });
-            } else if (msg == 'failed') {
-              setState(() {
-                _joining = false;
-                _error = 'Could not join this live room. Try again.';
-              });
-            }
-          },
-        );
-
-      await controller.loadHtmlString(
-        _jitsiHtml(
-          live.room!,
-          displayName: _displayName(),
-          width: meetWidth,
-          height: meetHeight,
-        ),
-        baseUrl: 'https://${live.room!.domain}/',
-      );
-
-      setState(() {
-        _live = live;
-        _controller = controller;
-        _loading = false;
-        _joining = true;
-      });
-      _startStatusPolling();
+      await _openRoom(live);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -196,6 +158,88 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
         _error = 'Could not open the live video.';
       });
     }
+  }
+
+  Future<void> _openRoom(LivestreamCard live) async {
+    final mic = await Permission.microphone.request();
+    final cam = await Permission.camera.request();
+    if (!mounted) return;
+    if (!mic.isGranted || !cam.isGranted) {
+      setState(() {
+        _live = live;
+        _loading = false;
+        _joining = false;
+        _waitingForHost = false;
+        _controller = null;
+        _error =
+            'Camera and microphone permission are required to watch live. Enable them in Settings, then try again.';
+      });
+      return;
+    }
+
+    final size = _viewport ?? MediaQuery.sizeOf(context);
+    // Leave room for the app bar; Jitsi needs a real pixel height in WebView (100% often collapses to blank).
+    final meetHeight = (size.height - 120).clamp(320.0, 2400.0).round();
+    final meetWidth = size.width.round();
+
+    final controller = WebViewController.fromPlatformCreationParams(_webViewParams());
+    await _configureWebView(controller);
+    controller
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onWebResourceError: (error) {
+            if (!mounted) return;
+            // Ignore subresource noise; only surface main-frame failures.
+            if (error.isForMainFrame ?? true) {
+              setState(() {
+                _joining = false;
+                _error = 'Could not load the live video. Check your connection and try again.';
+              });
+            }
+          },
+        ),
+      )
+      ..addJavaScriptChannel(
+        'CityShopLive',
+        onMessageReceived: (message) {
+          if (!mounted) return;
+          final msg = message.message.trim();
+          if (msg == 'joined') {
+            setState(() {
+              _joining = false;
+              _error = null;
+            });
+          } else if (msg == 'failed') {
+            setState(() {
+              _joining = false;
+              _error = 'Could not join this live room. Try again.';
+            });
+          }
+        },
+      );
+
+    await controller.loadHtmlString(
+      _jitsiHtml(
+        live.room!,
+        displayName: _displayName(),
+        width: meetWidth,
+        height: meetHeight,
+      ),
+      baseUrl: 'https://${live.room!.domain}/',
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _live = live;
+      _controller = controller;
+      _loading = false;
+      _joining = true;
+      _waitingForHost = false;
+      _error = null;
+    });
+    _startStatusPolling(waitingForHost: false);
   }
 
   PlatformWebViewControllerCreationParams _webViewParams() {
@@ -250,7 +294,7 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
 <body>
 <div id="status">Connecting to live…</div>
 <div id="meet"></div>
-<script src="https://meet.jit.si/external_api.js"></script>
+<script src="https://$domain/external_api.js"></script>
 <script>
 (function () {
   function notify(msg) {
@@ -274,24 +318,31 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
       userInfo: { displayName: $safeName },
       configOverwrite: {
         prejoinPageEnabled: false,
-        startWithAudioMuted: false,
-        startWithVideoMuted: false,
+        startWithAudioMuted: true,
+        startWithVideoMuted: true,
         disableDeepLinking: true,
         disableInviteFunctions: true,
         enableWelcomePage: false,
-        enableClosePage: false
+        enableClosePage: false,
+        enableLobby: false,
+        hideLobbyButton: true,
+        requireDisplayName: false,
+        disableModeratorIndicator: true,
+        p2p: { enabled: false }
       },
       interfaceConfigOverwrite: {
         SHOW_JITSI_WATERMARK: false,
         SHOW_WATERMARK_FOR_GUESTS: false,
         DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
-        TOOLBAR_BUTTONS: ["microphone", "camera", "tileview", "fullscreen"]
+        MOBILE_APP_PROMO: false,
+        AUTHENTICATION_ENABLE: false,
+        TOOLBAR_BUTTONS: ["tileview", "fullscreen"]
       }
     });
     api.addListener("videoConferenceJoined", function () {
       hideStatus();
-      try { api.executeCommand("setVideoMute", false); } catch (e) {}
-      try { api.executeCommand("setAudioMute", false); } catch (e) {}
+      try { api.executeCommand("setVideoMute", true); } catch (e) {}
+      try { api.executeCommand("setAudioMute", true); } catch (e) {}
       try { api.executeCommand("setTileView", true); } catch (e) {}
       notify("joined");
     });
@@ -361,6 +412,34 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
       ),
       body: _loading
           ? const FullPageLoader(label: 'Opening live…')
+          : _waitingForHost
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(color: Colors.white),
+                        const SizedBox(height: 16),
+                        Text(
+                          '${live?.storeName ?? 'The seller'} is going live. The stream will start in a few seconds…',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white, height: 1.4),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => context.push('/stores/${widget.slug}'),
+                          child: const Text('Visit store'),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: _load,
+                          child: const Text('Try again', style: TextStyle(color: AppColors.accent)),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
           : _controller == null
               ? Center(
                   child: Padding(
