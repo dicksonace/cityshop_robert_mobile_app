@@ -444,7 +444,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Top up via Paystack (MoMo or card). Paystack fee is added on top.',
+                  'Top up via Paystack (MoMo or card).',
                   style: TextStyle(color: AppColors.textSecondary, height: 1.35),
                 ),
                 const SizedBox(height: 16),
@@ -486,11 +486,6 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                     child: Column(
                       children: [
                         _FeeRow(label: 'Wallet credit', value: _money.format(quote['credit'])),
-                        const SizedBox(height: 6),
-                        _FeeRow(
-                          label: 'Paystack fee (${feePercent.toStringAsFixed(2)}%)',
-                          value: _money.format(quote['fee']),
-                        ),
                         const Divider(height: 16),
                         _FeeRow(
                           label: 'You pay',
