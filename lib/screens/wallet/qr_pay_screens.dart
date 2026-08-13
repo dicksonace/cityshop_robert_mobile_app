@@ -859,20 +859,26 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
 
   Future<void> _saveToAlbum() {
     return _runCardAction((bytes) async {
-      if (!await Gal.hasAccess() && !await Gal.requestAccess()) {
+      if (!await Gal.hasAccess(toAlbum: true) && !await Gal.requestAccess(toAlbum: true)) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Allow photo access to save your namecard')),
+            const SnackBar(content: Text('Allow photo access to save your QR')),
           );
         }
         return;
       }
-      await Gal.putImageBytes(bytes, name: 'cityshop_namecard_$_safeName');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Saved to your photos')),
-        );
-      }
+
+      final dir = await getTemporaryDirectory();
+      final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final file = File('${dir.path}/CityShop_Pay_${_safeName}_$stamp.png');
+      await file.writeAsBytes(bytes, flush: true);
+      await Gal.putImage(file.path, album: 'CityShop');
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saved to Photos')),
+      );
+      await Gal.open();
     });
   }
 
@@ -1195,22 +1201,31 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                       children: [
                         Expanded(
                           child: _CardAction(
+                            icon: Icons.payments_outlined,
+                            label: 'Specify Amount',
+                            busy: _saving || _applyingAmount,
+                            onTap: () async => _openAmountEditor(),
+                          ),
+                        ),
+                        Expanded(
+                          child: _CardAction(
+                            icon: Icons.save_alt_rounded,
+                            label: 'Save Picture',
+                            busy: _saving,
+                            onTap: _saveToAlbum,
+                          ),
+                        ),
+                        Expanded(
+                          child: _CardAction(
                             icon: Icons.ios_share_rounded,
                             label: 'Share',
                             busy: _saving,
                             onTap: _shareCard,
                           ),
                         ),
-                        Expanded(
-                          child: _CardAction(
-                            icon: Icons.image_outlined,
-                            label: 'Save to album',
-                            busy: _saving,
-                            onTap: _saveToAlbum,
-                          ),
-                        ),
                       ],
                     ),
+                    if (_editingAmount) ...[
                     const SizedBox(height: 14),
                     // Solid amount block — no floating dialog over the QR.
                     Container(
@@ -1220,8 +1235,7 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: AppColors.border),
                       ),
-                      child: _editingAmount
-                          ? Column(
+                      child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 const Text(
@@ -1294,69 +1308,9 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                                   ],
                                 ),
                               ],
-                            )
-                          : InkWell(
-                              onTap: _saving ? null : _openAmountEditor,
-                              borderRadius: BorderRadius.circular(12),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.ringOrange,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Icon(Icons.payments_outlined, color: AppColors.accent, size: 20),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        if (_amount == null)
-                                          const Text(
-                                            'Request a fixed amount',
-                                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                                          )
-                                        else ...[
-                                          Text(
-                                            _money.format(_amount),
-                                            style: const TextStyle(
-                                              color: AppColors.accent,
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: 15,
-                                            ),
-                                          ),
-                                          if ((_reason ?? '').isNotEmpty) ...[
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              _reason!,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: AppColors.textSecondary,
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                        if (_amount == null) ...[
-                                          const SizedBox(height: 2),
-                                          const Text(
-                                            'Optional — set amount and reason',
-                                            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const Icon(Icons.chevron_right, color: AppColors.textMuted),
-                                ],
-                              ),
                             ),
                     ),
+                    ],
                   ],
                 ),
     );
