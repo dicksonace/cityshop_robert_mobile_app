@@ -279,6 +279,8 @@ class _QrScanScreenState extends State<QrScanScreen> {
   bool _torchUnavailable = false;
   bool _wantTorch = false;
   bool _nightAutoTried = false;
+  bool _pausedAfterError = false;
+  String? _lastFailedPayload;
 
   @override
   void initState() {
@@ -356,39 +358,56 @@ class _QrScanScreenState extends State<QrScanScreen> {
     });
   }
 
+  void _toastOnce(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppColors.danger),
+    );
+  }
+
+  Future<void> _pauseAfterError(String? payload) async {
+    _lastFailedPayload = payload?.trim();
+    _pausedAfterError = true;
+    try {
+      await _controller.stop();
+    } catch (_) {}
+    if (mounted) setState(() => _handling = false);
+  }
+
+  Future<void> _resumeScan() async {
+    _pausedAfterError = false;
+    _lastFailedPayload = null;
+    if (!mounted) return;
+    setState(() => _handling = false);
+    await _controller.start();
+    await _restoreTorchIfNeeded();
+  }
+
   Future<void> _runScanFlow(Future<String?> Function() readPayload) async {
-    if (_handling) return;
+    if (_handling || _pausedAfterError) return;
     setState(() => _handling = true);
     HapticFeedback.mediumImpact();
+    String? raw;
     try {
       await _controller.stop();
       if (!mounted) return;
-      final raw = await readPayload();
+      raw = await readPayload();
       if (!mounted) return;
       if (raw == null || raw.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No CityShop QR code found'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
+        _toastOnce('No CityShop QR code found');
+        await _pauseAfterError(null);
         return;
       }
       await _resolveAndOpenContact(raw);
     } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: AppColors.danger),
-        );
-      }
+      if (mounted) _toastOnce(e.message);
+      await _pauseAfterError(raw);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e'), backgroundColor: AppColors.danger),
-        );
-      }
+      if (mounted) _toastOnce('$e');
+      await _pauseAfterError(raw);
     } finally {
-      if (mounted) {
+      if (mounted && !_pausedAfterError) {
         setState(() => _handling = false);
         await _controller.start();
         await _restoreTorchIfNeeded();
@@ -397,13 +416,14 @@ class _QrScanScreenState extends State<QrScanScreen> {
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_handling) return;
+    if (_handling || _pausedAfterError) return;
     final raw = capture.barcodes
         .map((b) => b.rawValue)
         .whereType<String>()
         .map((v) => v.trim())
         .firstWhere((v) => v.isNotEmpty, orElse: () => '');
     if (raw.isEmpty) return;
+    if (_lastFailedPayload != null && raw == _lastFailedPayload) return;
     await _runScanFlow(() async => raw);
   }
 
@@ -491,15 +511,39 @@ class _QrScanScreenState extends State<QrScanScreen> {
             left: 24,
             right: 24,
             bottom: 118,
-            child: Text(
-              _handling
-                  ? 'Reading code…'
-                  : (_torchOn
-                      ? 'Light on · scan QR / barcode'
-                      : 'Align the CityShop QR inside the frame'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-            ),
+            child: _pausedAfterError
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Scan paused',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 10),
+                      TextButton(
+                        onPressed: _resumeScan,
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        ),
+                        child: const Text(
+                          'Scan again',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
+                  )
+                : Text(
+                    _handling
+                        ? 'Reading code…'
+                        : (_torchOn
+                            ? 'Light on · scan QR / barcode'
+                            : 'Align the CityShop QR inside the frame'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
           ),
           Positioned(
             left: 24,
@@ -521,12 +565,13 @@ class _QrScanScreenState extends State<QrScanScreen> {
                     onTap: _handling
                         ? null
                         : () async {
+                            _pausedAfterError = false;
+                            _lastFailedPayload = null;
                             await _controller.stop();
                             if (!context.mounted) return;
                             await showEnterCityShopCodeSheet(context);
                             if (!mounted) return;
-                            await _controller.start();
-                            await _restoreTorchIfNeeded();
+                            await _resumeScan();
                           },
                   ),
                   _bottomAction(
