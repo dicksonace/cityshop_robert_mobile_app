@@ -315,8 +315,10 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
       parentNode: document.getElementById("meet"),
       width: $width,
       height: $height,
+      lang: "en",
       userInfo: { displayName: $safeName },
       configOverwrite: {
+        defaultLanguage: "en",
         prejoinPageEnabled: false,
         startWithAudioMuted: true,
         startWithVideoMuted: true,
@@ -331,6 +333,7 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
         p2p: { enabled: false }
       },
       interfaceConfigOverwrite: {
+        LANG_DETECTION: false,
         SHOW_JITSI_WATERMARK: false,
         SHOW_WATERMARK_FOR_GUESTS: false,
         DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
@@ -339,8 +342,10 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
         TOOLBAR_BUTTONS: ["tileview", "fullscreen"]
       }
     });
+    try { api.executeCommand("setLanguage", "en"); } catch (e) {}
     api.addListener("videoConferenceJoined", function () {
       hideStatus();
+      try { api.executeCommand("setLanguage", "en"); } catch (e) {}
       try { api.executeCommand("setVideoMute", true); } catch (e) {}
       try { api.executeCommand("setAudioMute", true); } catch (e) {}
       try { api.executeCommand("setTileView", true); } catch (e) {}
