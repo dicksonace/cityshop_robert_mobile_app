@@ -411,8 +411,14 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<Map<String, dynamic>> forgotPassword({required String login}) async {
-    final res = await _api.post('/auth/forgot-password', data: {'login': login});
+  Future<Map<String, dynamic>> forgotPassword({
+    required String login,
+    String via = 'email',
+  }) async {
+    final res = await _api.post('/auth/forgot-password', data: {
+      'login': login,
+      'via': via,
+    });
     final data = res.data;
     if (data is Map) {
       return Map<String, dynamic>.from(data);
@@ -619,13 +625,13 @@ class AppStore extends ChangeNotifier {
     }
   }
 
-  /// Returns a masked email hint when a reset code is emailed.
-  Future<String?> forgotPaymentPin() async {
-    final res = await _api.post('/profile/payment-pin/forgot');
+  /// Returns via + masked hint when a PIN reset code is sent.
+  Future<Map<String, dynamic>> forgotPaymentPin({String via = 'email'}) async {
+    final res = await _api.post('/profile/payment-pin/forgot', data: {'via': via});
     if (res.data is Map) {
-      return res.data['email_hint'] as String?;
+      return Map<String, dynamic>.from(res.data);
     }
-    return null;
+    return {'via': via};
   }
 
   Future<void> resetPaymentPin({

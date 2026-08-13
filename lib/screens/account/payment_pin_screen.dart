@@ -7,6 +7,7 @@ import '../../api/api_client.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/reset_via_picker.dart';
 
 /// Set, change, or reset the buyer's 4-digit payment PIN.
 class PaymentPinScreen extends StatefulWidget {
@@ -20,7 +21,8 @@ class _PaymentPinScreenState extends State<PaymentPinScreen> {
   bool saving = false;
   bool resetting = false;
   String mode = 'manage'; // manage | reset
-  String? emailHint;
+  String via = 'sms';
+  String? hint;
 
   final pin = TextEditingController();
   final pinConfirm = TextEditingController();
@@ -78,17 +80,32 @@ class _PaymentPinScreenState extends State<PaymentPinScreen> {
     }
   }
 
+  String get viaLabel => via == 'sms' ? 'SMS' : 'email';
+
   Future<void> _sendResetCode() async {
+    final user = context.read<AppStore>().user;
+    final hasMobile = (user?.mobile ?? '').trim().isNotEmpty;
+    final hasEmail = (user?.email ?? '').trim().isNotEmpty;
+    if (via == 'sms' && !hasMobile) {
+      _toast('Add a mobile number to your profile to use SMS');
+      return;
+    }
+    if (via == 'email' && !hasEmail) {
+      _toast('Add an email to your profile to use email reset');
+      return;
+    }
+
     setState(() => saving = true);
     try {
-      final hint = await context.read<AppStore>().forgotPaymentPin();
+      final result = await context.read<AppStore>().forgotPaymentPin(via: via);
       if (!mounted) return;
+      final sentHint = (result['hint'] as String?) ?? (result['email_hint'] as String?);
       setState(() {
         mode = 'reset';
-        emailHint = hint;
+        hint = sentHint;
         saving = false;
       });
-      _toast('Reset code sent${hint != null ? ' to $hint' : ''}');
+      _toast('Reset code sent${sentHint != null ? ' to $sentHint via $viaLabel' : ' via $viaLabel'}');
     } on ApiException catch (e) {
       if (mounted) {
         setState(() => saving = false);
@@ -99,7 +116,7 @@ class _PaymentPinScreenState extends State<PaymentPinScreen> {
 
   Future<void> _resetWithCode() async {
     if (code.text.trim().length != 6) {
-      _toast('Enter the 6-digit email code');
+      _toast('Enter the 6-digit $viaLabel code');
       return;
     }
     if (pin.text.length != 4 || pinConfirm.text.length != 4) {
@@ -188,17 +205,27 @@ class _PaymentPinScreenState extends State<PaymentPinScreen> {
               onPressed: saving ? null : _setOrChange,
             ),
             if (has) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
+              ResetViaPicker(
+                value: via,
+                emailEnabled: (context.watch<AppStore>().user?.email ?? '').trim().isNotEmpty,
+                smsEnabled: (context.watch<AppStore>().user?.mobile ?? '').trim().isNotEmpty,
+                onChanged: (next) => setState(() => via = next),
+              ),
+              const SizedBox(height: 12),
               TextButton(
                 onPressed: saving ? null : _sendResetCode,
-                child: const Text('Forgot PIN? Reset via email'),
+                child: Text(
+                  via == 'sms' ? 'Forgot PIN? Send SMS code' : 'Forgot PIN? Send email code',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
             ],
           ] else ...[
             Text(
-              emailHint == null
-                  ? 'Enter the 6-digit code we sent to your email, then choose a new PIN.'
-                  : 'Enter the 6-digit code sent to $emailHint, then choose a new PIN.',
+              hint == null
+                  ? 'Enter the 6-digit code we sent by $viaLabel, then choose a new PIN.'
+                  : 'Enter the 6-digit code sent to $hint via $viaLabel, then choose a new PIN.',
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 14),
@@ -207,7 +234,7 @@ class _PaymentPinScreenState extends State<PaymentPinScreen> {
               keyboardType: TextInputType.number,
               maxLength: 6,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Email code', counterText: ''),
+              decoration: InputDecoration(labelText: '$viaLabel code', counterText: ''),
             ),
             const SizedBox(height: 10),
             _pinField(pin, 'New PIN'),
@@ -225,7 +252,7 @@ class _PaymentPinScreenState extends State<PaymentPinScreen> {
             ),
             TextButton(
               onPressed: saving ? null : _sendResetCode,
-              child: const Text('Resend code'),
+              child: Text('Resend $viaLabel code'),
             ),
           ],
         ],

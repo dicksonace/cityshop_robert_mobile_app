@@ -7,8 +7,9 @@ import '../../api/api_client.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/reset_via_picker.dart';
 
-/// Request a 6-digit email code, then set a new login password.
+/// Request a 6-digit email or SMS code, then set a new login password.
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key, this.initialLogin = ''});
 
@@ -29,12 +30,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _codeSent = false;
   bool _obscure = true;
   bool _obscureConfirm = true;
-  String? _emailHint;
+  String _via = 'sms';
+  String? _hint;
 
   @override
   void initState() {
     super.initState();
     _login = TextEditingController(text: widget.initialLogin);
+    final initial = widget.initialLogin.trim();
+    if (initial.contains('@')) {
+      _via = 'email';
+    }
   }
 
   @override
@@ -45,6 +51,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     _confirm.dispose();
     super.dispose();
   }
+
+  String get _viaLabel => _via == 'sms' ? 'SMS' : 'email';
 
   void _toast(String message, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -64,15 +72,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _sending = true);
     try {
-      final result = await context.read<AppStore>().forgotPassword(login: login);
+      final result = await context.read<AppStore>().forgotPassword(
+            login: login,
+            via: _via,
+          );
       if (!mounted) return;
+      final hint = (result['hint'] as String?) ?? (result['email_hint'] as String?);
       setState(() {
         _codeSent = true;
-        _emailHint = result['email_hint'] as String?;
+        _hint = hint;
       });
       _toast(
-        _emailHint != null && _emailHint!.isNotEmpty
-            ? 'Code sent to $_emailHint'
+        hint != null && hint.isNotEmpty
+            ? 'Code sent to $hint via $_viaLabel'
             : (result['message'] as String? ?? 'If that account exists, a code was sent.'),
       );
     } on ApiException catch (e) {
@@ -85,7 +97,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Future<void> _reset() async {
     final login = _login.text.trim();
     if (_code.text.trim().length != 6) {
-      _toast('Enter the 6-digit code from your email', error: true);
+      _toast('Enter the 6-digit code from your $_viaLabel', error: true);
       return;
     }
     if (_password.text.length < 8) {
@@ -154,8 +166,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 const SizedBox(height: 6),
                 Text(
                   _codeSent
-                      ? 'Enter the code we emailed you, then choose a new password.'
-                      : 'Enter the mobile or email on your account. We’ll send a reset code.',
+                      ? 'Enter the code we sent by $_viaLabel, then choose a new password.'
+                      : 'Enter the mobile or email on your account, then choose Email or SMS.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                 ),
@@ -173,17 +185,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                 ),
                 if (!_codeSent) ...[
+                  const SizedBox(height: 16),
+                  ResetViaPicker(
+                    value: _via,
+                    onChanged: (via) => setState(() => _via = via),
+                  ),
                   const SizedBox(height: 20),
                   PrimaryButton(
-                    label: 'Send reset code',
+                    label: _via == 'sms' ? 'Send SMS code' : 'Send email code',
                     loading: _sending,
                     onPressed: _sendCode,
                   ),
                 ] else ...[
-                  if (_emailHint != null && _emailHint!.isNotEmpty) ...[
+                  if (_hint != null && _hint!.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     Text(
-                      'Sent to $_emailHint',
+                      'Sent to $_hint via $_viaLabel',
                       style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                     ),
                   ],
@@ -195,9 +212,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     keyboardType: TextInputType.number,
                     maxLength: 6,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(
-                      hintText: '6-digit code',
-                      prefixIcon: Icon(Icons.pin_outlined),
+                    decoration: InputDecoration(
+                      hintText: '6-digit $_viaLabel code',
+                      prefixIcon: const Icon(Icons.pin_outlined),
                       counterText: '',
                     ),
                   ),
@@ -241,7 +258,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   TextButton(
                     onPressed: _sending ? null : _sendCode,
                     child: Text(
-                      _sending ? 'Sending…' : 'Resend code',
+                      _sending ? 'Sending…' : 'Resend $_viaLabel code',
                       style: const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w700),
                     ),
                   ),
