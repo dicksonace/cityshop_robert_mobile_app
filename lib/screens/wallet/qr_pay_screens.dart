@@ -109,8 +109,8 @@ class QrPayHubScreen extends StatelessWidget {
           const SizedBox(height: 10),
           _HubTile(
             icon: Icons.qr_code_2_rounded,
-            title: 'My namecard',
-            subtitle: 'Show your code so others can pay you or add you',
+            title: 'My QR',
+            subtitle: 'Show your CityShop Pay code so others can pay or chat',
             onTap: () {
               if (user == null) {
                 context.push('/login');
@@ -556,7 +556,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
                 children: [
                   _bottomAction(
                     icon: Icons.qr_code_2_rounded,
-                    label: 'My namecard',
+                    label: 'My QR',
                     onTap: _handling ? null : () => context.push('/qr/receive'),
                   ),
                   _bottomAction(
@@ -889,7 +889,7 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(file.path, mimeType: 'image/png', name: 'cityshop_namecard.png')],
-          subject: 'My CityShop namecard',
+          subject: 'My CityShop Pay QR',
           text: _amount != null
               ? 'Scan my CityShop QR to send me ${_money.format(_amount)}'
               : 'Scan my CityShop QR to transfer money or chat me',
