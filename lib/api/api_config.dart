@@ -10,6 +10,9 @@ class ApiConfig {
   /// Flip to `false` to hit production (live cityunlock.net data + login).
   static const useLocalBackend = false;
 
+  /// Seller/buyer Go Live. Keep false until the stream is reliable again.
+  static const livestreamEnabled = false;
+
   /// Host machine from Android emulator; localhost elsewhere.
   static String get _localHost =>
       Platform.isAndroid ? '10.0.2.2' : '127.0.0.1';

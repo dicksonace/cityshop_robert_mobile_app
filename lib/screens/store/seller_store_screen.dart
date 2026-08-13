@@ -49,7 +49,7 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
 
   void _syncLivePolling() {
     _livePoll?.cancel();
-    if (store?.isLive != true) return;
+    if (!ApiConfig.livestreamEnabled || store?.isLive != true) return;
     _livePoll = Timer.periodic(const Duration(seconds: 10), (_) => _refreshLiveStatus());
   }
 
@@ -327,7 +327,7 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                                                     height: 1.15,
                                                   ),
                                                 ),
-                                                if (s?.isLive == true)
+                                                if (ApiConfig.livestreamEnabled && s?.isLive == true)
                                                   Container(
                                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                                     decoration: BoxDecoration(
@@ -396,7 +396,7 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (s != null && s.isLive) ...[
+                              if (ApiConfig.livestreamEnabled && s != null && s.isLive) ...[
                                 _StoreLivePill(
                                   store: s,
                                   photoUrl: photoUrl,

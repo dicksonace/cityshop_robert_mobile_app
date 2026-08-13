@@ -374,7 +374,8 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
                     ),
                   ),
                 ),
-                SliverToBoxAdapter(child: _LiveNowStrip(key: ValueKey('live-$_matchesTick'))),
+                if (ApiConfig.livestreamEnabled)
+                  SliverToBoxAdapter(child: _LiveNowStrip(key: ValueKey('live-$_matchesTick'))),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),

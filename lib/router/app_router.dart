@@ -23,6 +23,7 @@ import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
 import '../screens/shop/shop_shell.dart';
 import '../screens/wallet/qr_pay_screens.dart';
+import '../api/api_config.dart';
 import '../screens/live/watch_live_screen.dart';
 import '../screens/store/seller_store_screen.dart';
 import '../store/app_store.dart';
@@ -193,6 +194,9 @@ GoRouter createRouter(AppStore store) {
       ),
       GoRoute(
         path: '/live/:slug',
+        redirect: (_, state) => ApiConfig.livestreamEnabled
+            ? null
+            : '/stores/${state.pathParameters['slug']}',
         builder: (_, state) => WatchLiveScreen(slug: state.pathParameters['slug']!),
       ),
       GoRoute(
