@@ -268,7 +268,7 @@ class LivestreamRoom {
 
   factory LivestreamRoom.fromJson(Map<String, dynamic> json) {
     return LivestreamRoom(
-      domain: json['domain'] as String? ?? 'meet.ffmuc.net',
+      domain: json['domain'] as String? ?? 'jitsi.riot.im',
       roomName: json['room_name'] as String? ?? '',
       provider: json['provider'] as String? ?? 'jitsi',
     );

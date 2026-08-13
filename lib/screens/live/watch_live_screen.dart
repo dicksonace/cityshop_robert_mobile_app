@@ -240,6 +240,11 @@ class _WatchLiveScreenState extends State<WatchLiveScreen> {
       _error = null;
     });
     _startStatusPolling(waitingForHost: false);
+    // Don't cover the room forever if Jitsi never fires "joined" (login/lobby screens).
+    Future<void>.delayed(const Duration(seconds: 8), () {
+      if (!mounted || !_joining) return;
+      setState(() => _joining = false);
+    });
   }
 
   PlatformWebViewControllerCreationParams _webViewParams() {
