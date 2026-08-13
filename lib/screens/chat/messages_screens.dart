@@ -19,6 +19,7 @@ import '../../api/api_config.dart';
 import '../../api/chat_realtime.dart';
 import '../../models/models.dart';
 import '../../services/chat_call_service.dart';
+import '../../services/money_sound.dart';
 import '../../services/document_picker.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -472,6 +473,9 @@ class _ChatScreenState extends State<ChatScreen> {
         if (msg.isSignalling) {
           unawaited(_call?.handleMessage(msg) ?? Future<void>.value());
         }
+        if (!msg.mine && msg.isTransfer) {
+          unawaited(MoneySound.playReceived());
+        }
         setState(() => messages = [...messages, msg]);
         if (!msg.isSignalling) _jumpToEnd();
       },
@@ -552,6 +556,9 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
       if (!changed && !presenceChanged) return;
+      if (fresh.any((m) => !m.mine && m.isTransfer)) {
+        unawaited(MoneySound.playReceived());
+      }
       setState(() {
         messages = merged;
       });

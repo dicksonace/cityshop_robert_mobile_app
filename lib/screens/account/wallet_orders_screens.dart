@@ -22,6 +22,23 @@ import '../cart/paystack_payment_screen.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
+Map<String, double> _paystackRechargeQuote(double credit, {double percent = 1.95, double flat = 0}) {
+  final amount = credit <= 0 ? 0.0 : credit;
+  final rate = percent / 100;
+  final charge = amount <= 0
+      ? 0.0
+      : rate >= 1
+          ? amount + flat
+          : (amount + flat) / (1 - rate);
+  final chargeR = (charge * 100).round() / 100;
+  final creditR = (amount * 100).round() / 100;
+  return {
+    'credit': creditR,
+    'fee': ((chargeR - creditR) * 100).round() / 100,
+    'charge': chargeR,
+  };
+}
+
 enum _StatementPeriod {
   last30Days('Last 30 days', 30),
   last3Months('Last 3 months', 90),
@@ -358,12 +375,17 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     final amountCtrl = TextEditingController();
     String method = 'momo';
     var submitting = false;
+    final wallet = context.read<AppStore>().wallet;
+    final feePercent = wallet?.paystackFeePercent ?? 1.95;
+    final feeFlat = wallet?.paystackFeeFlat ?? 0;
 
     final started = await showAppSheet<Map<String, dynamic>>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModal) {
+            final typed = double.tryParse(amountCtrl.text.trim()) ?? 0;
+            final quote = _paystackRechargeQuote(typed, percent: feePercent, flat: feeFlat);
             return SheetShell(
               action: SizedBox(
                 height: 48,
@@ -406,7 +428,11 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                           }
                         },
                   child: Text(
-                    submitting ? 'Starting…' : 'Recharge',
+                    submitting
+                        ? 'Starting…'
+                        : quote['credit']! >= 5
+                            ? 'Pay ${_money.format(quote['charge'])}'
+                            : 'Recharge',
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                   ),
                 ),
@@ -418,13 +444,14 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Top up via Paystack (MoMo or card).',
+                  'Top up via Paystack (MoMo or card). Paystack fee is added on top.',
                   style: TextStyle(color: AppColors.textSecondary, height: 1.35),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: amountCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setModal(() {}),
                   decoration: const InputDecoration(
                     labelText: 'Amount (GHS)',
                     border: OutlineInputBorder(),
@@ -447,6 +474,33 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                           if (v != null) setModal(() => method = v);
                         },
                 ),
+                if (quote['credit']! >= 5) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF7ED),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        _FeeRow(label: 'Wallet credit', value: _money.format(quote['credit'])),
+                        const SizedBox(height: 6),
+                        _FeeRow(
+                          label: 'Paystack fee (${feePercent.toStringAsFixed(2)}%)',
+                          value: _money.format(quote['fee']),
+                        ),
+                        const Divider(height: 16),
+                        _FeeRow(
+                          label: 'You pay',
+                          value: _money.format(quote['charge']),
+                          bold: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             );
           },
@@ -2610,6 +2664,30 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           Text(_money.format(value), style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
       ),
+    );
+  }
+}
+
+class _FeeRow extends StatelessWidget {
+  const _FeeRow({required this.label, required this.value, this.bold = false});
+
+  final String label;
+  final String value;
+  final bool bold;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      fontSize: bold ? 15 : 13,
+      fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
+      color: const Color(0xFF9A3412),
+    );
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: style),
+        Text(value, style: style),
+      ],
     );
   }
 }

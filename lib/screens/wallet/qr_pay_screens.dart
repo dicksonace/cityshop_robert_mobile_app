@@ -273,13 +273,73 @@ class QrScanScreen extends StatefulWidget {
 }
 
 class _QrScanScreenState extends State<QrScanScreen> {
-  final _controller = MobileScannerController(detectionSpeed: DetectionSpeed.normal);
+  late final MobileScannerController _controller;
   bool _handling = false;
+  bool _torchOn = false;
+  bool _torchUnavailable = false;
+  bool _wantTorch = false;
+  bool _nightAutoTried = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = MobileScannerController(detectionSpeed: DetectionSpeed.normal);
+    _controller.addListener(_onScannerState);
+  }
 
   @override
   void dispose() {
+    _controller.removeListener(_onScannerState);
     _controller.dispose();
     super.dispose();
+  }
+
+  bool get _isNight {
+    final hour = TimeOfDay.now().hour;
+    return hour >= 18 || hour < 6;
+  }
+
+  void _onScannerState() {
+    final torch = _controller.value.torchState;
+    final on = torch == TorchState.on;
+    final unavailable = torch == TorchState.unavailable;
+    if (!mounted) return;
+    if (on != _torchOn || unavailable != _torchUnavailable) {
+      setState(() {
+        _torchOn = on;
+        _torchUnavailable = unavailable;
+      });
+    }
+    if (!_nightAutoTried && _controller.value.isRunning && !unavailable) {
+      _nightAutoTried = true;
+      if (_isNight && !on) {
+        _wantTorch = true;
+        _controller.toggleTorch();
+      }
+    }
+  }
+
+  Future<void> _toggleTorch() async {
+    if (_handling || _torchUnavailable || !_controller.value.isRunning) return;
+    try {
+      final turningOn = !_torchOn;
+      await _controller.toggleTorch();
+      if (mounted) _wantTorch = turningOn;
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Flashlight is not available on this device')),
+      );
+    }
+  }
+
+  Future<void> _restoreTorchIfNeeded() async {
+    if (!_wantTorch || !_controller.value.isRunning) return;
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted || !_wantTorch) return;
+    if (_controller.value.torchState == TorchState.off) {
+      await _controller.toggleTorch();
+    }
   }
 
   /// Lands on the contact screen rather than the keypad: a scan can mean
@@ -331,6 +391,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
       if (mounted) {
         setState(() => _handling = false);
         await _controller.start();
+        await _restoreTorchIfNeeded();
       }
     }
   }
@@ -418,12 +479,24 @@ class _QrScanScreenState extends State<QrScanScreen> {
               child: const SizedBox.expand(),
             ),
           ),
+          Align(
+            alignment: const Alignment(0, -0.18),
+            child: _TorchToggle(
+              on: _torchOn,
+              enabled: !_handling && _controller.value.isRunning && !_torchUnavailable,
+              onTap: _toggleTorch,
+            ),
+          ),
           Positioned(
             left: 24,
             right: 24,
             bottom: 118,
             child: Text(
-              _handling ? 'Reading code…' : 'Align the CityShop QR inside the frame',
+              _handling
+                  ? 'Reading code…'
+                  : (_torchOn
+                      ? 'Light on · scan QR / barcode'
+                      : 'Align the CityShop QR inside the frame'),
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
             ),
@@ -453,6 +526,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
                             await showEnterCityShopCodeSheet(context);
                             if (!mounted) return;
                             await _controller.start();
+                            await _restoreTorchIfNeeded();
                           },
                   ),
                   _bottomAction(
@@ -466,6 +540,53 @@ class _QrScanScreenState extends State<QrScanScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _TorchToggle extends StatelessWidget {
+  const _TorchToggle({
+    required this.on,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final bool on;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: on ? const Color(0xFFFFF7ED) : Colors.white.withValues(alpha: 0.2),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: enabled ? onTap : null,
+            child: SizedBox(
+              width: 64,
+              height: 64,
+              child: Icon(
+                on ? Icons.flashlight_on_rounded : Icons.flashlight_off_rounded,
+                color: on ? AppColors.accent : Colors.white,
+                size: 30,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          on ? 'Tap to turn off' : 'Tap to turn on',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.95),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }

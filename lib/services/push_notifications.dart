@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 import '../models/models.dart';
 import '../store/app_store.dart';
+import 'money_sound.dart';
 
 const _prefsLastShownId = 'cityshop_push_last_shown_id';
 const _androidChannelId = 'cityshop_alerts';
@@ -229,6 +230,9 @@ class PushNotifications {
     final toShow = fresh.length > 5 ? fresh.sublist(fresh.length - 5) : fresh;
     for (final item in toShow) {
       if (_shouldSuppress(item)) continue;
+      if (_isMoneyReceived(item)) {
+        unawaited(MoneySound.playReceived());
+      }
       await showLocal(item);
     }
     await _rememberShown(fresh.last.id);
@@ -236,6 +240,12 @@ class PushNotifications {
 
   void setAppInForeground(bool inForeground) {
     _appInForeground = inForeground;
+  }
+
+  bool _isMoneyReceived(AppNotificationItem item) {
+    if (item.type != 'payment') return false;
+    final title = item.title.toLowerCase();
+    return title.contains('received') || title.contains('paid you');
   }
 
   bool _shouldSuppress(AppNotificationItem item) {
@@ -283,6 +293,11 @@ class PushNotifications {
     final body = message.notification?.body ?? message.data['body'];
     final id = int.tryParse('${message.data['notification_id'] ?? ''}') ??
         DateTime.now().millisecondsSinceEpoch.remainder(1000000);
+    final type = '${message.data['type'] ?? ''}';
+    final titleText = '$title'.toLowerCase();
+    if (type == 'payment' && (titleText.contains('received') || titleText.contains('paid you'))) {
+      unawaited(MoneySound.playReceived());
+    }
 
     await _local.show(
       id,

@@ -562,6 +562,8 @@ class WalletInfo {
     this.withdrawnAmount = 0,
     this.paystackConfigured = false,
     this.manualTopUpEnabled = false,
+    this.paystackFeePercent = 1.95,
+    this.paystackFeeFlat = 0,
   });
 
   final double availableBalance;
@@ -570,6 +572,8 @@ class WalletInfo {
   final double withdrawnAmount;
   final bool paystackConfigured;
   final bool manualTopUpEnabled;
+  final double paystackFeePercent;
+  final double paystackFeeFlat;
 
   WalletInfo copyWith({double? availableBalance, double? pendingBalance}) {
     return WalletInfo(
@@ -579,6 +583,8 @@ class WalletInfo {
       withdrawnAmount: withdrawnAmount,
       paystackConfigured: paystackConfigured,
       manualTopUpEnabled: manualTopUpEnabled,
+      paystackFeePercent: paystackFeePercent,
+      paystackFeeFlat: paystackFeeFlat,
     );
   }
 
@@ -590,6 +596,12 @@ class WalletInfo {
       withdrawnAmount: (json['withdrawn_amount'] as num?)?.toDouble() ?? 0,
       paystackConfigured: json['paystack_configured'] as bool? ?? false,
       manualTopUpEnabled: json['manual_top_up_enabled'] as bool? ?? false,
+      paystackFeePercent: json['paystack_fee'] is Map
+          ? (json['paystack_fee']['percent'] as num?)?.toDouble() ?? 1.95
+          : 1.95,
+      paystackFeeFlat: json['paystack_fee'] is Map
+          ? (json['paystack_fee']['flat'] as num?)?.toDouble() ?? 0
+          : 0,
     );
   }
 }
