@@ -77,7 +77,7 @@ class QrPayHubScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
           const Text(
-            'Scan a CityShop QR to send money or add the person, enter a shared code, or show your own namecard so they can scan you.',
+            'Scan their CityShop QR, enter their code or mobile, or show My QR so they can add you.',
             style: TextStyle(color: AppColors.textSecondary, height: 1.4),
           ),
           const SizedBox(height: 16),
@@ -97,7 +97,7 @@ class QrPayHubScreen extends StatelessWidget {
           _HubTile(
             icon: Icons.keyboard_alt_outlined,
             title: 'Enter code',
-            subtitle: 'Paste a CityShop QR link or code text',
+            subtitle: 'Type their CityShop code, mobile, or paste a QR link',
             onTap: () {
               if (user == null) {
                 context.push('/login');
@@ -110,7 +110,7 @@ class QrPayHubScreen extends StatelessWidget {
           _HubTile(
             icon: Icons.qr_code_2_rounded,
             title: 'My QR',
-            subtitle: 'Show your CityShop Pay code so others can pay or chat',
+            subtitle: 'Show your QR and CityShop code so others can add you',
             onTap: () {
               if (user == null) {
                 context.push('/login');
@@ -179,20 +179,20 @@ class _EnterCodeSheetState extends State<_EnterCodeSheet> {
         ),
         const SizedBox(height: 6),
         const Text(
-          'Paste a shared CityShop QR link or the CS1… code text, then continue to transfer money or chat.',
+          'Enter their CityShop code (CS-2083), mobile number, or paste a shared QR link to add them, pay, or chat.',
           style: TextStyle(color: AppColors.textSecondary, height: 1.35),
         ),
         const SizedBox(height: 16),
         TextField(
           controller: _controller,
           autofocus: true,
-          minLines: 3,
-          maxLines: 5,
+          minLines: 1,
+          maxLines: 4,
           textInputAction: TextInputAction.done,
           onChanged: (_) => setState(() {}),
           onSubmitted: (_) => _submit(),
           decoration: InputDecoration(
-            hintText: 'CS1…. or cityshop://pay?c=…',
+            hintText: 'CS-2083 or 0532700209',
             filled: true,
             fillColor: AppColors.background,
             border: OutlineInputBorder(
@@ -673,6 +673,7 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
   bool _saving = false;
   String? _error;
   String? _payload;
+  String? _code;
   String? _name;
   String? _avatar;
   String? _role;
@@ -719,6 +720,10 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
       if (!mounted) return;
       setState(() {
         _payload = data['payload'] as String?;
+        final apiCode = data['code']?.toString().trim();
+        _code = (apiCode != null && apiCode.isNotEmpty)
+            ? apiCode
+            : (store.user != null ? 'CS-${store.user!.id}' : null);
         final user = data['user'];
         if (user is Map) {
           _name = user['name'] as String? ?? store.user?.name;
@@ -822,6 +827,16 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
 
   String get _safeName => (_name ?? 'cityshop').replaceAll(RegExp(r'[^\w\-]+'), '_');
 
+  Future<void> _copyCode() async {
+    final code = _code?.trim();
+    if (code == null || code.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Copied $code')),
+    );
+  }
+
   /// Paints the namecard to a PNG. The frame has to settle first or the
   /// RepaintBoundary can capture mid-layout.
   Future<Uint8List> _captureCard() async {
@@ -896,9 +911,13 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
         ShareParams(
           files: [XFile(file.path, mimeType: 'image/png', name: 'cityshop_namecard.png')],
           subject: 'My CityShop Pay QR',
-          text: _amount != null
-              ? 'Scan my CityShop QR to send me ${_money.format(_amount)}'
-              : 'Scan my CityShop QR to transfer money or chat me',
+          text: [
+            if (_code != null && _code!.isNotEmpty) 'My CityShop code is $_code.',
+            if (_amount != null)
+              'Scan my CityShop QR to send me ${_money.format(_amount)}'
+            else
+              'Enter the code in Pay / Receive → Enter code, or scan my QR to pay or chat.',
+          ].join(' '),
           sharePositionOrigin: origin,
         ),
       );
@@ -1120,6 +1139,40 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                                         ),
                                         const SizedBox(height: 8),
                                         _roleBadge(),
+                                        if (_code != null && _code!.isNotEmpty) ...[
+                                          const SizedBox(height: 12),
+                                          GestureDetector(
+                                            onTap: _copyCode,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFFF7ED),
+                                                borderRadius: BorderRadius.circular(999),
+                                                border: Border.all(color: const Color(0xFFFDBA74)),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    'Code  $_code',
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.w800,
+                                                      fontSize: 14,
+                                                      color: Color(0xFF9A3412),
+                                                      letterSpacing: 0.3,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  const Icon(
+                                                    Icons.copy_rounded,
+                                                    size: 16,
+                                                    color: Color(0xFFC2410C),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                         if (_amount != null) ...[
                                           const SizedBox(height: 10),
                                           Text(
@@ -1225,6 +1278,18 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                         ),
                       ],
                     ),
+                    if (_code != null && _code!.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'They can add you with $_code under Enter code, or by scanning this QR.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
                     if (_editingAmount) ...[
                     const SizedBox(height: 14),
                     // Solid amount block — no floating dialog over the QR.
