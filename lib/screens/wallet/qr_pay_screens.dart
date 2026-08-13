@@ -827,6 +827,19 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
 
   String get _safeName => (_name ?? 'cityshop').replaceAll(RegExp(r'[^\w\-]+'), '_');
 
+  String get _shareInviteText {
+    final code = _code?.trim();
+    final hasCode = code != null && code.isNotEmpty;
+    if (_amount != null) {
+      final payLine = 'Scan my QR to send me ${_money.format(_amount)}.';
+      return hasCode ? 'Add me on CityShop. Code: $code\n$payLine' : payLine;
+    }
+    if (hasCode) {
+      return 'Add me on CityShop. Code: $code\nScan this QR or enter the code under Pay / Receive → Enter code.';
+    }
+    return 'Scan my CityShop QR to add me, pay, or chat.';
+  }
+
   Future<void> _copyCode() async {
     final code = _code?.trim();
     if (code == null || code.isEmpty) return;
@@ -910,14 +923,10 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(file.path, mimeType: 'image/png', name: 'cityshop_namecard.png')],
-          subject: 'My CityShop Pay QR',
-          text: [
-            if (_code != null && _code!.isNotEmpty) 'My CityShop code is $_code.',
-            if (_amount != null)
-              'Scan my CityShop QR to send me ${_money.format(_amount)}'
-            else
-              'Enter the code in Pay / Receive → Enter code, or scan my QR to pay or chat.',
-          ].join(' '),
+          subject: _code != null && _code!.isNotEmpty
+              ? 'Add me on CityShop. Code: $_code'
+              : 'Add me on CityShop',
+          text: _shareInviteText,
           sharePositionOrigin: origin,
         ),
       );
