@@ -971,9 +971,10 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFFFF7ED),
       appBar: AppBar(
-        title: const Text('My namecard'),
+        backgroundColor: Colors.white,
+        title: const Text('My QR'),
         actions: [
           IconButton(
             tooltip: 'Refresh code',
@@ -1008,107 +1009,182 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                   children: [
                     RepaintBoundary(
                       key: _qrCardKey,
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.border),
-                        ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(22),
                         child: Column(
                           children: [
-                            Row(
-                              children: [
-                                _profileBadge(size: 46),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _name ?? 'CityShop',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 16,
-                                          color: Color(0xFF111827),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      _roleBadge(),
-                                    ],
+                            Container(
+                              width: double.infinity,
+                              color: AppColors.accent,
+                              padding: const EdgeInsets.fromLTRB(20, 26, 20, 0),
+                              child: Column(
+                                children: [
+                                  const Text(
+                                    'Recommended to use',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.2,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Scan this QR code to transfer money or chat me',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
-                            ),
-                            if (_amount != null) ...[
-                              const SizedBox(height: 10),
-                              Text(
-                                _money.format(_amount),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 22,
-                                  color: AppColors.accent,
-                                ),
-                              ),
-                              if ((_reason ?? '').isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  _reason!,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 13,
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'CityShop Pay',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w900,
+                                      height: 1.1,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ],
-                            const SizedBox(height: 16),
-                            if (_payload != null)
-                              SizedBox(
-                                width: 240,
-                                height: 240,
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    QrImageView(
-                                      data: _payload!,
-                                      version: QrVersions.auto,
-                                      size: 240,
-                                      // High ECC so scanners still read with avatar over the middle.
-                                      errorCorrectionLevel: QrErrorCorrectLevel.H,
-                                      backgroundColor: Colors.white,
-                                      eyeStyle: const QrEyeStyle(
-                                        eyeShape: QrEyeShape.square,
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFACC15),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: const Text(
+                                      'Wallet  ·  Transfer  ·  Chat',
+                                      style: TextStyle(
                                         color: Color(0xFF111827),
-                                      ),
-                                      dataModuleStyle: const QrDataModuleStyle(
-                                        dataModuleShape: QrDataModuleShape.square,
-                                        color: Color(0xFF111827),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
                                       ),
                                     ),
-                                    _profileBadge(size: 58),
-                                  ],
-                                ),
+                                  ),
+                                  const SizedBox(height: 22),
+                                  Container(
+                                    width: double.infinity,
+                                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(18),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.12),
+                                          blurRadius: 18,
+                                          offset: const Offset(0, 8),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        if (_payload != null)
+                                          SizedBox(
+                                            width: 236,
+                                            height: 236,
+                                            child: Stack(
+                                              alignment: Alignment.center,
+                                              children: [
+                                                QrImageView(
+                                                  data: _payload!,
+                                                  version: QrVersions.auto,
+                                                  size: 236,
+                                                  errorCorrectionLevel: QrErrorCorrectLevel.H,
+                                                  backgroundColor: Colors.white,
+                                                  eyeStyle: const QrEyeStyle(
+                                                    eyeShape: QrEyeShape.square,
+                                                    color: Color(0xFF111827),
+                                                  ),
+                                                  dataModuleStyle: const QrDataModuleStyle(
+                                                    dataModuleShape: QrDataModuleShape.square,
+                                                    color: Color(0xFF111827),
+                                                  ),
+                                                ),
+                                                _profileBadge(size: 54),
+                                              ],
+                                            ),
+                                          ),
+                                        const SizedBox(height: 14),
+                                        Text(
+                                          _name ?? 'CityShop',
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 17,
+                                            color: Color(0xFF111827),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        _roleBadge(),
+                                        if (_amount != null) ...[
+                                          const SizedBox(height: 10),
+                                          Text(
+                                            _money.format(_amount),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 22,
+                                              color: AppColors.accent,
+                                            ),
+                                          ),
+                                          if ((_reason ?? '').isNotEmpty) ...[
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _reason!,
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: AppColors.textSecondary,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 22),
+                                ],
                               ),
-                            const SizedBox(height: 14),
-                            const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.verified_user_outlined, size: 18, color: AppColors.emerald),
-                                SizedBox(width: 6),
-                                Text(
-                                  'Security guaranteed',
-                                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                                ),
-                              ],
+                            ),
+                            Container(
+                              width: double.infinity,
+                              color: Colors.white,
+                              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.asset(
+                                      'assets/branding/cityshop_logo.png',
+                                      height: 32,
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        width: 32,
+                                        height: 32,
+                                        alignment: Alignment.center,
+                                        decoration: const BoxDecoration(
+                                          color: AppColors.accent,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Text(
+                                          'C',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  const Text(
+                                    'CityShop Pay',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF111827),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
