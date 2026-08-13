@@ -1503,6 +1503,28 @@ class AppStore extends ChangeNotifier {
     });
   }
 
+  Future<ChatMessage> updateMessage(int conversationId, int messageId, String body) async {
+    final res = await _api.patch('/messages/$conversationId/messages/$messageId', data: {
+      'body': body,
+    });
+    final msg = res.data['message'];
+    return ChatMessage.fromJson(
+      Map<String, dynamic>.from(msg as Map),
+      myUserId: user?.id ?? 0,
+    );
+  }
+
+  Future<ChatMessage> reactToMessage(int conversationId, int messageId, String emoji) async {
+    final res = await _api.post('/messages/$conversationId/messages/$messageId/react', data: {
+      'emoji': emoji,
+    });
+    final msg = res.data['message'];
+    return ChatMessage.fromJson(
+      Map<String, dynamic>.from(msg as Map),
+      myUserId: user?.id ?? 0,
+    );
+  }
+
   Future<ChatMessage> deleteMessage(int conversationId, int messageId) async {
     final res = await _api.delete('/messages/$conversationId/messages/$messageId');
     final msg = res.data['message'];
@@ -1527,30 +1549,36 @@ class AppStore extends ChangeNotifier {
     return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
   }
 
-  Future<({List<ChatMessage> messages, List<int> readMessageIds, Map<String, dynamic>? other})>
+  Future<({List<ChatMessage> messages, List<ChatMessage> updated, List<int> readMessageIds, Map<String, dynamic>? other})>
       pollMessages(
     int conversationId,
-    int afterId,
-  ) async {
-    final res = await _api.get('/messages/$conversationId/poll', query: {'after': afterId});
+    int afterId, {
+    String? updatedAfter,
+  }) async {
+    final res = await _api.get('/messages/$conversationId/poll', query: {
+      'after': afterId,
+      if (updatedAfter != null && updatedAfter.isNotEmpty) 'updated_after': updatedAfter,
+    });
     final data = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    ChatMessage parse(Map e) => ChatMessage.fromJson(
+          Map<String, dynamic>.from(e),
+          myUserId: user?.id ?? 0,
+        );
     final msgs = data['messages'];
+    final updatedRaw = data['updated'];
     final readIds = data['read_message_ids'];
     final messages = msgs is List
-        ? msgs
-            .whereType<Map>()
-            .map((e) => ChatMessage.fromJson(
-                  Map<String, dynamic>.from(e),
-                  myUserId: user?.id ?? 0,
-                ))
-            .toList()
+        ? msgs.whereType<Map>().map(parse).toList()
+        : <ChatMessage>[];
+    final updated = updatedRaw is List
+        ? updatedRaw.whereType<Map>().map(parse).toList()
         : <ChatMessage>[];
     final readMessageIds = readIds is List
         ? readIds.whereType<num>().map((e) => e.toInt()).toList()
         : <int>[];
     final otherRaw = data['other'];
     final other = otherRaw is Map ? Map<String, dynamic>.from(otherRaw) : null;
-    return (messages: messages, readMessageIds: readMessageIds, other: other);
+    return (messages: messages, updated: updated, readMessageIds: readMessageIds, other: other);
   }
 
   Future<RealtimeConfig?> fetchRealtimeConfig() async {

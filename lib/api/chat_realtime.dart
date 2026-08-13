@@ -57,6 +57,7 @@ class ConversationRealtime {
   PusherChannelsClient? _client;
   StreamSubscription<void>? _connectionSub;
   StreamSubscription<ChannelReadEvent>? _eventSub;
+  StreamSubscription<ChannelReadEvent>? _updatedSub;
   bool _disposed = false;
 
   Future<bool> start() async {
@@ -99,6 +100,7 @@ class ConversationRealtime {
     );
 
     _eventSub = channel.bind('message.sent').listen(_handleEvent);
+    _updatedSub = channel.bind('message.updated').listen(_handleEvent);
 
     _connectionSub = client.onConnectionEstablished.listen((_) {
       channel.subscribeIfNotUnsubscribed();
@@ -132,8 +134,10 @@ class ConversationRealtime {
   Future<void> dispose() async {
     _disposed = true;
     await _eventSub?.cancel();
+    await _updatedSub?.cancel();
     await _connectionSub?.cancel();
     _eventSub = null;
+    _updatedSub = null;
     _connectionSub = null;
     _client?.dispose();
     _client = null;

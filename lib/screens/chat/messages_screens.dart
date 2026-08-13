@@ -23,9 +23,11 @@ import '../../services/money_sound.dart';
 import '../../services/document_picker.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chat_emojis.dart';
 import '../../utils/chat_text_links.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/chat_call_overlay.dart';
+import '../../widgets/chat_emoji_picker.dart';
 import '../../widgets/chat_link_text.dart';
 import '../../widgets/chat_shared_link_preview.dart';
 import '../../widgets/common_widgets.dart';
@@ -367,6 +369,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool recordingVoice = false;
   int recordSeconds = 0;
   ChatMessage? replyingTo;
+  ChatMessage? editingMessage;
+  DateTime _updatedAfter = DateTime.now().toUtc();
   Timer? _poll;
   Timer? _recordTick;
   final _recorder = AudioRecorder();
@@ -469,7 +473,7 @@ class _ChatScreenState extends State<ChatScreen> {
       myUserId: myId,
       onMessage: (msg) {
         if (!mounted) return;
-        if (messages.any((m) => m.id == msg.id)) return;
+        if (_upsertMessage(msg)) return;
         if (msg.isSignalling) {
           unawaited(_call?.handleMessage(msg) ?? Future<void>.value());
         }
@@ -515,22 +519,33 @@ class _ChatScreenState extends State<ChatScreen> {
       final polled = await context.read<AppStore>().pollMessages(
             widget.conversationId,
             afterId,
+            updatedAfter: _updatedAfter.toIso8601String(),
           );
       if (!mounted) return;
+      _updatedAfter = DateTime.now().toUtc();
       final readSet = polled.readMessageIds.toSet();
-      final existing = messages.map((m) => m.id).toSet();
+      final existing = {for (final m in messages) m.id: m};
+      var next = [...messages];
+      for (final msg in polled.updated) {
+        final index = next.indexWhere((m) => m.id == msg.id);
+        if (index >= 0) {
+          next[index] = msg;
+        } else {
+          next = [...next, msg];
+        }
+      }
       final fresh = <ChatMessage>[];
       for (final msg in polled.messages) {
-        if (existing.contains(msg.id)) continue;
+        if (existing.containsKey(msg.id)) continue;
         fresh.add(msg);
       }
       // Handle signals in order and await the drain so offer → ICE stays serial.
       for (final msg in fresh.where((m) => m.isSignalling)) {
         await _call?.handleMessage(msg);
       }
-      var changed = fresh.isNotEmpty;
+      var changed = fresh.isNotEmpty || polled.updated.isNotEmpty;
       final merged = [
-        ...messages.map((m) {
+        ...next.map((m) {
           if (!m.mine || m.isRead || !readSet.contains(m.id)) return m;
           changed = true;
           return m.copyWith(readAt: DateTime.now().toIso8601String());
@@ -627,6 +642,10 @@ class _ChatScreenState extends State<ChatScreen> {
           for (final m in messages)
             if (m.id == updated.id) updated else m,
         ];
+        if (editingMessage?.id == updated.id) {
+          editingMessage = null;
+          _controller.clear();
+        }
       });
     } on ApiException catch (e) {
       if (mounted) {
@@ -640,22 +659,37 @@ class _ChatScreenState extends State<ChatScreen> {
     if (text.isEmpty || sending || uploadingMedia) return;
     if (conversation?.blocked == true) return;
     final replyId = replyingTo?.id;
+    final editing = editingMessage;
     setState(() {
       sending = true;
       showAttachPanel = false;
     });
     try {
-      final msg = await context.read<AppStore>().sendMessage(
-            widget.conversationId,
-            text,
-            replyToId: replyId,
-          );
-      if (preset == null) _controller.clear();
-      setState(() {
-        messages = [...messages, msg];
-        replyingTo = null;
-      });
-      _jumpToEnd();
+      if (editing != null) {
+        final msg = await context.read<AppStore>().updateMessage(
+              widget.conversationId,
+              editing.id,
+              text,
+            );
+        if (preset == null) _controller.clear();
+        setState(() {
+          _replaceMessage(msg);
+          editingMessage = null;
+          replyingTo = null;
+        });
+      } else {
+        final msg = await context.read<AppStore>().sendMessage(
+              widget.conversationId,
+              text,
+              replyToId: replyId,
+            );
+        if (preset == null) _controller.clear();
+        setState(() {
+          messages = [...messages, msg];
+          replyingTo = null;
+        });
+        _jumpToEnd();
+      }
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -665,13 +699,63 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  bool _upsertMessage(ChatMessage msg) {
+    final index = messages.indexWhere((m) => m.id == msg.id);
+    if (index < 0) return false;
+    setState(() {
+      final next = [...messages];
+      next[index] = msg;
+      messages = next;
+    });
+    return true;
+  }
+
+  void _replaceMessage(ChatMessage msg) {
+    final index = messages.indexWhere((m) => m.id == msg.id);
+    if (index < 0) {
+      messages = [...messages, msg];
+      return;
+    }
+    final next = [...messages];
+    next[index] = msg;
+    messages = next;
+  }
+
   void _startReply(ChatMessage message) {
     if (message.isDeleted || message.isEvent || message.isSignalling) return;
     setState(() {
+      editingMessage = null;
       replyingTo = message;
       showAttachPanel = false;
     });
     _focus.requestFocus();
+  }
+
+  void _startEdit(ChatMessage message) {
+    if (!message.mine || message.type != 'text' || message.isDeleted) return;
+    setState(() {
+      replyingTo = null;
+      editingMessage = message;
+      showAttachPanel = false;
+      _controller.text = message.body;
+      _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+    });
+    _focus.requestFocus();
+  }
+
+  Future<void> _reactTo(ChatMessage message, String emoji) async {
+    try {
+      final updated = await context.read<AppStore>().reactToMessage(
+            widget.conversationId,
+            message.id,
+            emoji,
+          );
+      if (!mounted) return;
+      setState(() => _replaceMessage(updated));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Widget _messageBody(ChatMessage message, {required bool mine}) {
@@ -730,7 +814,12 @@ class _ChatScreenState extends State<ChatScreen> {
         !message.isEvent &&
         !message.isSignalling &&
         message.body.trim().isNotEmpty;
-    if (!canReply && !canDelete && !canForwardMessage && !canCopy) return;
+    final canEdit = message.canEdit ||
+        (message.mine && message.type == 'text' && !message.isDeleted);
+    final canReact = !message.isDeleted &&
+        !message.isEvent &&
+        !message.isSignalling;
+    if (!canReply && !canDelete && !canForwardMessage && !canCopy && !canEdit && !canReact) return;
 
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -744,6 +833,26 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (canReact)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                  child: Row(
+                    children: [
+                      for (final emoji in quickReactions)
+                        Expanded(
+                          child: IconButton(
+                            onPressed: () => Navigator.pop(ctx, 'react:$emoji'),
+                            icon: Text(emoji, style: const TextStyle(fontSize: 22)),
+                          ),
+                        ),
+                      IconButton(
+                        tooltip: 'More emojis',
+                        onPressed: () => Navigator.pop(ctx, 'react_more'),
+                        icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.accent),
+                      ),
+                    ],
+                  ),
+                ),
               if (canReply)
                 ListTile(
                   leading: const Icon(Icons.reply_rounded, color: AppColors.accent),
@@ -780,6 +889,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   title: const Text('Copy', style: TextStyle(fontWeight: FontWeight.w700)),
                   onTap: () => Navigator.pop(ctx, 'copy'),
                 ),
+              if (canEdit)
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined, color: AppColors.accent),
+                  title: const Text('Edit', style: TextStyle(fontWeight: FontWeight.w700)),
+                  onTap: () => Navigator.pop(ctx, 'edit'),
+                ),
               if (canDelete)
                 ListTile(
                   leading: const Icon(Icons.delete_outline, color: AppColors.danger),
@@ -795,6 +910,14 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted || action == null) return;
     if (action == 'reply') {
       _startReply(message);
+    } else if (action == 'edit') {
+      _startEdit(message);
+    } else if (action.startsWith('react:')) {
+      await _reactTo(message, action.substring(6));
+    } else if (action == 'react_more') {
+      final emoji = await showChatEmojiPicker(context);
+      if (!mounted || emoji == null || emoji.isEmpty) return;
+      await _reactTo(message, emoji);
     } else if (action == 'forward') {
       await _forwardToMembers(message);
     } else if (action == 'forward_hint') {
@@ -1712,6 +1835,49 @@ class _ChatScreenState extends State<ChatScreen> {
                                             )
                                           else
                                             _messageBody(m, mine: m.mine),
+                                          if (m.reactions.isNotEmpty && !m.isDeleted) ...[
+                                            const SizedBox(height: 6),
+                                            Padding(
+                                              padding: EdgeInsets.only(
+                                                left: m.isProduct || m.isTransfer || m.isFile || m.isMedia ? 8 : 0,
+                                                right: m.isProduct || m.isTransfer || m.isFile || m.isMedia ? 8 : 0,
+                                              ),
+                                              child: Wrap(
+                                                spacing: 4,
+                                                runSpacing: 4,
+                                                children: [
+                                                  for (final reaction in m.reactions)
+                                                    GestureDetector(
+                                                      onTap: () => _reactTo(m, reaction.emoji),
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: reaction.isMineFor(context.read<AppStore>().user?.id)
+                                                              ? const Color(0xFFFFEDD5)
+                                                              : Colors.white,
+                                                          borderRadius: BorderRadius.circular(999),
+                                                          border: Border.all(
+                                                            color: reaction.isMineFor(context.read<AppStore>().user?.id)
+                                                                ? AppColors.accent
+                                                                : AppColors.border,
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          '${reaction.emoji} ${reaction.count}',
+                                                          style: TextStyle(
+                                                            fontSize: 11,
+                                                            fontWeight: FontWeight.w700,
+                                                            color: m.mine && !m.isProduct && !m.isTransfer && !m.isFile
+                                                                ? AppColors.textPrimary
+                                                                : AppColors.textPrimary,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                           if (m.createdAt != null) ...[
                                             const SizedBox(height: 4),
                                             Padding(
@@ -1727,7 +1893,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
                                                   Text(
-                                                    _timeLabel(m.createdAt!),
+                                                    m.isEdited
+                                                        ? '${_timeLabel(m.createdAt!)} · edited'
+                                                        : _timeLabel(m.createdAt!),
                                                     style: TextStyle(
                                                       fontSize: 10,
                                                       color: m.isDeleted ||
@@ -1788,7 +1956,15 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                             ),
                           ),
-                        if (replyingTo != null)
+                        if (editingMessage != null)
+                          _EditingStrip(
+                            message: editingMessage!,
+                            onCancel: () => setState(() {
+                              editingMessage = null;
+                              _controller.clear();
+                            }),
+                          )
+                        else if (replyingTo != null)
                           _ReplyingStrip(
                             message: replyingTo!,
                             onCancel: () => setState(() => replyingTo = null),
@@ -1913,7 +2089,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                         ? 'Chat blocked'
                                         : uploadingMedia
                                             ? 'Sending…'
-                                            : 'Type a message…',
+                                            : editingMessage != null
+                                                ? 'Edit your message…'
+                                                : 'Type a message…',
                                     filled: true,
                                     fillColor: AppColors.background,
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -2129,6 +2307,51 @@ class _ReplyQuote extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _EditingStrip extends StatelessWidget {
+  const _EditingStrip({required this.message, required this.onCancel});
+
+  final ChatMessage message;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFFF7ED),
+        border: Border(bottom: BorderSide(color: Color(0xFFFFE0C2))),
+      ),
+      child: Row(
+        children: [
+          Container(width: 3, height: 40, color: AppColors.accent),
+          const SizedBox(width: 10),
+          const Icon(Icons.edit_outlined, color: AppColors.accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Editing message',
+                  style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w800, fontSize: 13),
+                ),
+                Text(
+                  message.body,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+          IconButton(onPressed: onCancel, icon: const Icon(Icons.close_rounded)),
+        ],
       ),
     );
   }

@@ -1567,6 +1567,33 @@ class ChatReplyTo {
   }
 }
 
+class ChatReaction {
+  const ChatReaction({
+    required this.emoji,
+    required this.count,
+    this.mine = false,
+    this.userIds = const [],
+  });
+
+  final String emoji;
+  final int count;
+  final bool mine;
+  final List<int> userIds;
+
+  bool isMineFor(int? myUserId) =>
+      mine || (myUserId != null && userIds.contains(myUserId));
+
+  factory ChatReaction.fromJson(Map<String, dynamic> json) {
+    final ids = json['user_ids'];
+    return ChatReaction(
+      emoji: json['emoji'] as String? ?? '',
+      count: (json['count'] as num?)?.toInt() ?? 0,
+      mine: json['mine'] == true,
+      userIds: ids is List ? ids.whereType<num>().map((e) => e.toInt()).toList() : const [],
+    );
+  }
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -1598,8 +1625,11 @@ class ChatMessage {
     this.fileMime,
     this.replyTo,
     this.readAt,
+    this.editedAt,
     this.isDeleted = false,
     this.canDelete = false,
+    this.canEdit = false,
+    this.reactions = const [],
   });
 
   final int id;
@@ -1631,8 +1661,13 @@ class ChatMessage {
   final String? fileMime;
   final ChatReplyTo? replyTo;
   final String? readAt;
+  final String? editedAt;
   final bool isDeleted;
   final bool canDelete;
+  final bool canEdit;
+  final List<ChatReaction> reactions;
+
+  bool get isEdited => (editedAt ?? '').isNotEmpty;
 
   /// Call setup rows share the message table but are not part of the chat.
   static const signallingTypes = {'call_offer', 'call_answer', 'call_ice', 'call_end'};
@@ -1779,8 +1814,20 @@ class ChatMessage {
         return ChatReplyTo.fromJson(Map<String, dynamic>.from(raw));
       }(),
       readAt: json['read_at'] as String?,
+      editedAt: json['edited_at'] as String? ??
+          (meta is Map ? meta['edited_at'] as String? : null),
       isDeleted: deleted,
       canDelete: json['can_delete'] == true,
+      canEdit: json['can_edit'] == true,
+      reactions: () {
+        final raw = json['reactions'];
+        if (raw is! List) return const <ChatReaction>[];
+        return raw
+            .whereType<Map>()
+            .map((e) => ChatReaction.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.emoji.isNotEmpty)
+            .toList();
+      }(),
     );
   }
 
@@ -1788,8 +1835,11 @@ class ChatMessage {
     String? body,
     bool? isDeleted,
     bool? canDelete,
+    bool? canEdit,
     String? imageUrl,
     String? readAt,
+    String? editedAt,
+    List<ChatReaction>? reactions,
   }) {
     return ChatMessage(
       id: id,
@@ -1821,8 +1871,11 @@ class ChatMessage {
       fileMime: fileMime,
       replyTo: replyTo,
       readAt: readAt ?? this.readAt,
+      editedAt: editedAt ?? this.editedAt,
       isDeleted: isDeleted ?? this.isDeleted,
       canDelete: canDelete ?? this.canDelete,
+      canEdit: canEdit ?? this.canEdit,
+      reactions: reactions ?? this.reactions,
     );
   }
 }
