@@ -788,6 +788,7 @@ class WithdrawalOverview {
     this.banks = const [],
     this.feeEnabled = true,
     this.feeAmount = 10,
+    this.momoFeeAmount = 0,
     this.feeAppliesTo = 'bank',
     this.feeMode = 'flat',
     this.feePercent = 0,
@@ -804,6 +805,7 @@ class WithdrawalOverview {
   final List<GhanaBank> banks;
   final bool feeEnabled;
   final double feeAmount;
+  final double momoFeeAmount;
   final String feeAppliesTo;
   final String feeMode;
   final double feePercent;
@@ -838,6 +840,17 @@ class WithdrawalOverview {
     BankFeeTier(min: 1000, max: 25000, fee: 20),
   ];
 
+  static double _momoFeeFromPayload(Map<String, dynamic> fee) {
+    if (fee.containsKey('momo_amount') && fee['momo_amount'] != null) {
+      return (fee['momo_amount'] as num?)?.toDouble() ?? 0;
+    }
+    final appliesTo = fee['applies_to'] as String? ?? 'bank';
+    if (appliesTo == 'momo' || appliesTo == 'all') {
+      return (fee['amount'] as num?)?.toDouble() ?? 0;
+    }
+    return 0;
+  }
+
   static List<BankFeeTier> _normalizeBankTiers(List<BankFeeTier> tiers) {
     if (tiers.isEmpty) return defaultBankTiers;
     final onlyDefaultFees = tiers.every((tier) => tier.fee == 10 || tier.fee == 20);
@@ -856,7 +869,10 @@ class WithdrawalOverview {
     }
     if (feeAppliesTo == 'none') return 0;
     final type = payoutType == 'bank' ? 'bank' : 'momo';
-    if (!(feeAppliesTo == 'all' || feeAppliesTo == type)) return 0;
+    if (type == 'momo') {
+      return momoFeeAmount > 0 ? momoFeeAmount : 0;
+    }
+    if (!(feeAppliesTo == 'all' || feeAppliesTo == 'bank')) return 0;
     if (type == 'bank') {
       final tiers = bankTiers.isNotEmpty ? bankTiers : defaultBankTiers;
       return feeFromBankTiers(amount, tiers, feeAmount);
@@ -927,6 +943,7 @@ class WithdrawalOverview {
           : const [],
       feeEnabled: fee['enabled'] != false,
       feeAmount: (fee['amount'] as num?)?.toDouble() ?? 10,
+      momoFeeAmount: _momoFeeFromPayload(fee),
       feeAppliesTo: fee['applies_to'] as String? ?? 'bank',
       feeMode: fee['mode'] as String? ?? 'flat',
       feePercent: (fee['percent'] as num?)?.toDouble() ?? 0,
