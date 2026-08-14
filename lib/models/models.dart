@@ -1691,6 +1691,18 @@ class ChatMessage {
 
   bool get isEdited => (editedAt ?? '').isNotEmpty;
 
+  static const editWindow = Duration(minutes: 2);
+
+  /// Own text can be edited for two minutes after send.
+  bool get stillEditable {
+    if (!mine || type != 'text' || isDeleted) return false;
+    final raw = createdAt;
+    if (raw == null || raw.isEmpty) return canEdit;
+    final created = DateTime.tryParse(raw);
+    if (created == null) return canEdit;
+    return DateTime.now().toUtc().difference(created.toUtc()) < editWindow;
+  }
+
   /// Call setup rows share the message table but are not part of the chat.
   static const signallingTypes = {'call_offer', 'call_answer', 'call_ice', 'call_end'};
 

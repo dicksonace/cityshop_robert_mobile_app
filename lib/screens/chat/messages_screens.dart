@@ -666,6 +666,18 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     try {
       if (editing != null) {
+        if (!editing.stillEditable) {
+          if (mounted) {
+            setState(() {
+              sending = false;
+              editingMessage = null;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('You can only edit a message within 2 minutes of sending.')),
+            );
+          }
+          return;
+        }
         final msg = await context.read<AppStore>().updateMessage(
               widget.conversationId,
               editing.id,
@@ -732,7 +744,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _startEdit(ChatMessage message) {
-    if (!message.mine || message.type != 'text' || message.isDeleted) return;
+    if (!message.stillEditable) return;
     setState(() {
       replyingTo = null;
       editingMessage = message;
@@ -814,8 +826,7 @@ class _ChatScreenState extends State<ChatScreen> {
         !message.isEvent &&
         !message.isSignalling &&
         message.body.trim().isNotEmpty;
-    final canEdit = message.canEdit ||
-        (message.mine && message.type == 'text' && !message.isDeleted);
+    final canEdit = message.stillEditable;
     final canReact = !message.isDeleted &&
         !message.isEvent &&
         !message.isSignalling;
