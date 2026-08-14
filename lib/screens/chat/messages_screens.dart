@@ -23,6 +23,7 @@ import '../../services/money_sound.dart';
 import '../../services/document_picker.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/chat_theme.dart';
 import '../../utils/chat_emojis.dart';
 import '../../utils/chat_text_links.dart';
 import '../../widgets/app_sheet.dart';
@@ -30,6 +31,7 @@ import '../../widgets/chat_call_overlay.dart';
 import '../../widgets/chat_emoji_picker.dart';
 import '../../widgets/chat_link_text.dart';
 import '../../widgets/chat_shared_link_preview.dart';
+import '../../widgets/chat_wallpaper.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 import '../../widgets/tab_refresh.dart';
@@ -381,7 +383,12 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     pendingProduct = widget.attachProduct;
+    _controller.addListener(_onComposerChanged);
     _load();
+  }
+
+  void _onComposerChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -403,6 +410,7 @@ class _ChatScreenState extends State<ChatScreen> {
       } catch (_) {}
     }());
     _recorder.dispose();
+    _controller.removeListener(_onComposerChanged);
     _controller.dispose();
     _scroll.dispose();
     _focus.dispose();
@@ -770,6 +778,21 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _insertComposerEmoji() async {
+    final emoji = await showChatEmojiPicker(context);
+    if (!mounted || emoji == null || emoji.isEmpty) return;
+    final text = _controller.text;
+    final sel = _controller.selection;
+    final start = sel.isValid ? sel.start : text.length;
+    final end = sel.isValid ? sel.end : text.length;
+    final next = text.replaceRange(start, end, emoji);
+    _controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: start + emoji.length),
+    );
+    _focus.requestFocus();
+  }
+
   Widget _messageBody(ChatMessage message, {required bool mine}) {
     if (message.isDeleted) {
       return Text(
@@ -787,7 +810,7 @@ class _ChatScreenState extends State<ChatScreen> {
       text: message.body,
       mine: mine,
       style: TextStyle(
-        color: mine ? Colors.white : AppColors.textPrimary,
+        color: AppColors.textPrimary,
         height: 1.35,
       ),
     );
@@ -1535,14 +1558,17 @@ class _ChatScreenState extends State<ChatScreen> {
     final thread = this.thread;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6),
+      backgroundColor: ChatColors.wallpaper,
       appBar: AppBar(
         toolbarHeight: 64,
         titleSpacing: 0,
         automaticallyImplyLeading: false,
+        backgroundColor: ChatColors.header,
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
         leading: IconButton(
           tooltip: 'Back',
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
           onPressed: () {
             if (context.canPop()) {
               context.pop();
@@ -1575,7 +1601,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                        color: Colors.white,
+                      ),
                     ),
                     if (conversation != null)
                       Text(
@@ -1588,8 +1618,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           color: (conversation!.isGroup
                                   ? conversation!.onlineCount > 0
                                   : conversation!.online)
-                              ? const Color(0xFF16A34A)
-                              : AppColors.textMuted,
+                              ? const Color(0xFFB9F6CA)
+                              : const Color(0xFFD1E8E2),
                         ),
                       ),
                   ],
@@ -1603,22 +1633,23 @@ class _ChatScreenState extends State<ChatScreen> {
             IconButton(
               tooltip: 'Store',
               onPressed: () => context.push('/stores/${conversation!.storeSlug!.trim()}'),
-              icon: const Icon(Icons.storefront_outlined, color: AppColors.accent),
+              icon: const Icon(Icons.storefront_outlined, color: Colors.white),
             ),
           if (conversation?.isGroup != true) ...[
             IconButton(
               tooltip: 'Audio call',
               onPressed: () => unawaited(_startInAppCall(ChatCallKind.voice)),
-              icon: const Icon(Icons.call_rounded, color: AppColors.accent),
+              icon: const Icon(Icons.call_rounded, color: Colors.white),
             ),
             IconButton(
               tooltip: 'Video call',
               onPressed: () => unawaited(_startInAppCall(ChatCallKind.video)),
-              icon: const Icon(Icons.videocam_rounded, color: Color(0xFF0284C7)),
+              icon: const Icon(Icons.videocam_rounded, color: Colors.white),
             ),
           ],
           if (conversation?.otherId != null)
             PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
               onSelected: (value) {
                 if (value == 'block') {
                   _toggleBlock();
@@ -1660,7 +1691,7 @@ class _ChatScreenState extends State<ChatScreen> {
             IconButton(
               tooltip: 'Chat settings',
               onPressed: _openChatSettings,
-              icon: const Icon(Icons.more_horiz_rounded),
+              icon: const Icon(Icons.more_horiz_rounded, color: Colors.white),
             ),
         ],
       ),
@@ -1673,7 +1704,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (conversation?.productName != null)
                   _ProductContextCard(conversation: conversation!),
                 Expanded(
-                  child: thread.isEmpty
+                  child: Stack(
+                    children: [
+                      const Positioned.fill(child: ChatWallpaper()),
+                      thread.isEmpty
                       ? Center(
                           child: Padding(
                             padding: const EdgeInsets.all(24),
@@ -1719,6 +1753,11 @@ class _ChatScreenState extends State<ChatScreen> {
                             final m = thread[logicalIndex];
                             final showDay = logicalIndex == 0 ||
                                 _dayKey(thread[logicalIndex - 1].createdAt) != _dayKey(m.createdAt);
+                            final bubbleColor = m.isDeleted
+                                ? const Color(0xFFECECEC)
+                                : m.isProduct || m.isTransfer || m.isFile
+                                    ? Colors.white
+                                    : (m.mine ? ChatColors.outgoing : ChatColors.incoming);
                             return Column(
                               children: [
                                 if (showDay && m.createdAt != null)
@@ -1727,12 +1766,22 @@ class _ChatScreenState extends State<ChatScreen> {
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: Colors.black12,
-                                        borderRadius: BorderRadius.circular(999),
+                                        color: Colors.white.withValues(alpha: 0.92),
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.08),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
                                       ),
                                       child: Text(
                                         _dayLabel(m.createdAt!),
-                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF54656F),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1747,19 +1796,23 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ),
                                     child: GestureDetector(
                                       onLongPress: m.isDeleted ? null : () => _openMessageActions(m),
-                                      child: Container(
-                                      margin: const EdgeInsets.only(bottom: 8),
+                                      child: Padding(
+                                      padding: const EdgeInsets.only(bottom: 6),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          if (!m.mine)
+                                            ChatBubbleTail(mine: false, color: bubbleColor),
+                                          Flexible(
+                                            child: Container(
                                       padding: m.isProduct || m.isTransfer || m.isFile
                                           ? EdgeInsets.zero
                                           : m.isMedia
                                               ? const EdgeInsets.all(4)
-                                              : const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                                              : const EdgeInsets.fromLTRB(10, 6, 10, 5),
                                       decoration: BoxDecoration(
-                                        color: m.isDeleted
-                                            ? Colors.grey.shade200
-                                            : m.isProduct || m.isTransfer || m.isFile
-                                                ? Colors.white
-                                                : (m.mine ? AppColors.accent : Colors.white),
+                                        color: bubbleColor,
                                         border: m.isProduct || m.isTransfer || m.isFile
                                             ? Border.all(
                                                 color: m.isTransfer
@@ -1770,10 +1823,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                               )
                                             : null,
                                         borderRadius: BorderRadius.only(
-                                          topLeft: const Radius.circular(16),
-                                          topRight: const Radius.circular(16),
-                                          bottomLeft: Radius.circular(m.mine ? 16 : 4),
-                                          bottomRight: Radius.circular(m.mine ? 4 : 16),
+                                          topLeft: Radius.circular(m.mine ? 16 : 4),
+                                          topRight: Radius.circular(m.mine ? 4 : 16),
+                                          bottomLeft: const Radius.circular(16),
+                                          bottomRight: const Radius.circular(16),
                                         ),
                                         boxShadow: [
                                           BoxShadow(
@@ -1815,7 +1868,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                                     text: m.body.trim(),
                                                     mine: m.mine,
                                                     style: TextStyle(
-                                                      color: m.mine ? Colors.white : AppColors.textPrimary,
+                                                      color: ChatColors.bubbleText,
                                                       height: 1.35,
                                                     ),
                                                   ),
@@ -1832,7 +1885,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                                     text: m.body.trim(),
                                                     mine: m.mine,
                                                     style: TextStyle(
-                                                      color: m.mine ? Colors.white : AppColors.textPrimary,
+                                                      color: ChatColors.bubbleText,
                                                       height: 1.35,
                                                     ),
                                                   ),
@@ -1909,20 +1962,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                                         : _timeLabel(m.createdAt!),
                                                     style: TextStyle(
                                                       fontSize: 10,
-                                                      color: m.isDeleted ||
-                                                              m.isProduct ||
-                                                              m.isTransfer ||
-                                                              m.isFile
-                                                          ? AppColors.textMuted
-                                                          : (m.mine ? Colors.white70 : AppColors.textMuted),
+                                                      color: ChatColors.time,
                                                     ),
                                                   ),
                                                   if (m.mine && !m.isDeleted) ...[
                                                     const SizedBox(width: 4),
-                                                    _MessageTick(
-                                                      read: m.isRead,
-                                                      onWhiteBubble: m.isProduct || m.isTransfer || m.isFile,
-                                                    ),
+                                                    _MessageTick(read: m.isRead),
                                                   ],
                                                 ],
                                               ),
@@ -1932,20 +1977,27 @@ class _ChatScreenState extends State<ChatScreen> {
                                         ],
                                       ),
                                     ),
+                                          ),
+                                          if (m.mine)
+                                            ChatBubbleTail(mine: true, color: bubbleColor),
+                                        ],
+                                      ),
                                     ),
                                   ),
+                                ),
                                 ),
                               ],
                             );
                           },
                         ),
+                    ],
+                  ),
                 ),
                 SafeArea(
                   top: false,
                   child: Container(
                     decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(top: BorderSide(color: AppColors.border)),
+                      color: ChatColors.composerBar,
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -2061,77 +2113,100 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         if (!recordingVoice)
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
+                          padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
                           child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              IconButton(
-                                tooltip: showAttachPanel ? 'Close' : 'Attach',
-                                onPressed: (sending ||
-                                        uploadingMedia ||
-                                        sendingProduct ||
-                                        conversation?.blocked == true)
-                                    ? null
-                                    : _toggleAttachPanel,
-                                style: IconButton.styleFrom(
-                                  foregroundColor: AppColors.accent,
-                                  disabledForegroundColor: AppColors.textMuted,
-                                ),
-                                icon: uploadingMedia
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
-                                      )
-                                    : Icon(showAttachPanel ? Icons.close_rounded : Icons.add_circle_outline_rounded),
-                              ),
                               Expanded(
-                                child: TextField(
-                                  controller: _controller,
-                                  focusNode: _focus,
-                                  minLines: 1,
-                                  maxLines: 4,
-                                  enabled: !uploadingMedia && conversation?.blocked != true,
-                                  textInputAction: TextInputAction.send,
-                                  onTap: () {
-                                    if (showAttachPanel) setState(() => showAttachPanel = false);
-                                  },
-                                  decoration: InputDecoration(
-                                    hintText: conversation?.blocked == true
-                                        ? 'Chat blocked'
-                                        : uploadingMedia
-                                            ? 'Sending…'
-                                            : editingMessage != null
-                                                ? 'Edit your message…'
-                                                : 'Type a message…',
-                                    filled: true,
-                                    fillColor: AppColors.background,
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(24),
-                                      borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
-                                    ),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(24),
                                   ),
-                                  onSubmitted: (_) => _send(),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Emoji',
+                                        onPressed: conversation?.blocked == true ? null : _insertComposerEmoji,
+                                        style: IconButton.styleFrom(
+                                          foregroundColor: const Color(0xFF54656F),
+                                        ),
+                                        icon: const Icon(Icons.emoji_emotions_outlined),
+                                      ),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _controller,
+                                          focusNode: _focus,
+                                          minLines: 1,
+                                          maxLines: 4,
+                                          enabled: !uploadingMedia && conversation?.blocked != true,
+                                          textInputAction: TextInputAction.send,
+                                          onTap: () {
+                                            if (showAttachPanel) setState(() => showAttachPanel = false);
+                                          },
+                                          decoration: InputDecoration(
+                                            hintText: conversation?.blocked == true
+                                                ? 'Chat blocked'
+                                                : uploadingMedia
+                                                    ? 'Sending…'
+                                                    : editingMessage != null
+                                                        ? 'Edit your message…'
+                                                        : 'Message',
+                                            hintStyle: const TextStyle(color: Color(0xFF667781)),
+                                            filled: true,
+                                            fillColor: Colors.transparent,
+                                            contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 12),
+                                            border: InputBorder.none,
+                                            enabledBorder: InputBorder.none,
+                                            focusedBorder: InputBorder.none,
+                                          ),
+                                          onSubmitted: (_) => _send(),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: showAttachPanel ? 'Close' : 'Attach',
+                                        onPressed: (sending ||
+                                                uploadingMedia ||
+                                                sendingProduct ||
+                                                conversation?.blocked == true)
+                                            ? null
+                                            : _toggleAttachPanel,
+                                        style: IconButton.styleFrom(
+                                          foregroundColor: const Color(0xFF54656F),
+                                          disabledForegroundColor: AppColors.textMuted,
+                                        ),
+                                        icon: uploadingMedia
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: ChatColors.send,
+                                                ),
+                                              )
+                                            : Icon(
+                                                showAttachPanel
+                                                    ? Icons.close_rounded
+                                                    : Icons.attach_file_rounded,
+                                              ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 6),
                               IconButton.filled(
                                 onPressed: (sending ||
                                         uploadingMedia ||
                                         conversation?.blocked == true)
                                     ? null
-                                    : _send,
+                                    : (_controller.text.trim().isNotEmpty || editingMessage != null)
+                                        ? _send
+                                        : _startVoice,
                                 style: IconButton.styleFrom(
-                                  backgroundColor: AppColors.accent,
-                                  disabledBackgroundColor: AppColors.ringOrange,
+                                  backgroundColor: ChatColors.send,
+                                  disabledBackgroundColor: const Color(0xFF8EE2B0),
                                   padding: const EdgeInsets.all(12),
                                 ),
                                 icon: sending
@@ -2140,7 +2215,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                         height: 18,
                                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                       )
-                                    : const Icon(Icons.send_rounded, color: Colors.white),
+                                    : Icon(
+                                        (_controller.text.trim().isNotEmpty || editingMessage != null)
+                                            ? Icons.send_rounded
+                                            : Icons.mic_rounded,
+                                        color: Colors.white,
+                                      ),
                               ),
                             ],
                           ),
@@ -2243,10 +2323,10 @@ class _ReplyQuote extends StatelessWidget {
         margin: EdgeInsets.fromLTRB(product ? 8 : 0, product ? 8 : 0, product ? 8 : 0, 6),
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
         decoration: BoxDecoration(
-          color: mine ? Colors.white.withValues(alpha: 0.18) : const Color(0xFFFFF7ED),
-          borderRadius: BorderRadius.circular(10),
+          color: mine ? const Color(0xFFC9E9B6) : const Color(0xFFF5F6F6),
+          borderRadius: BorderRadius.circular(8),
           border: Border(
-            left: BorderSide(color: mine ? Colors.white70 : AppColors.accent, width: 3),
+            left: BorderSide(color: mine ? ChatColors.replyBar : const Color(0xFF53BDEB), width: 3),
           ),
         ),
         child: Column(
@@ -2257,7 +2337,7 @@ class _ReplyQuote extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
-                color: mine ? Colors.white : AppColors.accent,
+                color: mine ? const Color(0xFF1FA855) : const Color(0xFF53BDEB),
               ),
             ),
             const SizedBox(height: 4),
@@ -2289,7 +2369,7 @@ class _ReplyQuote extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
-                            color: mine ? Colors.white : AppColors.textPrimary,
+                            color: ChatColors.bubbleText,
                           ),
                         ),
                         if (reply.productPrice != null)
@@ -2298,7 +2378,7 @@ class _ReplyQuote extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: mine ? Colors.white70 : AppColors.accent,
+                              color: ChatColors.header,
                             ),
                           ),
                       ],
@@ -2313,7 +2393,7 @@ class _ReplyQuote extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
-                  color: mine ? Colors.white70 : AppColors.textSecondary,
+                  color: ChatColors.time,
                 ),
               ),
           ],
@@ -3245,23 +3325,18 @@ class _AttachTileData {
   final VoidCallback onTap;
 }
 
-/// Delivery ticks for messages you sent, including voice notes. Green in both
-/// states so they stay legible against the orange bubble; the darker shade and
-/// the second tick mean the other side has read it.
+/// Delivery ticks for messages you sent. Grey when sent, blue when read.
 class _MessageTick extends StatelessWidget {
-  const _MessageTick({required this.read, required this.onWhiteBubble});
+  const _MessageTick({required this.read});
 
   final bool read;
-  final bool onWhiteBubble;
 
   @override
   Widget build(BuildContext context) {
     return Icon(
-      read ? Icons.done_all_rounded : Icons.done_rounded,
-      size: 14,
-      color: onWhiteBubble
-          ? (read ? AppColors.emerald : const Color(0xFF6EE7B7))
-          : (read ? const Color(0xFF4ADE80) : const Color(0xFFBBF7D0)),
+      read ? Icons.done_all_rounded : Icons.done_all_rounded,
+      size: 16,
+      color: read ? ChatColors.tickRead : ChatColors.tick,
     );
   }
 }
@@ -3528,10 +3603,9 @@ class _ChatVoiceState extends State<_ChatVoice> {
 
   @override
   Widget build(BuildContext context) {
-    final fg = widget.mine ? Colors.white : AppColors.textPrimary;
-    final muted = widget.mine ? Colors.white70 : AppColors.textMuted;
-    final bar = widget.mine ? Colors.white : AppColors.accent;
-    final track = widget.mine ? Colors.white24 : const Color(0xFFE5E7EB);
+    final muted = ChatColors.time;
+    final bar = ChatColors.header;
+    final track = const Color(0xFFC5C9C6);
     final total = _duration.inMilliseconds > 0
         ? _duration
         : Duration(seconds: widget.durationSeconds ?? 0);
@@ -3545,7 +3619,7 @@ class _ChatVoiceState extends State<_ChatVoice> {
       child: Row(
         children: [
           Material(
-            color: widget.mine ? Colors.white : AppColors.accent,
+            color: ChatColors.send,
             shape: const CircleBorder(),
             child: InkWell(
               customBorder: const CircleBorder(),
@@ -3554,16 +3628,16 @@ class _ChatVoiceState extends State<_ChatVoice> {
                 width: 40,
                 height: 40,
                 child: _loading
-                    ? Padding(
-                        padding: const EdgeInsets.all(10),
+                    ? const Padding(
+                        padding: EdgeInsets.all(10),
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: widget.mine ? AppColors.accent : Colors.white,
+                          color: Colors.white,
                         ),
                       )
                     : Icon(
                         _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                        color: widget.mine ? AppColors.accent : Colors.white,
+                        color: Colors.white,
                         size: 26,
                       ),
               ),
@@ -3601,7 +3675,7 @@ class _ChatVoiceState extends State<_ChatVoice> {
                       onTap: missing ? null : _cycleSpeed,
                       child: Text(
                         '${_speed == 1 ? '1' : _speed == 1.5 ? '1.5' : '2'}x',
-                        style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w800),
+                        style: TextStyle(color: ChatColors.bubbleText, fontSize: 11, fontWeight: FontWeight.w800),
                       ),
                     ),
                   ],

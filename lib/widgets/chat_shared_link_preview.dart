@@ -9,6 +9,7 @@ import '../api/api_config.dart';
 import '../models/models.dart';
 import '../store/app_store.dart';
 import '../theme/app_theme.dart';
+import '../theme/chat_theme.dart';
 import '../utils/chat_text_links.dart';
 
 final _money = NumberFormat.currency(locale: 'en_GH', symbol: 'GH₵', decimalDigits: 2);
@@ -108,7 +109,7 @@ class _ChatSharedLinkPreviewState extends State<ChatSharedLinkPreview> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: widget.mine ? Colors.white.withValues(alpha: 0.16) : AppColors.background,
+        color: widget.mine ? const Color(0xFFC9E9B6) : AppColors.background,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -136,7 +137,7 @@ class _ChatSharedLinkPreviewState extends State<ChatSharedLinkPreview> {
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 13,
-                        color: widget.mine ? Colors.white : AppColors.textPrimary,
+                        color: ChatColors.bubbleText,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -145,7 +146,7 @@ class _ChatSharedLinkPreviewState extends State<ChatSharedLinkPreview> {
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 12,
-                        color: widget.mine ? Colors.white : AppColors.accent,
+                        color: ChatColors.header,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -153,7 +154,7 @@ class _ChatSharedLinkPreviewState extends State<ChatSharedLinkPreview> {
                       'cityunlock.net',
                       style: TextStyle(
                         fontSize: 11,
-                        color: widget.mine ? Colors.white70 : AppColors.textMuted,
+                        color: ChatColors.time,
                       ),
                     ),
                   ],
@@ -185,7 +186,7 @@ class _SimpleLinkCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: mine ? Colors.white.withValues(alpha: 0.16) : AppColors.background,
+        color: mine ? const Color(0xFFC9E9B6) : AppColors.background,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -194,7 +195,7 @@ class _SimpleLinkCard extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             child: Row(
               children: [
-                Icon(Icons.link, color: mine ? Colors.white : AppColors.accent),
+                Icon(Icons.link, color: ChatColors.header),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -204,20 +205,20 @@ class _SimpleLinkCard extends StatelessWidget {
                         title,
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
-                          color: mine ? Colors.white : AppColors.textPrimary,
+                          color: ChatColors.bubbleText,
                         ),
                       ),
                       Text(
                         subtitle,
                         style: TextStyle(
                           fontSize: 11,
-                          color: mine ? Colors.white70 : AppColors.textMuted,
+                          color: ChatColors.time,
                         ),
                       ),
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right, color: mine ? Colors.white70 : AppColors.textMuted),
+                Icon(Icons.chevron_right, color: ChatColors.time),
               ],
             ),
           ),

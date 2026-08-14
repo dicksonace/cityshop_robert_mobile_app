@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../theme/app_theme.dart';
+import '../theme/chat_theme.dart';
 import '../utils/chat_text_links.dart';
 
 class ChatLinkText extends StatefulWidget {
@@ -75,10 +75,10 @@ class _ChatLinkTextState extends State<ChatLinkText> {
     _disposeRecognizers();
     final base = widget.style ??
         TextStyle(
-          color: widget.mine ? Colors.white : AppColors.textPrimary,
+          color: ChatColors.bubbleText,
           height: 1.35,
         );
-    final linkColor = widget.mine ? Colors.white : AppColors.accent;
+    final linkColor = ChatColors.link;
     final segments = parseChatText(widget.text);
     if (segments.isEmpty) {
       return Text(widget.text, style: base);
