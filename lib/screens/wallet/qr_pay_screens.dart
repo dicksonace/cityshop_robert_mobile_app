@@ -19,7 +19,6 @@ import '../../api/api_client.dart';
 import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/payment_pin_sheet.dart';
 import '../../widgets/payment_success_screen.dart';
@@ -27,43 +26,7 @@ import '../../widgets/wallet_transfer_pad.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
-/// Paste / type a shared CityShop QR payload, then open the contact screen.
-Future<void> resolveEnteredCityShopCode(BuildContext context, String raw) async {
-  final payload = raw.trim();
-  if (payload.isEmpty) return;
-  final store = context.read<AppStore>();
-  final resolved = await store.resolveQrPayment(payload);
-  if (!context.mounted) return;
-  await context.push('/qr/contact', extra: {
-    'payload': payload,
-    'resolved': resolved,
-  });
-}
-
-Future<void> showEnterCityShopCodeSheet(BuildContext context) async {
-  final entered = await showAppSheet<String>(
-    context: context,
-    builder: (ctx) => const _EnterCodeSheet(),
-  );
-  if (entered == null || !context.mounted) return;
-  try {
-    await resolveEnteredCityShopCode(context, entered);
-  } on ApiException catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: AppColors.danger),
-      );
-    }
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: AppColors.danger),
-      );
-    }
-  }
-}
-
-/// Hub: Scan someone else's code, enter a pasted code, or show My QR.
+/// Hub: Scan someone else's QR, or show My QR.
 class QrPayHubScreen extends StatelessWidget {
   const QrPayHubScreen({super.key});
 
@@ -77,7 +40,7 @@ class QrPayHubScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
           const Text(
-            'Scan their CityShop QR, enter their code or mobile, or show My QR so they can add you.',
+            'Scan their CityShop QR, or show My QR so they can add you.',
             style: TextStyle(color: AppColors.textSecondary, height: 1.4),
           ),
           const SizedBox(height: 16),
@@ -95,22 +58,9 @@ class QrPayHubScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _HubTile(
-            icon: Icons.keyboard_alt_outlined,
-            title: 'Enter code',
-            subtitle: 'Type their CityShop code, mobile, or paste a QR link',
-            onTap: () {
-              if (user == null) {
-                context.push('/login');
-                return;
-              }
-              showEnterCityShopCodeSheet(context);
-            },
-          ),
-          const SizedBox(height: 10),
-          _HubTile(
             icon: Icons.qr_code_2_rounded,
             title: 'My QR',
-            subtitle: 'Show your QR and CityShop code so others can add you',
+            subtitle: 'Show your QR so others can add you',
             onTap: () {
               if (user == null) {
                 context.push('/login');
@@ -121,92 +71,6 @@ class QrPayHubScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _EnterCodeSheet extends StatefulWidget {
-  const _EnterCodeSheet();
-
-  @override
-  State<_EnterCodeSheet> createState() => _EnterCodeSheetState();
-}
-
-class _EnterCodeSheetState extends State<_EnterCodeSheet> {
-  final _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text?.trim() ?? '';
-    if (text.isEmpty) return;
-    _controller
-      ..text = text
-      ..selection = TextSelection.collapsed(offset: text.length);
-    setState(() {});
-  }
-
-  void _submit() {
-    final value = _controller.text.trim();
-    if (value.isEmpty) return;
-    Navigator.of(context).pop(value);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SheetShell(
-      action: SizedBox(
-        height: 50,
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: _controller.text.trim().isEmpty ? null : _submit,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.accent,
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('Continue'),
-        ),
-      ),
-      children: [
-        const Text(
-          'Enter code',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'Enter their CityShop code (CS-2083), mobile number, or paste a shared QR link to add them, pay, or chat.',
-          style: TextStyle(color: AppColors.textSecondary, height: 1.35),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _controller,
-          autofocus: true,
-          minLines: 1,
-          maxLines: 4,
-          textInputAction: TextInputAction.done,
-          onChanged: (_) => setState(() {}),
-          onSubmitted: (_) => _submit(),
-          decoration: InputDecoration(
-            hintText: 'CS-2083 or 0532700209',
-            filled: true,
-            fillColor: AppColors.background,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide.none,
-            ),
-            suffixIcon: IconButton(
-              tooltip: 'Paste',
-              onPressed: _paste,
-              icon: const Icon(Icons.content_paste_rounded),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -560,21 +424,6 @@ class _QrScanScreenState extends State<QrScanScreen> {
                     onTap: _handling ? null : () => context.push('/qr/receive'),
                   ),
                   _bottomAction(
-                    icon: Icons.keyboard_alt_outlined,
-                    label: 'Enter code',
-                    onTap: _handling
-                        ? null
-                        : () async {
-                            _pausedAfterError = false;
-                            _lastFailedPayload = null;
-                            await _controller.stop();
-                            if (!context.mounted) return;
-                            await showEnterCityShopCodeSheet(context);
-                            if (!mounted) return;
-                            await _resumeScan();
-                          },
-                  ),
-                  _bottomAction(
                     icon: Icons.photo_library_outlined,
                     label: 'Album',
                     onTap: _handling ? null : _pickFromAlbum,
@@ -673,7 +522,6 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
   bool _saving = false;
   String? _error;
   String? _payload;
-  String? _code;
   String? _name;
   String? _avatar;
   String? _role;
@@ -720,10 +568,6 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
       if (!mounted) return;
       setState(() {
         _payload = data['payload'] as String?;
-        final apiCode = data['code']?.toString().trim();
-        _code = (apiCode != null && apiCode.isNotEmpty)
-            ? apiCode
-            : (store.user != null ? 'CS-${store.user!.id}' : null);
         final user = data['user'];
         if (user is Map) {
           _name = user['name'] as String? ?? store.user?.name;
@@ -828,26 +672,10 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
   String get _safeName => (_name ?? 'cityshop').replaceAll(RegExp(r'[^\w\-]+'), '_');
 
   String get _shareInviteText {
-    final code = _code?.trim();
-    final hasCode = code != null && code.isNotEmpty;
     if (_amount != null) {
-      final payLine = 'Scan my QR to send me ${_money.format(_amount)}.';
-      return hasCode ? 'Add me on CityShop. Code: $code\n$payLine' : payLine;
-    }
-    if (hasCode) {
-      return 'Add me on CityShop. Code: $code\nScan this QR or enter the code under Pay / Receive → Enter code.';
+      return 'Scan my QR to send me ${_money.format(_amount)}.';
     }
     return 'Scan my CityShop QR to add me, pay, or chat.';
-  }
-
-  Future<void> _copyCode() async {
-    final code = _code?.trim();
-    if (code == null || code.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: code));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Copied $code')),
-    );
   }
 
   /// Paints the namecard to a PNG. The frame has to settle first or the
@@ -923,9 +751,7 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
       await SharePlus.instance.share(
         ShareParams(
           files: [XFile(file.path, mimeType: 'image/png', name: 'cityshop_namecard.png')],
-          subject: _code != null && _code!.isNotEmpty
-              ? 'Add me on CityShop. Code: $_code'
-              : 'Add me on CityShop',
+          subject: 'Add me on CityShop',
           text: _shareInviteText,
           sharePositionOrigin: origin,
         ),
@@ -1148,40 +974,6 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                                         ),
                                         const SizedBox(height: 8),
                                         _roleBadge(),
-                                        if (_code != null && _code!.isNotEmpty) ...[
-                                          const SizedBox(height: 12),
-                                          GestureDetector(
-                                            onTap: _copyCode,
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFFFF7ED),
-                                                borderRadius: BorderRadius.circular(999),
-                                                border: Border.all(color: const Color(0xFFFDBA74)),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    'Code  $_code',
-                                                    style: const TextStyle(
-                                                      fontWeight: FontWeight.w800,
-                                                      fontSize: 14,
-                                                      color: Color(0xFF9A3412),
-                                                      letterSpacing: 0.3,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  const Icon(
-                                                    Icons.copy_rounded,
-                                                    size: 16,
-                                                    color: Color(0xFFC2410C),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ],
                                         if (_amount != null) ...[
                                           const SizedBox(height: 10),
                                           Text(
@@ -1287,18 +1079,16 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                         ),
                       ],
                     ),
-                    if (_code != null && _code!.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'They can add you with $_code under Enter code, or by scanning this QR.',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                          height: 1.35,
-                        ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'They can add you by scanning this QR.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.35,
                       ),
-                    ],
+                    ),
                     if (_editingAmount) ...[
                     const SizedBox(height: 14),
                     // Solid amount block — no floating dialog over the QR.
