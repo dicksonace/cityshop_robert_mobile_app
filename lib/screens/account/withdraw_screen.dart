@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -184,8 +185,11 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       );
       if (!mounted) return;
       amountCtrl.clear();
-      _toast('Withdrawal requested. Usually processed within 15 minutes and sometimes instant.');
-      await _load();
+      if (context.canPop()) {
+        context.pop(true);
+      } else {
+        context.go('/shop?tab=wallet');
+      }
     } on ApiException catch (e) {
       if (mounted) _toast(e.message);
     } catch (e) {

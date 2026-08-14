@@ -546,8 +546,15 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
   }
 
   Future<void> _openWithdraw() async {
-    await context.push('/wallet/withdraw');
+    final done = await context.push<bool>('/wallet/withdraw');
     if (!mounted) return;
+    if (done == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Withdrawal requested. Usually processed within 15 minutes and sometimes instant.'),
+        ),
+      );
+    }
     await _load();
     _loadTransactions(reset: true);
   }
