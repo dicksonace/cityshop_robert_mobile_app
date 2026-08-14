@@ -9,6 +9,7 @@ import '../screens/account/notifications_screen.dart';
 import '../screens/account/payment_pin_screen.dart';
 import '../screens/account/wallet_orders_screens.dart';
 import '../screens/account/withdraw_screen.dart';
+import '../screens/wallet/china_transfer_screens.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
@@ -139,6 +140,19 @@ GoRouter createRouter(AppStore store) {
         ),
       ),
       GoRoute(path: '/wallet/withdraw', builder: (_, __) => const WithdrawScreen()),
+      GoRoute(path: '/wallet/china-transfer', builder: (_, __) => const ChinaTransferHubScreen()),
+      GoRoute(
+        path: '/wallet/china-transfer/create',
+        builder: (_, state) => ChinaTransferCreateScreen(
+          initialGhs: state.extra is String ? state.extra as String : null,
+        ),
+      ),
+      GoRoute(
+        path: '/wallet/china-transfer/:id',
+        builder: (_, state) => ChinaTransferShowScreen(
+          id: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
+        ),
+      ),
       GoRoute(path: '/qr', builder: (_, __) => const QrPayHubScreen()),
       GoRoute(path: '/qr/scan', builder: (_, __) => const QrScanScreen()),
       GoRoute(path: '/qr/receive', builder: (_, __) => const QrReceiveScreen()),

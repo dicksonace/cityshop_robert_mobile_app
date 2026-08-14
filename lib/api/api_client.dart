@@ -214,19 +214,53 @@ class ApiClient {
     String filename = 'upload.jpg',
     String? contentType,
   }) {
+    return postForm(
+      path,
+      {
+        ...fields,
+        fileField: filePath,
+      },
+      fileFields: [fileField],
+      filenames: {fileField: filename},
+      contentTypes: {
+        if (contentType != null) fileField: contentType,
+      },
+    );
+  }
+
+  /// Multipart POST. Values that are file paths (and listed in [fileFields])
+  /// or [MultipartFile]s are uploaded; everything else is a form field.
+  Future<Response<dynamic>> postForm(
+    String path,
+    Map<String, dynamic> data, {
+    List<String>? fileFields,
+    Map<String, String>? filenames,
+    Map<String, String>? contentTypes,
+  }) {
     return _withRetry(
       () async {
-        final form = FormData.fromMap({
-          ...fields,
-          fileField: await MultipartFile.fromFile(
-            filePath,
-            filename: filename,
-            contentType: contentType == null ? null : _parseMediaType(contentType),
-          ),
-        });
+        final map = <String, dynamic>{};
+        for (final entry in data.entries) {
+          final value = entry.value;
+          if (value == null) continue;
+          final isFile = value is MultipartFile ||
+              (value is String &&
+                  (fileFields?.contains(entry.key) == true || entry.key.startsWith('files[')));
+          if (isFile && value is String) {
+            map[entry.key] = await MultipartFile.fromFile(
+              value,
+              filename: filenames?[entry.key] ?? value.split('/').last,
+              contentType: contentTypes?[entry.key] == null
+                  ? null
+                  : _parseMediaType(contentTypes![entry.key]!),
+            );
+          } else {
+            map[entry.key] = value;
+          }
+        }
         return _dio.post(
           path,
-          data: form,
+          data: FormData.fromMap(map),
           options: Options(
             sendTimeout: const Duration(seconds: 120),
             receiveTimeout: const Duration(seconds: 120),

@@ -1020,6 +1020,47 @@ class AppStore extends ChangeNotifier {
     return data is Map ? Map<String, dynamic>.from(data) : body;
   }
 
+  Future<Map<String, dynamic>> loadChinaTransfers() async {
+    final res = await _api.get('/wallet/china-transfer');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> fetchChinaTransfer(int id) async {
+    final res = await _api.get('/wallet/china-transfer/$id');
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
+  Future<Map<String, dynamic>> submitChinaTransfer({
+    required String ghsAmount,
+    required int paymentMethodId,
+    required Map<int, String> fields,
+    required Map<int, dynamic> files,
+  }) async {
+    final payload = <String, dynamic>{
+      'ghs_amount': ghsAmount,
+      'payment_method_id': paymentMethodId,
+    };
+    fields.forEach((id, value) {
+      payload['fields[$id]'] = value;
+    });
+    files.forEach((id, file) {
+      payload['files[$id]'] = '${file.path}';
+    });
+    final res = await _api.postForm('/wallet/china-transfer', payload);
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
+  Future<Map<String, dynamic>> cancelChinaTransfer(int id) async {
+    final res = await _api.post('/wallet/china-transfer/$id/cancel');
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
   Future<void> loadConversations() async {
     final res = await _api.get('/messages');
     final data = res.data is Map ? (res.data['data'] ?? res.data['conversations']) : null;

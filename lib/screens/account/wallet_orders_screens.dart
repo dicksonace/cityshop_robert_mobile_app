@@ -601,7 +601,9 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 ),
               ],
             ),
-            child: Column(
+                            child: Stack(
+              children: [
+                Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Available balance', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
@@ -633,6 +635,30 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                             manualEnabled: enabled,
                           )
                       : null,
+                ),
+              ],
+            ),
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: () => context.push('/wallet/china-transfer'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Text(
+                        'Transfer to China',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
