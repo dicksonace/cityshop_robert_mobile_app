@@ -1207,6 +1207,20 @@ class AppStore extends ChangeNotifier {
     return conversations.firstWhere((c) => c.id == conversationId);
   }
 
+  Future<ConversationModel> blockGroupMember(int conversationId, int userId) async {
+    final res = await _api.post('/messages/$conversationId/members/$userId/block');
+    if (res.data is Map && res.data['conversation'] is Map) {
+      final conversation = ConversationModel.fromJson(
+        Map<String, dynamic>.from(res.data['conversation'] as Map),
+      );
+      _upsertConversation(conversation);
+      notifyListeners();
+      return conversation;
+    }
+    await loadConversations();
+    return conversations.firstWhere((c) => c.id == conversationId);
+  }
+
   Future<ConversationModel> uploadGroupAvatar(
     int conversationId,
     String filePath, {

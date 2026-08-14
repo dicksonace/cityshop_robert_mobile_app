@@ -161,6 +161,46 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     }
   }
 
+  Future<void> _blockBuyer(ChatParticipant member) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Block buyer?'),
+        content: Text(
+          'Block ${member.name} from messaging you and remove them from this group?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final updated = await context.read<AppStore>().blockGroupMember(
+            widget.conversationId,
+            member.id,
+          );
+      if (!mounted) return;
+      setState(() {
+        _members = updated.participants;
+        _name = updated.otherName;
+        _avatar = updated.otherAvatar;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${member.name} blocked and removed')),
+      );
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
   Future<void> _removeMember(ChatParticipant member) async {
     final me = context.read<AppStore>().user?.id;
     if (member.id == me) {
@@ -207,6 +247,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     final avatarUrl = ApiConfig.resolveMediaUrl(_avatar);
     final letter = _name.trim().isNotEmpty ? _name.trim()[0].toUpperCase() : 'G';
     final me = context.watch<AppStore>().user?.id;
+    final amAdmin = _members.any((m) => m.id == me && m.isCreator);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F6),
@@ -334,6 +375,9 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                     ..._members.map((m) {
                       final photo = ApiConfig.resolveMediaUrl(m.avatar);
                       final isMe = m.id == me;
+                      final canRemove = amAdmin && !isMe && !m.isCreator;
+                      final canBlock = canRemove && m.isBuyer;
+                      final showMenu = isMe || canRemove;
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: AppColors.ringOrange,
@@ -359,17 +403,32 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                           ].where((e) => e.isNotEmpty).join(' · '),
                           style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                         ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (value) {
-                            if (value == 'remove') _removeMember(m);
-                          },
-                          itemBuilder: (_) => [
-                            PopupMenuItem(
-                              value: 'remove',
-                              child: Text(isMe ? 'Leave group' : 'Remove from group'),
-                            ),
-                          ],
-                        ),
+                        trailing: showMenu
+                            ? PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  if (value == 'remove') _removeMember(m);
+                                  if (value == 'block') _blockBuyer(m);
+                                  if (value == 'leave') _leaveGroup();
+                                },
+                                itemBuilder: (_) => [
+                                  if (isMe)
+                                    const PopupMenuItem(
+                                      value: 'leave',
+                                      child: Text('Leave group'),
+                                    ),
+                                  if (canRemove)
+                                    const PopupMenuItem(
+                                      value: 'remove',
+                                      child: Text('Remove from group'),
+                                    ),
+                                  if (canBlock)
+                                    const PopupMenuItem(
+                                      value: 'block',
+                                      child: Text('Block buyer'),
+                                    ),
+                                ],
+                              )
+                            : null,
                       );
                     }),
                 ],

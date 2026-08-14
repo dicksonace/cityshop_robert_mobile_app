@@ -1203,6 +1203,7 @@ class ChatParticipant {
     this.online = false,
     this.lastSeenAt,
     this.isCreator = false,
+    this.role,
   });
 
   final int id;
@@ -1212,6 +1213,9 @@ class ChatParticipant {
   final bool online;
   final String? lastSeenAt;
   final bool isCreator;
+  final String? role;
+
+  bool get isBuyer => (role ?? '').toLowerCase() == 'buyer';
 
   String get presenceLabel {
     if (online) return 'Online';
@@ -1227,6 +1231,7 @@ class ChatParticipant {
       online: json['online'] == true,
       lastSeenAt: json['last_seen_at'] as String?,
       isCreator: json['is_creator'] == true,
+      role: json['role'] as String?,
     );
   }
 }
