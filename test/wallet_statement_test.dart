@@ -14,7 +14,7 @@ List<WalletTransactionItem> _transactions() => [
         'amount': 5.0,
         // Em dash and cedi sign come straight from the backend and are outside
         // Latin-1, which the built-in PDF fonts cannot draw.
-        'description': 'Transfer from Robert Asare — QR payment of GH₵5',
+        'description': 'Transfer from Robert Asare — QR Code payment of GH₵5',
         'reference': 'TRF-4620B65988A5',
         'created_at': '2026-08-08T09:43:00+00:00',
         'balance_before': 2832.40,

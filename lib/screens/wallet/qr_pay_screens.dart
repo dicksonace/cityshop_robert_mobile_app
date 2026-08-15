@@ -1521,7 +1521,7 @@ class QrPayScreen extends StatelessWidget {
 
         final pin = await promptPaymentPin(
           context,
-          title: 'Confirm QR payment',
+          title: 'Confirm QR Code payment',
           subtitle: 'Pay ${_money.format(amount)} to $name',
         );
         if (pin == null || !context.mounted) return;
