@@ -261,6 +261,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  /// Shared / deep-linked products often have no stack to pop — go home instead.
+  void _leaveProduct() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/shop');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
@@ -270,6 +279,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: _leaveProduct,
+          icon: const Icon(Icons.arrow_back),
+        ),
         title: Text(p?.name ?? 'Product'),
         actions: [
           IconButton(
@@ -481,6 +495,13 @@ class _Body extends StatelessWidget {
           videoDuration: product.videoDuration,
           discountPct: hasDiscount ? discountPct : null,
           onVideoPlay: onVideoPlay,
+          onBack: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/shop');
+            }
+          },
         ),
         Padding(
           padding: const EdgeInsets.all(20),
@@ -1051,6 +1072,7 @@ class _ProductImageGallery extends StatefulWidget {
     this.videoDuration,
     this.discountPct,
     this.onVideoPlay,
+    this.onBack,
   });
 
   final List<ProductImage> images;
@@ -1059,6 +1081,7 @@ class _ProductImageGallery extends StatefulWidget {
   final int? videoDuration;
   final int? discountPct;
   final VoidCallback? onVideoPlay;
+  final VoidCallback? onBack;
 
   @override
   State<_ProductImageGallery> createState() => _ProductImageGalleryState();
@@ -1248,6 +1271,10 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
     final items = _items;
     final total = items.length;
     final currentIsVideo = total > 0 && items[_index].isVideo;
+    var topBadgeLeft = 12.0;
+    if (widget.onBack != null) topBadgeLeft += 48;
+    final discountLeft = topBadgeLeft;
+    if (widget.discountPct != null) topBadgeLeft += 60;
 
     return Column(
       children: [
@@ -1290,10 +1317,31 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                         },
                       ),
               ),
-              if (widget.discountPct != null)
+              // Back / home — critical for shared product links (no nav stack).
+              if (widget.onBack != null)
                 Positioned(
                   top: 12,
                   left: 12,
+                  child: Material(
+                    color: Colors.white.withValues(alpha: 0.92),
+                    shape: const CircleBorder(),
+                    elevation: 2,
+                    shadowColor: Colors.black26,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: widget.onBack,
+                      child: const SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: Icon(Icons.arrow_back, size: 22, color: Color(0xFF1F2937)),
+                      ),
+                    ),
+                  ),
+                ),
+              if (widget.discountPct != null)
+                Positioned(
+                  top: 12,
+                  left: discountLeft,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -1309,7 +1357,7 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
               if (currentIsVideo)
                 Positioned(
                   top: 12,
-                  left: widget.discountPct != null ? 72 : 12,
+                  left: topBadgeLeft,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
