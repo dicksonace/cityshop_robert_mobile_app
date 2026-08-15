@@ -6,7 +6,7 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
-/// Buyer entry for China / RMB: Buy RMB (Transfer to China) and Sell RMB.
+/// Buyer entry for China / RMB: GHS → RMB (buy) and RMB → GHS (sell).
 class ChinaRmbHubScreen extends StatefulWidget {
   const ChinaRmbHubScreen({super.key});
 
@@ -21,6 +21,9 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   Map<String, dynamic> sellConfig = {};
   List<Map<String, dynamic>> buyTransfers = [];
   List<Map<String, dynamic>> sellTransfers = [];
+
+  /// `buy` = GHS → RMB, `sell` = RMB → GHS (matches the Exchange Type cards).
+  String selectedType = 'buy';
 
   @override
   void initState() {
@@ -66,6 +69,29 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   Map<String, dynamic>? get sellRate =>
       sellConfig['rate'] is Map ? Map<String, dynamic>.from(sellConfig['rate'] as Map) : null;
 
+  bool get buyOpen => buyConfig['enabled'] == true;
+  bool get sellOpen => sellConfig['enabled'] == true;
+
+  void _openSelected() {
+    if (selectedType == 'buy') {
+      if (!buyOpen) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('GHS → RMB is paused right now')),
+        );
+        return;
+      }
+      context.push('/wallet/china-transfer');
+      return;
+    }
+    if (!sellOpen) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('RMB → GHS is paused right now')),
+      );
+      return;
+    }
+    context.push('/wallet/sell-rmb');
+  }
+
   @override
   Widget build(BuildContext context) {
     final buyGhsPerRmb = (buyRate?['ghs_per_rmb'] as num?)?.toDouble();
@@ -107,38 +133,70 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                         const SizedBox(height: 10),
                         Text(
                           buyGhsPerRmb == null
-                              ? 'Buy RMB rate: not published'
-                              : 'Buy / Transfer · 1 RMB = GH₵${buyGhsPerRmb.toStringAsFixed(4)}',
+                              ? 'GHS → RMB: not published'
+                              : 'GHS → RMB · 1 RMB = GH₵${buyGhsPerRmb.toStringAsFixed(4)}',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           sellUsdPerRmb == null
-                              ? 'Sell RMB rate: not published'
-                              : 'Sell (we buy) · 1 RMB = \$${sellUsdPerRmb.toStringAsFixed(4)}'
+                              ? 'RMB → GHS: not published'
+                              : 'RMB → GHS · 1 RMB = \$${sellUsdPerRmb.toStringAsFixed(4)}'
                                   '${sellGhsPerUsd == null ? '' : ' · 1 USD = GH₵${sellGhsPerUsd.toStringAsFixed(2)}'}',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _ServiceTile(
-                    icon: Icons.south_west_rounded,
-                    title: 'Buy RMB',
-                    subtitle: 'Pay GHS · receive RMB on Alipay in China',
-                    badge: buyConfig['enabled'] == true ? 'Open' : 'Paused',
-                    open: buyConfig['enabled'] == true,
-                    onTap: () => context.push('/wallet/china-transfer'),
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Exchange Type',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF374151),
+                    ),
                   ),
                   const SizedBox(height: 10),
-                  _ServiceTile(
-                    icon: Icons.north_east_rounded,
-                    title: 'Sell RMB',
-                    subtitle: 'Sell your RMB · receive USD or GHS',
-                    badge: sellConfig['enabled'] == true ? 'Open' : 'Paused',
-                    open: sellConfig['enabled'] == true,
-                    onTap: () => context.push('/wallet/sell-rmb'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ExchangeTypeCard(
+                          title: 'GHS → RMB',
+                          subtitle: 'Ghana to China',
+                          selected: selectedType == 'buy',
+                          paused: !buyOpen,
+                          onTap: () => setState(() => selectedType = 'buy'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _ExchangeTypeCard(
+                          title: 'RMB → GHS',
+                          subtitle: 'China to Ghana',
+                          selected: selectedType == 'sell',
+                          paused: !sellOpen,
+                          onTap: () => setState(() => selectedType = 'sell'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: _openSelected,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F766E),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text(
+                        selectedType == 'buy' ? 'Continue · Buy RMB' : 'Continue · Sell RMB',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 28),
                   const Text('Recent activity', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
@@ -153,7 +211,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                         backgroundColor: Color(0xFFFFEDD5),
                         child: Icon(Icons.south_west_rounded, color: AppColors.accent, size: 18),
                       ),
-                      title: Text('Buy · ${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                      title: Text('GHS → RMB · ${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w800)),
                       subtitle: Text(
                         '¥${((quote['rmb_amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)} · ${item['status_label']}',
                       ),
@@ -172,7 +230,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                         backgroundColor: Color(0xFFD1FAE5),
                         child: Icon(Icons.north_east_rounded, color: Color(0xFF047857), size: 18),
                       ),
-                      title: Text('Sell · ${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                      title: Text('RMB → GHS · ${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w800)),
                       subtitle: Text(
                         '¥${((quote['rmb_amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)} → $payout · ${item['status_label']}',
                       ),
@@ -186,70 +244,71 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   }
 }
 
-class _ServiceTile extends StatelessWidget {
-  const _ServiceTile({
-    required this.icon,
+class _ExchangeTypeCard extends StatelessWidget {
+  const _ExchangeTypeCard({
     required this.title,
     required this.subtitle,
-    required this.badge,
-    required this.open,
+    required this.selected,
+    required this.paused,
     required this.onTap,
   });
 
-  final IconData icon;
   final String title;
   final String subtitle;
-  final String badge;
-  final bool open;
+  final bool selected;
+  final bool paused;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final borderColor = selected ? const Color(0xFF059669) : const Color(0xFFD1D5DB);
+    final titleColor = selected ? const Color(0xFF047857) : const Color(0xFF374151);
+    final subtitleColor = selected ? const Color(0xFF10B981) : const Color(0xFF9CA3AF);
+
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderColor, width: selected ? 2.5 : 1.2),
+          ),
+          child: Column(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: open ? const Color(0xFFCCFBF1) : AppColors.border,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: open ? const Color(0xFF0F766E) : AppColors.textMuted),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                    const SizedBox(height: 2),
-                    Text(subtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                  ],
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  color: titleColor,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: open ? const Color(0xFFDCFCE7) : const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(999),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: subtitleColor,
                 ),
-                child: Text(
-                  badge,
+              ),
+              if (paused) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Paused',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w800,
-                    color: open ? const Color(0xFF166534) : const Color(0xFF92400E),
+                    color: Colors.amber.shade800,
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
