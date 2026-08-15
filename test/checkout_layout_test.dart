@@ -266,4 +266,25 @@ void main() {
       '9': {'channel': 'direct', 'method_id': 5},
     });
   });
+
+  testWidgets('coupon field shows and is sent with checkout', (tester) async {
+    final api = await _pumpCheckout(tester);
+
+    expect(find.text('Coupon code (optional)'), findsOneWidget);
+    expect(find.text('SAVE10'), findsOneWidget); // hint
+
+    await tester.enterText(find.byType(TextField).first, 'save10');
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Place order'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Place order'));
+    await tester.pumpAndSettle();
+
+    final body = api.posted.single['data'] as Map;
+    expect(body['seller_coupons'], {'9': 'SAVE10'});
+  });
 }

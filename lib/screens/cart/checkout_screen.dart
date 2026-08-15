@@ -31,6 +31,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String paymentMethod = 'momo';
   final Map<int, String> sellerChannels = {};
   final Map<int, int?> sellerMethodIds = {};
+  final Map<int, String> sellerCoupons = {};
 
   @override
   void initState() {
@@ -169,10 +170,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     setState(() => placing = true);
     try {
       final sellerPayments = _sellerPaymentsPayload();
+      final sellerCouponsPayload = <String, String>{
+        for (final entry in sellerCoupons.entries)
+          if (entry.value.trim().isNotEmpty) '${entry.key}': entry.value.trim().toUpperCase(),
+      };
       final result = await store.placeCheckout(
         addressId: addressId!,
         paymentMethod: paymentMethod,
         sellerPayments: sellerPayments.isEmpty ? null : sellerPayments,
+        sellerCoupons: sellerCouponsPayload.isEmpty ? null : sellerCouponsPayload,
         paymentPin: paymentPin,
       );
       final next = result['next'] as String? ?? 'orders';
@@ -498,6 +504,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 setState(() => sellerMethodIds[id] = methodId);
               },
             ),
+        for (final group in p.sellerGroups)
+          _SellerCouponField(
+            sellerName: '${group['seller_name'] ?? 'Seller'}',
+            showSellerName: p.sellerGroups.length > 1,
+            value: sellerCoupons[(group['seller_id'] as num?)?.toInt() ?? 0] ?? '',
+            onChanged: (code) {
+              final id = (group['seller_id'] as num?)?.toInt();
+              if (id == null) return;
+              setState(() => sellerCoupons[id] = code);
+            },
+          ),
         const SizedBox(height: 14),
         _CardShell(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -837,6 +854,87 @@ class _PayBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SellerCouponField extends StatefulWidget {
+  const _SellerCouponField({
+    required this.sellerName,
+    required this.value,
+    required this.onChanged,
+    this.showSellerName = false,
+  });
+
+  final String sellerName;
+  final String value;
+  final ValueChanged<String> onChanged;
+  final bool showSellerName;
+
+  @override
+  State<_SellerCouponField> createState() => _SellerCouponFieldState();
+}
+
+class _SellerCouponFieldState extends State<_SellerCouponField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: _CardShell(
+        padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.showSellerName
+                  ? 'Coupon code for ${widget.sellerName} (optional)'
+                  : 'Coupon code (optional)',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _controller,
+              textCapitalization: TextCapitalization.characters,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+              ),
+              decoration: const InputDecoration(
+                hintText: 'SAVE10',
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                border: OutlineInputBorder(),
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\-_]')),
+                LengthLimitingTextInputFormatter(30),
+                TextInputFormatter.withFunction((oldValue, newValue) {
+                  final upper = newValue.text.toUpperCase();
+                  return newValue.copyWith(
+                    text: upper,
+                    selection: TextSelection.collapsed(offset: upper.length),
+                  );
+                }),
+              ],
+              onChanged: widget.onChanged,
+            ),
+          ],
+        ),
       ),
     );
   }

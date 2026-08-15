@@ -1784,12 +1784,14 @@ class AppStore extends ChangeNotifier {
     required int addressId,
     required String paymentMethod,
     Map<String, dynamic>? sellerPayments,
+    Map<String, String>? sellerCoupons,
     String? paymentPin,
   }) async {
     final res = await _api.post('/checkout', data: {
       'address_id': addressId,
       'payment_method': paymentMethod,
       if (sellerPayments != null && sellerPayments.isNotEmpty) 'seller_payments': sellerPayments,
+      if (sellerCoupons != null && sellerCoupons.isNotEmpty) 'seller_coupons': sellerCoupons,
       if (paymentPin != null && paymentPin.isNotEmpty) 'payment_pin': paymentPin,
     });
     final data = Map<String, dynamic>.from(res.data as Map);
