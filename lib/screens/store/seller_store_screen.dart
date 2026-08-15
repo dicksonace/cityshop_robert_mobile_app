@@ -565,31 +565,218 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                           hasScrollBody: false,
                           child: Center(child: CircularProgressIndicator()),
                         )
-                      else if (products.isEmpty)
-                        const SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: Center(child: Text('No products found in this store')),
-                        )
-                      else
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 28),
-                          sliver: SliverGrid(
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              mainAxisSpacing: 10,
-                              crossAxisSpacing: 10,
-                              childAspectRatio: 0.68,
+                      else ...[
+                        if (products.isEmpty)
+                          const SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(24, 28, 24, 12),
+                              child: Center(child: Text('No products found in this store')),
                             ),
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) => ProductCard(product: products[index]),
-                              childCount: products.length,
+                          )
+                        else
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                            sliver: SliverGrid(
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 10,
+                                crossAxisSpacing: 10,
+                                childAspectRatio: 0.68,
+                              ),
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) => ProductCard(product: products[index]),
+                                childCount: products.length,
+                              ),
                             ),
                           ),
+                        // Match web store page: About + Contact under the product grid.
+                        SliverToBoxAdapter(
+                          child: _StoreAboutContact(store: s!),
                         ),
+                      ],
                     ],
                   ),
                 ),
     );
+  }
+}
+
+class _StoreAboutContact extends StatelessWidget {
+  const _StoreAboutContact({
+    required this.store,
+  });
+
+  final SellerStore store;
+
+  Future<void> _open(Uri uri) async {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  String? get _locationLine {
+    final parts = [
+      store.city?.trim(),
+      store.region?.trim(),
+    ].whereType<String>().where((s) => s.isNotEmpty).toList();
+    if (parts.isEmpty && (store.digitalAddress ?? '').trim().isEmpty) {
+      return null;
+    }
+    final base = parts.join(', ');
+    final digital = (store.digitalAddress ?? '').trim();
+    if (base.isEmpty) return digital;
+    if (digital.isEmpty) return base;
+    return '$base · $digital';
+  }
+
+  bool get _hasContact {
+    return _locationLine != null ||
+        (store.mobile ?? '').trim().isNotEmpty ||
+        (store.whatsapp ?? '').trim().isNotEmpty ||
+        (store.email ?? '').trim().isNotEmpty;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final about = (store.description ?? '').trim();
+    final aboutText = about.isNotEmpty ? about : 'Welcome to our store on CityShop.';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'About ${store.storeName}',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  aboutText,
+                  style: const TextStyle(
+                    height: 1.45,
+                    fontSize: 13.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_hasContact) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Contact',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_locationLine != null)
+                    _ContactRow(
+                      icon: Icons.place_outlined,
+                      child: Text(
+                        _locationLine!,
+                        style: const TextStyle(fontSize: 13.5, color: AppColors.textSecondary, height: 1.35),
+                      ),
+                    ),
+                  if ((store.mobile ?? '').trim().isNotEmpty)
+                    _ContactRow(
+                      icon: Icons.phone_outlined,
+                      onTap: () => _open(Uri(scheme: 'tel', path: store.mobile!.replaceAll(' ', ''))),
+                      child: Text(
+                        store.mobile!.trim(),
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          color: AppColors.textSecondary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  if ((store.whatsapp ?? '').trim().isNotEmpty)
+                    _ContactRow(
+                      icon: Icons.chat,
+                      iconColor: const Color(0xFF16A34A),
+                      onTap: () {
+                        final digits = store.whatsapp!.replaceAll(RegExp(r'\D'), '');
+                        _open(Uri.parse('https://wa.me/$digits'));
+                      },
+                      child: const Text(
+                        'WhatsApp',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: Color(0xFF16A34A),
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  if ((store.email ?? '').trim().isNotEmpty)
+                    _ContactRow(
+                      icon: Icons.mail_outline,
+                      onTap: () => _open(Uri(scheme: 'mailto', path: store.email!.trim())),
+                      child: Text(
+                        store.email!.trim(),
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          color: AppColors.textSecondary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactRow extends StatelessWidget {
+  const _ContactRow({
+    required this.icon,
+    required this.child,
+    this.onTap,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final Widget child;
+  final VoidCallback? onTap;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: iconColor ?? AppColors.textMuted),
+          const SizedBox(width: 10),
+          Expanded(child: child),
+        ],
+      ),
+    );
+    if (onTap == null) return row;
+    return InkWell(onTap: onTap, child: row);
   }
 }
 
