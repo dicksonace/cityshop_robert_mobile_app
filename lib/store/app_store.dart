@@ -1061,6 +1061,49 @@ class AppStore extends ChangeNotifier {
     return data is Map ? Map<String, dynamic>.from(data) : body;
   }
 
+  Future<Map<String, dynamic>> loadSellRmb() async {
+    final res = await _api.get('/wallet/sell-rmb');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> fetchSellRmb(int id) async {
+    final res = await _api.get('/wallet/sell-rmb/$id');
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
+  Future<Map<String, dynamic>> submitSellRmb({
+    required String rmbAmount,
+    required String payoutCurrency,
+    required int receiveMethodId,
+    required Map<int, String> fields,
+    required Map<int, dynamic> files,
+  }) async {
+    final payload = <String, dynamic>{
+      'rmb_amount': rmbAmount,
+      'payout_currency': payoutCurrency,
+      'receive_method_id': receiveMethodId,
+    };
+    fields.forEach((id, value) {
+      payload['fields[$id]'] = value;
+    });
+    files.forEach((id, file) {
+      payload['files[$id]'] = '${file.path}';
+    });
+    final res = await _api.postForm('/wallet/sell-rmb', payload);
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
+  Future<Map<String, dynamic>> cancelSellRmb(int id) async {
+    final res = await _api.post('/wallet/sell-rmb/$id/cancel');
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
   Future<void> loadConversations() async {
     final res = await _api.get('/messages');
     final data = res.data is Map ? (res.data['data'] ?? res.data['conversations']) : null;

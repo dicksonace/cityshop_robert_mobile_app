@@ -649,7 +649,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                   top: 0,
                   right: 0,
                   child: GestureDetector(
-                    onTap: () => context.push('/wallet/china-transfer'),
+                    onTap: () => context.push('/wallet/china-rmb'),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
@@ -657,7 +657,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: const Text(
-                        'Transfer to China',
+                        'China / RMB',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 11,
