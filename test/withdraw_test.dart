@@ -38,7 +38,7 @@ const _paidRequest = {
   'network': 'telecel',
   'network_label': 'Telecel Cash',
   'status': 'paid',
-  'status_label': 'Paid out',
+  'status_label': 'Completed',
   'rejection_reason': null,
   'created_at': '2026-07-30T09:00:00+00:00',
   'processed_at': '2026-07-30T09:41:00+00:00',
@@ -359,7 +359,7 @@ void main() {
 
     expect(find.text('Withdrawal requests'), findsOneWidget);
     expect(find.text('Rejected'), findsOneWidget);
-    expect(find.text('Paid out'), findsOneWidget);
+    expect(find.text('Completed'), findsOneWidget);
     expect(find.text('GH₵75.00'), findsOneWidget);
     expect(find.text('GH₵300.00'), findsOneWidget);
     expect(find.text('Name did not match the MoMo account.'), findsOneWidget);
@@ -373,7 +373,7 @@ void main() {
       expect(overview.minimum, 10);
       expect(overview.hasPending, isFalse);
       expect(overview.canWithdraw, isTrue);
-      expect(overview.items.single.statusLabel, 'Paid out');
+      expect(overview.items.single.statusLabel, 'Completed');
       expect(overview.items.single.isPaid, isTrue);
     });
 
