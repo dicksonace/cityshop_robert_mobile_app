@@ -21,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   bool _obscure = true;
   bool _remember = true;
+  String _portal = 'buyer';
 
   @override
   void dispose() {
@@ -38,13 +39,15 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     setState(() => _loading = true);
     try {
-      await context.read<AppStore>().login(
-            login: _login.text.trim(),
-            password: _password.text,
-          );
+      final store = context.read<AppStore>();
+      await store.login(
+        login: _login.text.trim(),
+        password: _password.text,
+        portal: _portal,
+      );
       await PushNotifications.instance.syncForLoggedInUser(requestIfNeeded: true);
       if (!mounted) return;
-      context.go('/shop');
+      context.go(store.homePath);
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -57,6 +60,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isSeller = _portal == 'seller';
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -85,10 +90,10 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'SHOPPER',
+                Text(
+                  isSeller ? 'SELLER' : 'SHOPPER',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.4,
@@ -102,12 +107,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Login to shop, track orders, and save wishlists.',
+                Text(
+                  isSeller
+                      ? 'Login to your Seller Hub dashboard.'
+                      : 'Login to shop, track orders, and save wishlists.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 20),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'buyer', label: Text('Shopper'), icon: Icon(Icons.shopping_bag_outlined, size: 18)),
+                    ButtonSegment(value: 'seller', label: Text('Seller'), icon: Icon(Icons.storefront_outlined, size: 18)),
+                  ],
+                  selected: {_portal},
+                  onSelectionChanged: (set) => setState(() => _portal = set.first),
+                ),
+                const SizedBox(height: 24),
                 const Text('Mobile or Email', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                 const SizedBox(height: 6),
                 TextField(
@@ -164,31 +180,40 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 PrimaryButton(
-                  label: 'Login',
+                  label: isSeller ? 'Login as seller' : 'Login',
                   loading: _loading,
                   onPressed: _submit,
                 ),
-                const SizedBox(height: 20),
-                const Divider(),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => context.push('/register'),
-                  child: const Text.rich(
-                    TextSpan(
-                      text: 'New here? ',
-                      style: TextStyle(color: AppColors.textSecondary),
-                      children: [
-                        TextSpan(
-                          text: 'Create shopper account',
-                          style: TextStyle(
-                            color: AppColors.accent,
-                            fontWeight: FontWeight.w700,
+                if (!isSeller) ...[
+                  const SizedBox(height: 20),
+                  const Divider(),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => context.push('/register'),
+                    child: const Text.rich(
+                      TextSpan(
+                        text: 'New here? ',
+                        style: TextStyle(color: AppColors.textSecondary),
+                        children: [
+                          TextSpan(
+                            text: 'Create shopper account',
+                            style: TextStyle(
+                              color: AppColors.accent,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                ] else ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Seller registration stays on the website invite link.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                ],
               ],
             ),
           ),

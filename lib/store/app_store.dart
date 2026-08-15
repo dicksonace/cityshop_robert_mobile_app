@@ -53,6 +53,10 @@ class AppStore extends ChangeNotifier {
 
   bool get isLoggedIn => user != null;
 
+  bool get isSeller => user?.isSeller == true;
+
+  String get homePath => isSeller ? '/seller' : '/shop';
+
   Future<String?> get apiToken => _api.getToken();
 
   /// Lets splash / Skip intro enter the app even if network init is still running.
@@ -71,12 +75,17 @@ class AppStore extends ChangeNotifier {
         try {
           // Boot must stay snappy — one attempt each, then enter the shop.
           await refreshMe(maxAttempts: 1);
-          await Future.wait([
-            loadCart(maxAttempts: 1),
-            loadWishlist(maxAttempts: 1),
-            loadFollowing(maxAttempts: 1),
-            refreshNotificationCounts(maxAttempts: 1),
-          ]).timeout(const Duration(seconds: 8));
+          if (isSeller) {
+            await refreshNotificationCounts(maxAttempts: 1)
+                .timeout(const Duration(seconds: 8));
+          } else {
+            await Future.wait([
+              loadCart(maxAttempts: 1),
+              loadWishlist(maxAttempts: 1),
+              loadFollowing(maxAttempts: 1),
+              refreshNotificationCounts(maxAttempts: 1),
+            ]).timeout(const Duration(seconds: 8));
+          }
         } on ApiException catch (e) {
           // Only log out when the server rejects the session — never on
           // network blips right after a phone reboot / power-on.
@@ -88,10 +97,12 @@ class AppStore extends ChangeNotifier {
           // Keep the saved token; shop can still load as guest UI + retry later.
         }
       }
-      try {
-        await loadShop(maxAttempts: 1).timeout(const Duration(seconds: 10));
-      } catch (_) {
-        shopError ??= 'Something went wrong. Please try again.';
+      if (!isSeller) {
+        try {
+          await loadShop(maxAttempts: 1).timeout(const Duration(seconds: 10));
+        } catch (_) {
+          shopError ??= 'Something went wrong. Please try again.';
+        }
       }
     } finally {
       finishBoot();
@@ -389,11 +400,15 @@ class AppStore extends ChangeNotifier {
     );
   }
 
-  Future<void> login({required String login, required String password}) async {
+  Future<void> login({
+    required String login,
+    required String password,
+    String portal = 'buyer',
+  }) async {
     final res = await _api.post('/auth/login', data: {
       'login': login,
       'password': password,
-      'portal': 'buyer',
+      'portal': portal,
       'device_name': ApiConfig.deviceName,
     });
     final token = res.data['token'] as String?;
@@ -407,8 +422,21 @@ class AppStore extends ChangeNotifier {
     } else {
       await refreshMe();
     }
-    await Future.wait([loadCart(), loadWishlist(), loadFollowing(), refreshNotificationCounts()]);
+    if (isSeller) {
+      await refreshNotificationCounts();
+    } else {
+      await Future.wait([loadCart(), loadWishlist(), loadFollowing(), refreshNotificationCounts()]);
+    }
     notifyListeners();
+  }
+
+  Future<Map<String, dynamic>> loadSellerDashboard() async {
+    final res = await _api.get('/seller/dashboard');
+    final data = res.data;
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return {};
   }
 
   Future<Map<String, dynamic>> forgotPassword({

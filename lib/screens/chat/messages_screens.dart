@@ -12,7 +12,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:video_player/video_player.dart';
 
 import '../../api/api_client.dart';
 import '../../api/api_config.dart';
@@ -422,48 +421,60 @@ class _ChatScreenState extends State<ChatScreen> {
       final store = context.read<AppStore>();
       final result = await store.loadConversation(widget.conversationId);
       if (!mounted) return;
-      final myId = store.user?.id ?? 0;
-      _call ??= ChatCallService(
-        store: store,
-        conversationId: widget.conversationId,
-        myUserId: myId,
-        myName: store.user?.name ?? 'You',
-        onCallLog: (msg) {
-          if (!mounted) return;
-          if (messages.any((m) => m.id == msg.id)) return;
-          setState(() => messages = [...messages, msg]);
-          _jumpToEnd();
-        },
-        onCallError: (message) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-        },
-      )..addListener(() {
-          if (!mounted) return;
-          setState(() {});
-          _startPoll();
-        });
-      _call!.peerName = result.conversation.otherName;
-      store.primeIceServers();
       setState(() {
         conversation = result.conversation;
         messages = result.messages;
         loading = false;
       });
       _jumpToEnd();
-      // Apply any live offer immediately (push deep-link / Reverb miss).
-      for (final signal in result.pendingCallSignals) {
-        await _call?.handleMessage(signal);
-      }
-      await _startRealtime(store);
-      _startPoll();
-      // Don't wait for the first Timer.periodic tick — ring ASAP.
-      unawaited(_pollNew());
+
+      // Call + Reverb setup after first paint so opening a chat stays tappable.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_finishOpen(store, result.pendingCallSignals));
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() => loading = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
+  }
+
+  Future<void> _finishOpen(AppStore store, List<ChatMessage> pendingCallSignals) async {
+    final myId = store.user?.id ?? 0;
+    _call ??= ChatCallService(
+      store: store,
+      conversationId: widget.conversationId,
+      myUserId: myId,
+      myName: store.user?.name ?? 'You',
+      onCallLog: (msg) {
+        if (!mounted) return;
+        if (messages.any((m) => m.id == msg.id)) return;
+        setState(() => messages = [...messages, msg]);
+        _jumpToEnd();
+      },
+      onCallError: (message) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      },
+    )..addListener(() {
+        if (!mounted) return;
+        setState(() {});
+        _startPoll();
+      });
+    _call!.peerName = conversation?.otherName ?? 'Chat';
+    store.primeIceServers();
+
+    for (final signal in pendingCallSignals) {
+      if (!mounted) return;
+      await _call?.handleMessage(signal);
+    }
+    if (!mounted) return;
+
+    // Never block the open path on websocket connect.
+    unawaited(_startRealtime(store));
+    _startPoll();
+    unawaited(_pollNew());
   }
 
   Future<void> _startRealtime(AppStore store) async {
@@ -1558,6 +1569,9 @@ class _ChatScreenState extends State<ChatScreen> {
     final thread = this.thread;
 
     return Scaffold(
+      // Handle keyboard ourselves so the composer never sits under the IME
+      // (edge-to-edge Android often skips adjustResize for bottomNavigationBar).
+      resizeToAvoidBottomInset: false,
       backgroundColor: ChatColors.wallpaper,
       appBar: AppBar(
         toolbarHeight: 64,
@@ -1993,15 +2007,47 @@ class _ChatScreenState extends State<ChatScreen> {
                     ],
                   ),
                 ),
-                SafeArea(
-                  top: false,
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      color: ChatColors.composerBar,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+              ],
+            ),
+                if (_call != null)
+                  ListenableBuilder(
+                    listenable: _call!,
+                    builder: (context, _) {
+                      if (_call!.state == ChatCallState.idle) {
+                        return const SizedBox.shrink();
+                      }
+                      return Positioned.fill(
+                        child: ChatCallOverlay(
+                          call: _call!,
+                          peerName: conversation?.otherName ?? 'Chat',
+                          onAccept: () => unawaited(_acceptInAppCall()),
+                          onEnd: () => unawaited(_endInAppCall()),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+      bottomNavigationBar: loading
+          ? null
+          : AnnotatedRegion<SystemUiOverlayStyle>(
+              value: const SystemUiOverlayStyle(
+                systemNavigationBarColor: ChatColors.composerBar,
+                systemNavigationBarIconBrightness: Brightness.dark,
+                systemNavigationBarDividerColor: ChatColors.composerBar,
+              ),
+              child: Material(
+                color: ChatColors.composerBar,
+                child: Padding(
+                  // Lift composer above the keyboard; keep home-indicator when closed.
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(context).bottom > 0
+                        ? MediaQuery.viewInsetsOf(context).bottom
+                        : MediaQuery.viewPaddingOf(context).bottom,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                         if (conversation?.blocked == true)
                           Container(
                             width: double.infinity,
@@ -2141,6 +2187,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                           minLines: 1,
                                           maxLines: 4,
                                           enabled: !uploadingMedia && conversation?.blocked != true,
+                                          style: const TextStyle(
+                                            color: Color(0xFF111B21),
+                                            fontSize: 16,
+                                            height: 1.35,
+                                          ),
+                                          cursorColor: ChatColors.send,
                                           textInputAction: TextInputAction.send,
                                           onTap: () {
                                             if (showAttachPanel) setState(() => showAttachPanel = false);
@@ -2238,30 +2290,10 @@ class _ChatScreenState extends State<ChatScreen> {
                             onTransfer: _openTransfer,
                             onFiles: _sendFile,
                           ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-                if (_call != null)
-                  ListenableBuilder(
-                    listenable: _call!,
-                    builder: (context, _) {
-                      if (_call!.state == ChatCallState.idle) {
-                        return const SizedBox.shrink();
-                      }
-                      return Positioned.fill(
-                        child: ChatCallOverlay(
-                          call: _call!,
-                          peerName: conversation?.otherName ?? 'Chat',
-                          onAccept: () => unawaited(_acceptInAppCall()),
-                          onEnd: () => unawaited(_endInAppCall()),
-                        ),
-                      );
-                    },
-                  ),
-              ],
+              ),
             ),
     );
   }
@@ -3341,53 +3373,24 @@ class _MessageTick extends StatelessWidget {
   }
 }
 
-class _ChatVideo extends StatefulWidget {
+class _ChatVideo extends StatelessWidget {
   const _ChatVideo({required this.url, required this.mine});
 
   final String url;
   final bool mine;
 
-  @override
-  State<_ChatVideo> createState() => _ChatVideoState();
-}
-
-class _ChatVideoState extends State<_ChatVideo> {
-  VideoPlayerController? _controller;
-  bool _failed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final resolved = ApiConfig.resolveMediaUrl(widget.url);
-    _controller = VideoPlayerController.networkUrl(Uri.parse(resolved))
-      ..initialize().then((_) {
-        if (!mounted) return;
-        _controller?.setVolume(0);
-        setState(() {});
-      }).catchError((_) {
-        if (mounted) setState(() => _failed = true);
-      });
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _open() async {
-    await showVideoViewer(context, url: widget.url);
+  Future<void> _open(BuildContext context) async {
+    await showVideoViewer(context, url: url);
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = _controller;
-    final ready = c != null && c.value.isInitialized && !_failed;
-
+    // Do not create VideoPlayerController here — initializing every video in the
+    // thread freezes the chat for seconds on open. Tap opens the full viewer.
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: _failed ? null : _open,
+        onTap: () => unawaited(_open(context)),
         borderRadius: BorderRadius.circular(12),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -3397,55 +3400,38 @@ class _ChatVideoState extends State<_ChatVideo> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (ready)
-                  FittedBox(
-                    fit: BoxFit.cover,
-                    child: SizedBox(
-                      width: c.value.size.width,
-                      height: c.value.size.height,
-                      child: VideoPlayer(c),
-                    ),
-                  )
-                else
-                  ColoredBox(
-                    color: widget.mine ? Colors.white24 : AppColors.background,
-                    child: Center(
-                      child: _failed
-                          ? const Icon(Icons.videocam_off_outlined, color: AppColors.textMuted)
-                          : const SizedBox(
-                              width: 28,
-                              height: 28,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
-                            ),
-                    ),
+                ColoredBox(
+                  color: mine ? Colors.white24 : AppColors.background,
+                  child: const Center(
+                    child: Icon(Icons.videocam_rounded, color: AppColors.textMuted, size: 36),
                   ),
-                if (!_failed)
-                  Container(
-                    color: Colors.black26,
-                    alignment: Alignment.center,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: const BoxDecoration(
-                            color: Colors.black54,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36),
+                ),
+                Container(
+                  color: Colors.black26,
+                  alignment: Alignment.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Tap to play',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                          ),
+                        child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Tap to play',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
               ],
             ),
           ),

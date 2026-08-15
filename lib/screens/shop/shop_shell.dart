@@ -67,17 +67,20 @@ class _ShopShellState extends State<ShopShell> {
       context.push('/login');
       return;
     }
+    if (user.isSeller) {
+      context.go('/seller');
+      return;
+    }
     final role = (user.role ?? '').toLowerCase();
-    if (role == 'seller' || role == 'admin') {
+    if (role == 'admin') {
       final base = ApiConfig.webBaseUrl.endsWith('/')
           ? ApiConfig.webBaseUrl.substring(0, ApiConfig.webBaseUrl.length - 1)
           : ApiConfig.webBaseUrl;
-      final path = role == 'admin' ? '/admin/dashboard' : '/seller/dashboard';
-      final uri = Uri.parse('$base$path');
+      final uri = Uri.parse('$base/admin/dashboard');
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open $path')),
+          const SnackBar(content: Text('Could not open /admin/dashboard')),
         );
       }
       return;
@@ -1735,18 +1738,19 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
                       }
                       return;
                     }
-                    if (item.$4 == '__seller_dashboard__' || item.$4 == '__admin_dashboard__') {
+                    if (item.$4 == '__seller_dashboard__') {
+                      context.go('/seller');
+                      return;
+                    }
+                    if (item.$4 == '__admin_dashboard__') {
                       final base = ApiConfig.webBaseUrl.endsWith('/')
                           ? ApiConfig.webBaseUrl.substring(0, ApiConfig.webBaseUrl.length - 1)
                           : ApiConfig.webBaseUrl;
-                      final path = item.$4 == '__admin_dashboard__'
-                          ? '/admin/dashboard'
-                          : '/seller/dashboard';
-                      final uri = Uri.parse('$base$path');
+                      final uri = Uri.parse('$base/admin/dashboard');
                       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
                       if (!ok && context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Could not open $path')),
+                          const SnackBar(content: Text('Could not open /admin/dashboard')),
                         );
                       }
                       return;

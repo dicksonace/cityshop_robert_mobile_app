@@ -456,6 +456,10 @@ class AppUser {
     this.city,
     this.avatar,
     this.hasPaymentPin = false,
+    this.sellerStoreName,
+    this.sellerSlug,
+    this.sellerStatus,
+    this.sellerStoreSetupComplete = false,
   });
 
   final int id;
@@ -468,8 +472,16 @@ class AppUser {
   final String? city;
   final String? avatar;
   final bool hasPaymentPin;
+  final String? sellerStoreName;
+  final String? sellerSlug;
+  final String? sellerStatus;
+  final bool sellerStoreSetupComplete;
+
+  bool get isSeller => (role ?? '').toLowerCase() == 'seller';
+  bool get isBuyer => (role ?? '').toLowerCase() == 'buyer';
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
+    final seller = json['seller'] is Map ? Map<String, dynamic>.from(json['seller'] as Map) : null;
     return AppUser(
       id: json['id'] as int,
       name: json['name'] as String? ?? '',
@@ -481,6 +493,10 @@ class AppUser {
       city: json['city'] as String?,
       avatar: json['avatar'] as String?,
       hasPaymentPin: json['has_payment_pin'] == true,
+      sellerStoreName: seller?['store_name'] as String?,
+      sellerSlug: seller?['slug'] as String?,
+      sellerStatus: seller?['status'] as String?,
+      sellerStoreSetupComplete: seller?['store_setup_complete'] == true,
     );
   }
 }

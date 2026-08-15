@@ -25,7 +25,6 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
   Map<String, dynamic> config = {};
   List<Map<String, dynamic>> transfers = [];
   final amount = TextEditingController(text: '10000');
-  String payoutCurrency = 'ghs';
 
   @override
   void initState() {
@@ -71,13 +70,15 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
   Widget build(BuildContext context) {
     final usdPerRmb = (rate?['usd_per_rmb'] as num?)?.toDouble() ?? 0;
     final ghsPerUsd = (rate?['ghs_per_usd'] as num?)?.toDouble() ?? 0;
+    final ghsPerRmb = (rate?['ghs_per_rmb'] as num?)?.toDouble() ?? (usdPerRmb * ghsPerUsd);
     final feeMode = rate?['fee_mode'] as String? ?? 'flat';
     final feeValue = (rate?['fee_value'] as num?)?.toDouble() ?? 0;
     final rmb = double.tryParse(amount.text) ?? 0;
     final usdGross = usdPerRmb > 0 ? rmb * usdPerRmb : 0.0;
     final fee = feeMode == 'percent' ? usdGross * feeValue / 100 : feeValue;
-    final usdPayout = usdGross - fee;
-    final ghsPayout = usdPayout * ghsPerUsd;
+    final ghsGross = rmb * ghsPerRmb;
+    final feeGhs = usdGross > 0 ? ghsGross * (fee / usdGross) : 0.0;
+    final ghsPayout = ghsGross - feeGhs;
     final enabled = config['enabled'] == true;
 
     return Scaffold(
@@ -109,24 +110,16 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          'Send RMB · receive USD or GHS',
+                          'Send RMB · receive GHS · admin processes payout',
                           style: TextStyle(color: Colors.white60, fontSize: 12),
                         ),
                         const SizedBox(height: 16),
                         Text(
                           rate == null
                               ? 'Buying rate not published yet'
-                              : '1 RMB = \$${usdPerRmb.toStringAsFixed(4)}',
+                              : '1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}',
                           style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900),
                         ),
-                        if (rate != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              '1 USD = GH₵${ghsPerUsd.toStringAsFixed(4)}',
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                          ),
                       ],
                     ),
                   ),
@@ -147,38 +140,8 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                         border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    const Text('Receive payout in', style: TextStyle(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ChoiceChip(
-                            label: const Text('GHS'),
-                            selected: payoutCurrency == 'ghs',
-                            onSelected: (_) => setState(() => payoutCurrency = 'ghs'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ChoiceChip(
-                            label: const Text('USD'),
-                            selected: payoutCurrency == 'usd',
-                            onSelected: (_) => setState(() => payoutCurrency = 'usd'),
-                          ),
-                        ),
-                      ],
-                    ),
                     const SizedBox(height: 12),
-                    _row('Gross (USD)', _usd.format(usdGross)),
-                    _row('Fee', _usd.format(fee)),
-                    _row('USD payout', _usd.format(usdPayout)),
-                    _row('GHS payout', _ghs.format(ghsPayout)),
-                    _row(
-                      'You receive',
-                      payoutCurrency == 'ghs' ? _ghs.format(ghsPayout) : _usd.format(usdPayout),
-                      bold: true,
-                    ),
+                    _row('You receive (GHS)', _ghs.format(ghsPayout), bold: true),
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed: enabled
@@ -186,7 +149,7 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                                 '/wallet/sell-rmb/create',
                                 extra: {
                                   'rmb': amount.text,
-                                  'payout_currency': payoutCurrency,
+                                  'payout_currency': 'ghs',
                                 },
                               )
                           : null,
@@ -201,7 +164,7 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                     const Text('No Sell RMB requests yet.', style: TextStyle(color: Colors.black54)),
                   ...transfers.map((item) {
                     final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
-                    final currency = (quote['payout_currency'] as String?) ?? 'usd';
+                    final currency = (quote['payout_currency'] as String?) ?? 'ghs';
                     final payout = currency == 'ghs'
                         ? _ghs.format((quote['ghs_payout'] as num?)?.toDouble() ?? 0)
                         : _usd.format((quote['usd_payout'] as num?)?.toDouble() ?? 0);
@@ -254,7 +217,6 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
   bool submitting = false;
   String? error;
   final amount = TextEditingController();
-  String payoutCurrency = 'ghs';
   int? methodId;
   final values = <int, String>{};
   final files = <int, XFile>{};
@@ -263,7 +225,6 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
   void initState() {
     super.initState();
     amount.text = widget.initialRmb ?? '10000';
-    payoutCurrency = widget.initialPayoutCurrency == 'usd' ? 'usd' : 'ghs';
     _load();
   }
 
@@ -311,7 +272,7 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
     try {
       final created = await context.read<AppStore>().submitSellRmb(
             rmbAmount: amount.text,
-            payoutCurrency: payoutCurrency,
+            payoutCurrency: 'ghs',
             receiveMethodId: methodId ?? 0,
             fields: values,
             files: files,
@@ -332,13 +293,24 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
     final rate = config['rate'] is Map ? Map<String, dynamic>.from(config['rate'] as Map) : null;
     final usdPerRmb = (rate?['usd_per_rmb'] as num?)?.toDouble() ?? 0;
     final ghsPerUsd = (rate?['ghs_per_usd'] as num?)?.toDouble() ?? 0;
+    final ghsPerRmb = (rate?['ghs_per_rmb'] as num?)?.toDouble() ?? (usdPerRmb * ghsPerUsd);
     final rmb = double.tryParse(amount.text) ?? 0;
     final feeMode = rate?['fee_mode'] as String? ?? 'flat';
     final feeValue = (rate?['fee_value'] as num?)?.toDouble() ?? 0;
     final usdGross = usdPerRmb > 0 ? rmb * usdPerRmb : 0.0;
     final fee = feeMode == 'percent' ? usdGross * feeValue / 100 : feeValue;
-    final usdPayout = usdGross - fee;
-    final ghsPayout = usdPayout * ghsPerUsd;
+    final ghsGross = rmb * ghsPerRmb;
+    final feeGhs = usdGross > 0 ? ghsGross * (fee / usdGross) : 0.0;
+    final ghsPayout = ghsGross - feeGhs;
+    Map<String, dynamic>? selectedMethod;
+    for (final m in methods) {
+      if ((m['id'] as num?)?.toInt() == methodId) {
+        selectedMethod = m;
+        break;
+      }
+    }
+    selectedMethod ??= methods.isEmpty ? null : methods.first;
+    final qrUrl = (selectedMethod?['qr_url'] as String?)?.trim() ?? '';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Sell RMB details')),
@@ -357,22 +329,12 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
                   decoration: const InputDecoration(prefixText: '¥ ', border: OutlineInputBorder()),
                 ),
                 const SizedBox(height: 10),
-                Text('Buying rate: 1 RMB = \$${usdPerRmb.toStringAsFixed(4)}'),
-                Text('Estimated USD: ${_usd.format(usdPayout)}'),
-                Text('Estimated GHS: ${_ghs.format(ghsPayout)}'),
-                const SizedBox(height: 12),
-                const Text('Payout currency', style: TextStyle(fontWeight: FontWeight.w700)),
-                RadioListTile<String>(
-                  value: 'ghs',
-                  groupValue: payoutCurrency,
-                  onChanged: (v) => setState(() => payoutCurrency = v ?? 'ghs'),
-                  title: Text('GHS (${_ghs.format(ghsPayout)})'),
-                ),
-                RadioListTile<String>(
-                  value: 'usd',
-                  groupValue: payoutCurrency,
-                  onChanged: (v) => setState(() => payoutCurrency = v ?? 'usd'),
-                  title: Text('USD (${_usd.format(usdPayout)})'),
+                Text('Buying rate: 1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}'),
+                Text('You receive: ${_ghs.format(ghsPayout)}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                const Text(
+                  'Send RMB to our Alipay QR (no RMB wallet). After you upload proof, admin processes your GHS payout.',
+                  style: TextStyle(color: Colors.black54, height: 1.35),
                 ),
                 if ((config['receive_instructions'] as String?)?.isNotEmpty == true) ...[
                   const SizedBox(height: 8),
@@ -396,6 +358,39 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
                     ),
                   );
                 }),
+                if (qrUrl.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text('Pay Alipay', style: TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Scan the QR code to transfer RMB to our account.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12, color: Colors.black54),
+                        ),
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            qrUrl,
+                            height: 220,
+                            width: 220,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.qr_code_2, size: 80),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 ...fields.where((f) => f['group'] == 'payment').map(_field),
                 const SizedBox(height: 16),
                 const Text('Your payout details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
@@ -500,10 +495,13 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
         .whereType<Map>()
         .where((p) => p['type'] == 'payout_sent')
         .toList();
-    final currency = (quote['payout_currency'] as String?) ?? 'usd';
+    final currency = (quote['payout_currency'] as String?) ?? 'ghs';
     final payout = currency == 'ghs'
         ? _ghs.format((quote['ghs_payout'] as num?)?.toDouble() ?? 0)
         : _usd.format((quote['usd_payout'] as num?)?.toDouble() ?? 0);
+    final ghsPerRmb = (quote['ghs_per_rmb'] as num?)?.toDouble() ??
+        (((quote['usd_per_rmb'] as num?)?.toDouble() ?? 0) *
+            ((quote['ghs_per_usd'] as num?)?.toDouble() ?? 0));
 
     return Scaffold(
       appBar: AppBar(title: Text('${item['reference']}')),
@@ -518,8 +516,7 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
             ),
             const SizedBox(height: 12),
             Text('RMB sold: ¥${((quote['rmb_amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}'),
-            Text('Buying rate: 1 RMB = \$${((quote['usd_per_rmb'] as num?)?.toDouble() ?? 0).toStringAsFixed(4)}'),
-            Text('Fee: ${_usd.format((quote['fee_usd'] as num?)?.toDouble() ?? 0)}'),
+            Text('Buying rate: 1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}'),
             Text('Expected payout: $payout'),
             if (item['payout_amount'] != null)
               Text(

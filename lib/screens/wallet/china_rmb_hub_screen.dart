@@ -75,28 +75,42 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   void _openSelected() {
     if (selectedType == 'buy') {
       if (!buyOpen) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('GHS → RMB is paused right now')),
-        );
+        _showPausedOnce('GHS → RMB is paused right now');
         return;
       }
       context.push('/wallet/china-transfer');
       return;
     }
     if (!sellOpen) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('RMB → GHS is paused right now')),
-      );
+      _showPausedOnce('RMB → GHS is paused right now');
       return;
     }
     context.push('/wallet/sell-rmb');
   }
 
+  void _showPausedOnce(String message) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  bool get selectedIsPaused => selectedType == 'buy' ? !buyOpen : !sellOpen;
+
   @override
   Widget build(BuildContext context) {
     final buyGhsPerRmb = (buyRate?['ghs_per_rmb'] as num?)?.toDouble();
+    final buyRmbPerGhs = (buyRate?['rmb_per_ghs'] as num?)?.toDouble() ??
+        (buyGhsPerRmb != null && buyGhsPerRmb > 0 ? 1 / buyGhsPerRmb : null);
     final sellUsdPerRmb = (sellRate?['usd_per_rmb'] as num?)?.toDouble();
     final sellGhsPerUsd = (sellRate?['ghs_per_usd'] as num?)?.toDouble();
+    final sellGhsPerRmb = (sellRate?['ghs_per_rmb'] as num?)?.toDouble() ??
+        (sellUsdPerRmb != null && sellGhsPerUsd != null ? sellUsdPerRmb * sellGhsPerUsd : null);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -132,17 +146,16 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          buyGhsPerRmb == null
+                          buyRmbPerGhs == null
                               ? 'GHS → RMB: not published'
-                              : 'GHS → RMB · 1 RMB = GH₵${buyGhsPerRmb.toStringAsFixed(4)}',
+                              : 'GHS → RMB · 1 GHS = ¥${buyRmbPerGhs.toStringAsFixed(3)} RMB',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          sellUsdPerRmb == null
+                          sellGhsPerRmb == null
                               ? 'RMB → GHS: not published'
-                              : 'RMB → GHS · 1 RMB = \$${sellUsdPerRmb.toStringAsFixed(4)}'
-                                  '${sellGhsPerUsd == null ? '' : ' · 1 USD = GH₵${sellGhsPerUsd.toStringAsFixed(2)}'}',
+                              : 'RMB → GHS · 1 RMB = GH₵${sellGhsPerRmb.toStringAsFixed(4)}',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
                         ),
                       ],
@@ -186,14 +199,20 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
-                      onPressed: _openSelected,
+                      onPressed: selectedIsPaused ? null : _openSelected,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0F766E),
+                        disabledBackgroundColor: const Color(0xFF9CA3AF),
                         foregroundColor: Colors.white,
+                        disabledForegroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       ),
                       child: Text(
-                        selectedType == 'buy' ? 'Continue · Buy RMB' : 'Continue · Sell RMB',
+                        selectedIsPaused
+                            ? (selectedType == 'buy'
+                                ? 'GHS → RMB is paused'
+                                : 'RMB → GHS is paused')
+                            : (selectedType == 'buy' ? 'Continue · Buy RMB' : 'Continue · Sell RMB'),
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),
@@ -306,6 +325,16 @@ class _ExchangeTypeCard extends StatelessWidget {
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     color: Colors.amber.shade800,
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Live',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF047857),
                   ),
                 ),
               ],

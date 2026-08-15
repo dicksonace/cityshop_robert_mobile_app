@@ -25,6 +25,7 @@ import '../screens/chat/friend_chat_screens.dart';
 import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
 import '../screens/shop/shop_shell.dart';
+import '../screens/seller/seller_shell_screen.dart';
 import '../screens/wallet/qr_pay_screens.dart';
 import '../api/api_config.dart';
 import '../screens/live/watch_live_screen.dart';
@@ -129,6 +130,7 @@ GoRouter createRouter(AppStore store) {
           initialTab: _shellTabs[state.uri.queryParameters['tab']] ?? 0,
         ),
       ),
+      GoRoute(path: '/seller', builder: (_, __) => const SellerShellScreen()),
       GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
       GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
       GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
@@ -308,14 +310,27 @@ GoRouter createRouter(AppStore store) {
         }
         if (loc == '/splash') return null;
         // Allow Skip intro / forced entry into the main shell.
-        if (loc == '/shop' || loc.startsWith('/shop')) return null;
+        if (loc == '/shop' || loc.startsWith('/shop') || loc == '/seller') return null;
         return '/splash';
       }
 
       if (loc == '/splash') {
         final pending = pendingAfterBoot;
         pendingAfterBoot = null;
-        return pending ?? '/shop';
+        return pending ?? store.homePath;
+      }
+
+      // Role-aware shells: sellers stay in Seller Hub; buyers in shop.
+      if (store.isLoggedIn && store.isSeller) {
+        if (loc == '/shop' || loc.startsWith('/shop')) {
+          return '/seller';
+        }
+      } else if (store.isLoggedIn && !store.isSeller) {
+        if (loc == '/seller' || loc.startsWith('/seller/')) {
+          return '/shop';
+        }
+      } else if (!store.isLoggedIn && (loc == '/seller' || loc.startsWith('/seller/'))) {
+        return '/login';
       }
 
       return null;
