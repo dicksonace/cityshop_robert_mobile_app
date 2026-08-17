@@ -76,8 +76,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_bootstrap()));
   }
 
-  /// Always release the router lock, then open the shop.
-  /// Without [AppStore.finishBoot], Skip intro / timeout navigated to /shop and
+  /// Always release the router lock, then open the seller hub or shop.
+  /// Without [AppStore.finishBoot], Skip intro / timeout navigated away and
   /// the redirect bounced straight back to splash — looked like a freeze.
   void _enterApp() {
     if (_entered || !mounted) return;
@@ -85,7 +85,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     final store = context.read<AppStore>();
     store.finishBoot();
     if (mounted) setState(() => _ready = true);
-    context.go('/shop');
+    context.go(store.homePath);
   }
 
   Future<void> _bootstrap() async {

@@ -23,6 +23,7 @@ class AppTheme {
       useMaterial3: true,
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: ColorScheme.fromSeed(
+        brightness: Brightness.light,
         seedColor: AppColors.primary,
         primary: AppColors.primary,
         secondary: AppColors.accent,

@@ -220,6 +220,7 @@ class _SellerProductsTabState extends State<SellerProductsTab> with AutoRefreshT
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      primary: false,
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(selecting ? '${selected.length} selected' : 'Products'),

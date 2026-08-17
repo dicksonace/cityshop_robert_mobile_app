@@ -80,6 +80,8 @@ class _CityShopAppState extends State<CityShopApp> with WidgetsBindingObserver {
         title: 'CityShop',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
+        darkTheme: AppTheme.light,
+        themeMode: ThemeMode.light,
         routerConfig: router,
       ),
     );

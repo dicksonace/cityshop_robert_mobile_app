@@ -135,6 +135,7 @@ class _SellerOrdersTabState extends State<SellerOrdersTab> with AutoRefreshTab {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      primary: false,
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Orders')),
       body: Column(

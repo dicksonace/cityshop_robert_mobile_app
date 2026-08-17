@@ -9,7 +9,6 @@ import '../../screens/account/wallet_orders_screens.dart';
 import '../../screens/chat/messages_screens.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/common_widgets.dart';
 import '../../widgets/tab_refresh.dart';
 import 'seller_orders_screens.dart';
 import 'seller_products_screens.dart';
@@ -90,50 +89,94 @@ class _SellerShellScreenState extends State<SellerShellScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: ActiveTab(
-        index: _tab,
-        child: IndexedStack(
+      body: SafeArea(
+        bottom: false,
+        child: ActiveTab(
           index: _tab,
-          children: [
-            _OverviewTab(
-              loading: loading,
-              error: error,
-              dashboard: dashboard,
-              storeName: storeName,
-              onRefresh: _load,
-              onLogout: _logout,
-              onOpenOrders: _openOrders,
-              onOpenOrder: (id) => context.push('/seller/orders/$id'),
-              onOpenProducts: () => setState(() => _tab = 2),
-              onOpenWallet: () => setState(() => _tab = 3),
-              onOpenPayments: () => context.push('/seller/payment-methods'),
-              onOpenStore: () async {
-                final url = dashboard['store_url'] as String?;
-                if (url == null || url.isEmpty) return;
-                final uri = Uri.tryParse(url);
-                if (uri == null) return;
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
-            ),
-            SellerOrdersTab(initialStage: _ordersStage),
-            const SellerProductsTab(),
-            const SafeArea(bottom: false, child: WalletTab(shellTabIndex: 3)),
-            const SafeArea(bottom: false, child: MessagesTab(shellTabIndex: 4)),
-          ],
+          child: IndexedStack(
+            index: _tab,
+            children: [
+              _OverviewTab(
+                loading: loading,
+                error: error,
+                dashboard: dashboard,
+                storeName: storeName,
+                onRefresh: _load,
+                onLogout: _logout,
+                onOpenOrders: _openOrders,
+                onOpenOrder: (id) => context.push('/seller/orders/$id'),
+                onOpenProducts: () => setState(() => _tab = 2),
+                onOpenWallet: () => setState(() => _tab = 3),
+                onOpenPayments: () => context.push('/seller/payment-methods'),
+                onOpenStore: () async {
+                  final url = dashboard['store_url'] as String?;
+                  if (url == null || url.isEmpty) return;
+                  final uri = Uri.tryParse(url);
+                  if (uri == null) return;
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+              ),
+              SellerOrdersTab(initialStage: _ordersStage),
+              const SellerProductsTab(),
+              const SafeArea(bottom: false, child: WalletTab(shellTabIndex: 3)),
+              const SafeArea(bottom: false, child: MessagesTab(shellTabIndex: 4)),
+            ],
+          ),
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) {
-          setState(() => _tab = i);
-        },
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
-          NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Products'),
-          NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet), label: 'Wallet'),
-          NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: 'Messages'),
-        ],
+      bottomNavigationBar: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          indicatorColor: AppColors.accent,
+          indicatorShape: const CircleBorder(),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            final active = states.contains(WidgetState.selected);
+            return TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: active ? AppColors.accent : AppColors.textSecondary,
+            );
+          }),
+        ),
+        child: ColoredBox(
+          color: Colors.white,
+          child: SafeArea(
+            top: false,
+            maintainBottomViewPadding: true,
+            child: NavigationBar(
+              selectedIndex: _tab,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              height: 68,
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              destinations: [
+                NavigationDestination(
+                  icon: Icon(Icons.dashboard_outlined, color: _tab == 0 ? Colors.white : AppColors.textSecondary),
+                  selectedIcon: Icon(Icons.dashboard, color: _tab == 0 ? Colors.white : AppColors.textSecondary),
+                  label: 'Home',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.receipt_long_outlined, color: _tab == 1 ? Colors.white : AppColors.textSecondary),
+                  selectedIcon: Icon(Icons.receipt_long, color: _tab == 1 ? Colors.white : AppColors.textSecondary),
+                  label: 'Orders',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.inventory_2_outlined, color: _tab == 2 ? Colors.white : AppColors.textSecondary),
+                  selectedIcon: Icon(Icons.inventory_2, color: _tab == 2 ? Colors.white : AppColors.textSecondary),
+                  label: 'Products',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.account_balance_wallet_outlined, color: _tab == 3 ? Colors.white : AppColors.textSecondary),
+                  selectedIcon: Icon(Icons.account_balance_wallet, color: _tab == 3 ? Colors.white : AppColors.textSecondary),
+                  label: 'Wallet',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.chat_bubble_outline, color: _tab == 4 ? Colors.white : AppColors.textSecondary),
+                  selectedIcon: Icon(Icons.chat_bubble, color: _tab == 4 ? Colors.white : AppColors.textSecondary),
+                  label: 'Messages',
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -186,49 +229,46 @@ class _OverviewTab extends StatelessWidget {
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
+    final tips = (health['tips'] as List? ?? []).take(3).map((tip) => '$tip').toList();
 
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            title: const Text('Seller Hub'),
-            actions: [
-              IconButton(
-                tooltip: 'View store',
-                onPressed: onOpenStore,
-                icon: const Icon(Icons.storefront_outlined),
+    return ColoredBox(
+      color: AppColors.background,
+      child: Column(
+        children: [
+          Material(
+            color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Seller Hub',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'View store',
+                    onPressed: onOpenStore,
+                    icon: const Icon(Icons.storefront_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Log out',
+                    onPressed: onLogout,
+                    icon: const Icon(Icons.logout),
+                  ),
+                ],
               ),
-              IconButton(
-                tooltip: 'Log out',
-                onPressed: onLogout,
-                icon: const Icon(Icons.logout),
-              ),
-            ],
+            ),
           ),
-          if (loading)
-            const SliverFillRemaining(child: FullPageLoader(label: 'Loading dashboard…'))
-          else if (error != null)
-            SliverFillRemaining(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
-                    const SizedBox(height: 16),
-                    FilledButton(onPressed: onRefresh, child: const Text('Retry')),
-                  ],
-                ),
-              ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
+          if (loading) const LinearProgressIndicator(minHeight: 2),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: onRefresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                children: [
                   Text(
                     storeName,
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
@@ -238,6 +278,27 @@ class _OverviewTab extends StatelessWidget {
                     'Overview of sales, stock, and payouts',
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
+                  if (error != null) ...[
+                    const SizedBox(height: 12),
+                    Material(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(14),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          children: [
+                            Text(
+                              error!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 8),
+                            FilledButton(onPressed: onRefresh, child: const Text('Retry')),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                   if (profile['needs_activation'] == true) ...[
                     const SizedBox(height: 12),
                     Material(
@@ -255,33 +316,42 @@ class _OverviewTab extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(height: 16),
-                  GridView.count(
-                    crossAxisCount: 2,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 1.45,
+                  Row(
                     children: [
-                      _StatCard(
-                        label: 'Available',
-                        value: _money.format((stats['available_balance'] as num?)?.toDouble() ?? 0),
-                        onTap: onOpenWallet,
+                      Expanded(
+                        child: _StatCard(
+                          label: 'Available',
+                          value: _money.format((stats['available_balance'] as num?)?.toDouble() ?? 0),
+                          onTap: onOpenWallet,
+                        ),
                       ),
-                      _StatCard(
-                        label: 'Earnings',
-                        value: _money.format((stats['total_earnings'] as num?)?.toDouble() ?? 0),
-                        onTap: onOpenWallet,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatCard(
+                          label: 'Earnings',
+                          value: _money.format((stats['total_earnings'] as num?)?.toDouble() ?? 0),
+                          onTap: onOpenWallet,
+                        ),
                       ),
-                      _StatCard(
-                        label: 'Orders',
-                        value: '${(stats['total_orders'] as num?)?.toInt() ?? 0}',
-                        onTap: () => onOpenOrders(),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _StatCard(
+                          label: 'Orders',
+                          value: '${(stats['total_orders'] as num?)?.toInt() ?? 0}',
+                          onTap: () => onOpenOrders(),
+                        ),
                       ),
-                      _StatCard(
-                        label: 'Live products',
-                        value: '${(stats['live_products'] as num?)?.toInt() ?? 0}',
-                        onTap: onOpenProducts,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _StatCard(
+                          label: 'Live products',
+                          value: '${(stats['live_products'] as num?)?.toInt() ?? 0}',
+                          onTap: onOpenProducts,
+                        ),
                       ),
                     ],
                   ),
@@ -331,14 +401,14 @@ class _OverviewTab extends StatelessWidget {
                           color: const Color(0xFF0F766E),
                           backgroundColor: const Color(0xFFE5E7EB),
                         ),
-                        if ((health['tips'] as List?)?.isNotEmpty == true) ...[
+                        if (tips.isNotEmpty) ...[
                           const SizedBox(height: 10),
-                          ...(health['tips'] as List).take(3).map(
-                                (tip) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Text('• $tip', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                                ),
-                              ),
+                          ...tips.map(
+                            (tip) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text('• $tip', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                            ),
+                          ),
                         ],
                         const SizedBox(height: 8),
                         TextButton(
@@ -412,9 +482,10 @@ class _OverviewTab extends StatelessWidget {
                       },
                     );
                   }),
-                ]),
+                ],
               ),
             ),
+          ),
         ],
       ),
     );
@@ -448,7 +519,11 @@ class _StatCard extends StatelessWidget {
             children: [
               Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
-              Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+              ),
             ],
           ),
         ),
