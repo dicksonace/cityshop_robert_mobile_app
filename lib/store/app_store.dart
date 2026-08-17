@@ -439,6 +439,456 @@ class AppStore extends ChangeNotifier {
     return {};
   }
 
+  Future<Map<String, dynamic>> loadSellerOrders({
+    String stage = 'all',
+    int page = 1,
+    int perPage = 20,
+  }) async {
+    final res = await _api.get('/seller/orders', query: {
+      'stage': stage,
+      'page': page,
+      'per_page': perPage,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> loadSellerOrder(int id) async {
+    final res = await _api.get('/seller/orders/$id');
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return body;
+  }
+
+  Future<Map<String, dynamic>> updateSellerOrder(
+    int id, {
+    String? status,
+    String? vehicleNumber,
+    String? driverPhone,
+    String? packageImagePath,
+  }) async {
+    final fields = <String, dynamic>{
+      if (status != null) 'status': status,
+      if (vehicleNumber != null) 'vehicle_number': vehicleNumber,
+      if (driverPhone != null) 'driver_phone': driverPhone,
+    };
+    if (packageImagePath != null && packageImagePath.isNotEmpty) {
+      final res = await _api.postForm(
+        '/seller/orders/$id',
+        {...fields, 'package_image': packageImagePath},
+        fileFields: const ['package_image'],
+      );
+      return Map<String, dynamic>.from(res.data as Map);
+    }
+    final res = await _api.post('/seller/orders/$id', data: fields);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> rejectSellerOrder(
+    int id, {
+    required String cancellationCode,
+    String? reason,
+  }) async {
+    final res = await _api.post('/seller/orders/$id/reject', data: {
+      'cancellation_code': cancellationCode,
+      if (reason != null && reason.trim().isNotEmpty) 'rejection_reason': reason.trim(),
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> confirmSellerDirectPayment(int orderItemId) async {
+    final res = await _api.post('/seller/orders/$orderItemId/confirm-direct-payment');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> rejectSellerDirectPayment(int orderItemId, String reason) async {
+    final res = await _api.post('/seller/orders/$orderItemId/reject-direct-payment', data: {
+      'reason': reason,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> loadSellerProducts({
+    String? status,
+    String? search,
+    int page = 1,
+    int perPage = 20,
+  }) async {
+    final res = await _api.get('/seller/products', query: {
+      if (status != null && status.isNotEmpty) 'status': status,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      'page': page,
+      'per_page': perPage,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> loadSellerProduct(int id) async {
+    final res = await _api.get('/seller/products/$id');
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    if (data is Map) return Map<String, dynamic>.from(data);
+    return body;
+  }
+
+  Future<Map<String, dynamic>> createSellerProduct({
+    required String name,
+    required double price,
+    required int quantity,
+    String? description,
+    int? categoryId,
+    double? discountPrice,
+    required List<String> imagePaths,
+    String? videoPath,
+    int? videoDuration,
+    Map<String, dynamic> listing = const {},
+  }) async {
+    final data = <String, dynamic>{
+      'name': name,
+      'price': price,
+      'quantity': quantity,
+      if (description != null && description.trim().isNotEmpty) 'description': description.trim(),
+      if (categoryId != null) 'category_id': categoryId,
+      if (discountPrice != null) 'discount_price': discountPrice,
+      'image_count': imagePaths.length,
+      if (videoDuration != null) 'video_duration': videoDuration,
+      ..._flattenSellerListing(listing, form: true),
+    };
+    final fileFields = <String>[];
+    for (var i = 0; i < imagePaths.length; i++) {
+      data['images[$i]'] = imagePaths[i];
+      fileFields.add('images[$i]');
+    }
+    if (videoPath != null) {
+      data['video'] = videoPath;
+      fileFields.add('video');
+    }
+    final res = await _api.postForm('/seller/products', data, fileFields: fileFields);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateSellerProduct(
+    int id, {
+    String? name,
+    String? description,
+    double? price,
+    double? discountPrice,
+    int? quantity,
+    int? categoryId,
+    Map<String, dynamic> listing = const {},
+    List<int> removeImageIds = const [],
+  }) async {
+    final res = await _api.patch('/seller/products/$id', data: {
+      if (name != null) 'name': name,
+      if (description != null) 'description': description,
+      if (price != null) 'price': price,
+      if (discountPrice != null) 'discount_price': discountPrice,
+      if (quantity != null) 'quantity': quantity,
+      if (categoryId != null) 'category_id': categoryId,
+      ..._flattenSellerListing(listing, form: false),
+      if (removeImageIds.isNotEmpty) 'remove_image_ids': removeImageIds,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> uploadSellerProductImages(int id, List<String> imagePaths) async {
+    final data = <String, dynamic>{};
+    final fileFields = <String>[];
+    for (var i = 0; i < imagePaths.length; i++) {
+      data['images[$i]'] = imagePaths[i];
+      fileFields.add('images[$i]');
+    }
+    final res = await _api.postForm('/seller/products/$id/images', data, fileFields: fileFields);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> bulkSellerProducts({
+    required String action,
+    required List<int> productIds,
+    int? categoryId,
+  }) async {
+    final res = await _api.post('/seller/products/bulk', data: {
+      'action': action,
+      'product_ids': productIds,
+      if (categoryId != null) 'category_id': categoryId,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Map<String, dynamic> _flattenSellerListing(Map<String, dynamic> listing, {required bool form}) {
+    final out = <String, dynamic>{};
+    listing.forEach((key, value) {
+      if (value == null) return;
+      if (key == 'specifications' && value is Map) {
+        if (form) {
+          value.forEach((specKey, specValue) {
+            if (specValue != null && specValue.toString().trim().isNotEmpty) {
+              out['specifications[$specKey]'] = specValue.toString();
+            }
+          });
+        } else {
+          out['specifications'] = value;
+        }
+        return;
+      }
+      if (value is bool && form) {
+        out[key] = value ? 1 : 0;
+        return;
+      }
+      out[key] = value;
+    });
+    return out;
+  }
+
+  Future<Map<String, dynamic>> toggleSellerProductVisibility(int id) async {
+    final res = await _api.post('/seller/products/$id/visibility');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> deleteSellerProduct(int id) async {
+    await _api.delete('/seller/products/$id');
+  }
+
+  Future<Map<String, dynamic>> loadSellerPaymentMethods() async {
+    final res = await _api.get('/seller/payment-methods');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateSellerPaymentSettings({
+    required bool acceptMarketplace,
+    required bool acceptDirect,
+    required bool cashOnDelivery,
+  }) async {
+    final res = await _api.patch('/seller/payment-methods/settings', data: {
+      'accept_marketplace_payments': acceptMarketplace,
+      'accept_direct_payments': acceptDirect,
+      'cash_on_delivery_enabled': cashOnDelivery,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> addSellerPaymentMethod({
+    required String type,
+    required String accountName,
+    required String accountNumber,
+    String? network,
+    String? bankName,
+    String? label,
+    bool isDefault = false,
+  }) async {
+    final res = await _api.post('/seller/payment-methods', data: {
+      'type': type,
+      'account_name': accountName,
+      'account_number': accountNumber,
+      if (network != null) 'network': network,
+      if (bankName != null) 'bank_name': bankName,
+      if (label != null && label.trim().isNotEmpty) 'label': label.trim(),
+      'is_default': isDefault,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> deleteSellerPaymentMethod(int id) async {
+    final res = await _api.delete('/seller/payment-methods/$id');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> duplicateSellerProduct(int id) async {
+    final res = await _api.post('/seller/products/$id/duplicate');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> loadSellerProductAnalytics(int id) async {
+    final res = await _api.get('/seller/products/$id/analytics');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> uploadSellerProductVideo(
+    int id, {
+    required String filePath,
+    int? duration,
+    String filename = 'product.mp4',
+  }) async {
+    final res = await _api.postForm(
+      '/seller/products/$id/video',
+      {
+        'video': filePath,
+        if (duration != null) 'video_duration': duration,
+      },
+      fileFields: const ['video'],
+      filenames: {'video': filename},
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> loadSellerReviews({String filter = 'all', int page = 1}) async {
+    final res = await _api.get('/seller/reviews', query: {
+      'filter': filter,
+      'page': page,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> replySellerReview(int id, String reply) async {
+    final res = await _api.post('/seller/reviews/$id/reply', data: {
+      'seller_reply': reply,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> loadSellerPromotions({int page = 1}) async {
+    final res = await _api.get('/seller/promotions', query: {'page': page});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> createSellerPromotion(Map<String, dynamic> payload) async {
+    final res = await _api.post('/seller/promotions', data: payload);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateSellerPromotion(int id, {required bool isActive}) async {
+    final res = await _api.patch('/seller/promotions/$id', data: {'is_active': isActive});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> deleteSellerPromotion(int id) async {
+    await _api.delete('/seller/promotions/$id');
+  }
+
+  Future<Map<String, dynamic>> loadSellerFollowers({int page = 1}) async {
+    final res = await _api.get('/seller/followers', query: {'page': page});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> loadSellerRefunds({String status = 'open', int page = 1}) async {
+    final res = await _api.get('/seller/refunds', query: {
+      'status': status,
+      'page': page,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> loadSellerStore() async {
+    final res = await _api.get('/seller/store');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateSellerStore({
+    String? storeName,
+    String? description,
+    String? slogan,
+    String? preset,
+    bool? announcementEnabled,
+    String? announcementText,
+    bool? promoEnabled,
+    String? promoText,
+    String? socialFacebook,
+    String? socialInstagram,
+    String? website,
+    Map<String, bool>? sectionsEnabled,
+    List<String>? removeHeroPaths,
+    bool removePromoImage = false,
+  }) async {
+    final res = await _api.patch('/seller/store', data: {
+      if (storeName != null) 'store_name': storeName,
+      if (description != null) 'description': description,
+      if (slogan != null) 'slogan': slogan,
+      if (preset != null) 'preset': preset,
+      if (announcementEnabled != null) 'announcement_enabled': announcementEnabled,
+      if (announcementText != null) 'announcement_text': announcementText,
+      if (promoEnabled != null) 'promo_enabled': promoEnabled,
+      if (promoText != null) 'promo_text': promoText,
+      if (socialFacebook != null) 'social_facebook': socialFacebook,
+      if (socialInstagram != null) 'social_instagram': socialInstagram,
+      if (website != null) 'website': website,
+      if (sectionsEnabled != null) 'sections_enabled': sectionsEnabled,
+      if (removeHeroPaths != null && removeHeroPaths.isNotEmpty) 'remove_hero_paths': removeHeroPaths,
+      if (removePromoImage) 'remove_promo_image': true,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> uploadSellerStoreHero(List<String> paths) async {
+    final data = <String, dynamic>{};
+    final fileFields = <String>[];
+    for (var i = 0; i < paths.length; i++) {
+      data['hero_images[$i]'] = paths[i];
+      fileFields.add('hero_images[$i]');
+    }
+    final res = await _api.postForm('/seller/store/hero', data, fileFields: fileFields);
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> uploadSellerStorePromo(String path) async {
+    final res = await _api.postMultipart(
+      '/seller/store/promo',
+      fields: const {},
+      fileField: 'promo_image',
+      filePath: path,
+      filename: 'promo.jpg',
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> loadSellerAccount() async {
+    final res = await _api.get('/seller/account');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateSellerOrderSms({
+    String? mobile1,
+    String? mobile2,
+  }) async {
+    final res = await _api.patch('/seller/account/order-sms', data: {
+      'order_sms_mobile_1': mobile1 ?? '',
+      'order_sms_mobile_2': mobile2 ?? '',
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> paySellerActivation(String paymentPin) async {
+    final res = await _api.post('/seller/activation/pay', data: {
+      'payment_pin': paymentPin,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> uploadSellerStoreLogo(String path) async {
+    final res = await _api.postMultipart(
+      '/seller/store/logo',
+      fields: const {},
+      fileField: 'logo',
+      filePath: path,
+      filename: 'logo.jpg',
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> uploadSellerStoreCover(String path) async {
+    final res = await _api.postMultipart(
+      '/seller/store/cover',
+      fields: const {},
+      fileField: 'cover',
+      filePath: path,
+      filename: 'cover.jpg',
+    );
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> publishSellerStore() async {
+    final res = await _api.post('/seller/store/publish');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> completeSellerStoreSetup() async {
+    final res = await _api.post('/seller/store/complete-setup');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<List<int>> downloadSellerOrderPdf(int id) {
+    return _api.getBytes('/seller/orders/$id/pdf');
+  }
+
   Future<Map<String, dynamic>> forgotPassword({
     required String login,
     String via = 'email',

@@ -5,9 +5,14 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
+import '../../screens/account/wallet_orders_screens.dart';
+import '../../screens/chat/messages_screens.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/tab_refresh.dart';
+import 'seller_orders_screens.dart';
+import 'seller_products_screens.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
@@ -20,6 +25,7 @@ class SellerShellScreen extends StatefulWidget {
 
 class _SellerShellScreenState extends State<SellerShellScreen> {
   int _tab = 0;
+  String _ordersStage = 'all';
   bool loading = true;
   String? error;
   Map<String, dynamic> dashboard = {};
@@ -57,13 +63,11 @@ class _SellerShellScreenState extends State<SellerShellScreen> {
     }
   }
 
-  void _comingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature is coming soon in the app. Use the web Seller Hub for now.'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  void _openOrders({String stage = 'all'}) {
+    setState(() {
+      _tab = 1;
+      _ordersStage = stage;
+    });
   }
 
   Future<void> _logout() async {
@@ -86,53 +90,37 @@ class _SellerShellScreenState extends State<SellerShellScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: IndexedStack(
+      body: ActiveTab(
         index: _tab,
-        children: [
-          _OverviewTab(
-            loading: loading,
-            error: error,
-            dashboard: dashboard,
-            storeName: storeName,
-            onRefresh: _load,
-            onComingSoon: _comingSoon,
-            onLogout: _logout,
-            onOpenStore: () async {
-              final url = dashboard['store_url'] as String?;
-              if (url == null || url.isEmpty) {
-                _comingSoon('Store page');
-                return;
-              }
-              final uri = Uri.tryParse(url);
-              if (uri == null) return;
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            },
-          ),
-          _PlaceholderTab(
-            title: 'Orders',
-            subtitle: 'Manage your sales pipeline on web for now.',
-            onRefresh: _load,
-            onComingSoon: () => _comingSoon('Orders'),
-          ),
-          _PlaceholderTab(
-            title: 'Products',
-            subtitle: 'Product tools are coming to the app next.',
-            onRefresh: _load,
-            onComingSoon: () => _comingSoon('Products'),
-          ),
-          _PlaceholderTab(
-            title: 'Wallet',
-            subtitle: 'Wallet & withdrawals stay on web Seller Hub for now.',
-            onRefresh: _load,
-            onComingSoon: () => _comingSoon('Wallet'),
-          ),
-          _PlaceholderTab(
-            title: 'Messages',
-            subtitle: 'Open Messages from Account soon — use web inbox for now.',
-            onRefresh: _load,
-            onComingSoon: () => _comingSoon('Messages'),
-          ),
-        ],
+        child: IndexedStack(
+          index: _tab,
+          children: [
+            _OverviewTab(
+              loading: loading,
+              error: error,
+              dashboard: dashboard,
+              storeName: storeName,
+              onRefresh: _load,
+              onLogout: _logout,
+              onOpenOrders: _openOrders,
+              onOpenOrder: (id) => context.push('/seller/orders/$id'),
+              onOpenProducts: () => setState(() => _tab = 2),
+              onOpenWallet: () => setState(() => _tab = 3),
+              onOpenPayments: () => context.push('/seller/payment-methods'),
+              onOpenStore: () async {
+                final url = dashboard['store_url'] as String?;
+                if (url == null || url.isEmpty) return;
+                final uri = Uri.tryParse(url);
+                if (uri == null) return;
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+            ),
+            SellerOrdersTab(initialStage: _ordersStage),
+            const SellerProductsTab(),
+            const SafeArea(bottom: false, child: WalletTab(shellTabIndex: 3)),
+            const SafeArea(bottom: false, child: MessagesTab(shellTabIndex: 4)),
+          ],
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
@@ -158,9 +146,13 @@ class _OverviewTab extends StatelessWidget {
     required this.dashboard,
     required this.storeName,
     required this.onRefresh,
-    required this.onComingSoon,
     required this.onLogout,
     required this.onOpenStore,
+    required this.onOpenOrders,
+    required this.onOpenOrder,
+    required this.onOpenProducts,
+    required this.onOpenWallet,
+    required this.onOpenPayments,
   });
 
   final bool loading;
@@ -168,12 +160,19 @@ class _OverviewTab extends StatelessWidget {
   final Map<String, dynamic> dashboard;
   final String storeName;
   final Future<void> Function() onRefresh;
-  final void Function(String feature) onComingSoon;
   final Future<void> Function() onLogout;
   final Future<void> Function() onOpenStore;
+  final void Function({String stage}) onOpenOrders;
+  final void Function(int id) onOpenOrder;
+  final VoidCallback onOpenProducts;
+  final VoidCallback onOpenWallet;
+  final VoidCallback onOpenPayments;
 
   @override
   Widget build(BuildContext context) {
+    final profile = dashboard['profile'] is Map
+        ? Map<String, dynamic>.from(dashboard['profile'] as Map)
+        : <String, dynamic>{};
     final stats = dashboard['stats'] is Map
         ? Map<String, dynamic>.from(dashboard['stats'] as Map)
         : <String, dynamic>{};
@@ -236,9 +235,25 @@ class _OverviewTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Overview · more tools coming soon',
+                    'Overview of sales, stock, and payouts',
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
+                  if (profile['needs_activation'] == true) ...[
+                    const SizedBox(height: 12),
+                    Material(
+                      color: const Color(0xFFFFF7ED),
+                      borderRadius: BorderRadius.circular(14),
+                      child: ListTile(
+                        title: Text(
+                          'Pay GH₵${((profile['activation_fee'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)} seller fee',
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        subtitle: const Text('Your store stays hidden from buyers until this is paid.'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/seller/activation'),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   GridView.count(
                     crossAxisCount: 2,
@@ -251,18 +266,22 @@ class _OverviewTab extends StatelessWidget {
                       _StatCard(
                         label: 'Available',
                         value: _money.format((stats['available_balance'] as num?)?.toDouble() ?? 0),
+                        onTap: onOpenWallet,
                       ),
                       _StatCard(
                         label: 'Earnings',
                         value: _money.format((stats['total_earnings'] as num?)?.toDouble() ?? 0),
+                        onTap: onOpenWallet,
                       ),
                       _StatCard(
                         label: 'Orders',
                         value: '${(stats['total_orders'] as num?)?.toInt() ?? 0}',
+                        onTap: () => onOpenOrders(),
                       ),
                       _StatCard(
                         label: 'Live products',
                         value: '${(stats['live_products'] as num?)?.toInt() ?? 0}',
+                        onTap: onOpenProducts,
                       ),
                     ],
                   ),
@@ -274,17 +293,18 @@ class _OverviewTab extends StatelessWidget {
                     runSpacing: 8,
                     children: [
                       for (final entry in [
-                        ('Pending', pipeline['pending']),
-                        ('Processing', pipeline['processing']),
-                        ('Packed', pipeline['packed']),
-                        ('Shipped', pipeline['shipped']),
-                        ('Awaiting', pipeline['awaiting_confirmation']),
-                        ('Delivered', pipeline['delivered']),
+                        ('Pending', 'new', pipeline['pending']),
+                        ('Processing', 'processing', pipeline['processing']),
+                        ('Packed', 'packing', pipeline['packed']),
+                        ('Shipped', 'delivery', pipeline['shipped']),
+                        ('Awaiting', 'awaiting', pipeline['awaiting_confirmation']),
+                        ('Delivered', 'completed', pipeline['delivered']),
                       ])
-                        Chip(
-                          label: Text('${entry.$1}: ${(entry.$2 as num?)?.toInt() ?? 0}'),
+                        ActionChip(
+                          label: Text('${entry.$1}: ${(entry.$3 as num?)?.toInt() ?? 0}'),
                           backgroundColor: Colors.white,
                           side: const BorderSide(color: AppColors.border),
+                          onPressed: () => onOpenOrders(stage: entry.$2),
                         ),
                     ],
                   ),
@@ -320,8 +340,30 @@ class _OverviewTab extends StatelessWidget {
                                 ),
                               ),
                         ],
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: onOpenPayments,
+                          child: const Text('Payment methods'),
+                        ),
                       ],
                     ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text('More tools', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ActionChip(label: const Text('Store look'), onPressed: () => context.push('/seller/store')),
+                      ActionChip(label: const Text('Reviews'), onPressed: () => context.push('/seller/reviews')),
+                      ActionChip(label: const Text('Promotions'), onPressed: () => context.push('/seller/promotions')),
+                      ActionChip(label: const Text('Followers'), onPressed: () => context.push('/seller/followers')),
+                      ActionChip(label: const Text('Refunds'), onPressed: () => context.push('/seller/refunds')),
+                      ActionChip(label: const Text('Payment methods'), onPressed: onOpenPayments),
+                      ActionChip(label: const Text('Seller fee'), onPressed: () => context.push('/seller/activation')),
+                      ActionChip(label: const Text('Order SMS'), onPressed: () => context.push('/seller/order-sms')),
+                    ],
                   ),
                   const SizedBox(height: 18),
                   Row(
@@ -330,7 +372,7 @@ class _OverviewTab extends StatelessWidget {
                         child: Text('Recent orders', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                       ),
                       TextButton(
-                        onPressed: () => onComingSoon('Orders'),
+                        onPressed: () => onOpenOrders(),
                         child: const Text('See all'),
                       ),
                     ],
@@ -364,7 +406,10 @@ class _OverviewTab extends StatelessWidget {
                         _money.format((item['amount'] as num?)?.toDouble() ?? 0),
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
-                      onTap: () => onComingSoon('Order details'),
+                      onTap: () {
+                        final id = (item['id'] as num?)?.toInt() ?? 0;
+                        if (id > 0) onOpenOrder(id);
+                      },
                     );
                   }),
                 ]),
@@ -377,62 +422,36 @@ class _OverviewTab extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value});
+  const _StatCard({required this.label, required this.value, this.onTap});
 
   final String label;
   final String value;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-        ],
-      ),
-    );
-  }
-}
-
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({
-    required this.title,
-    required this.subtitle,
-    required this.onRefresh,
-    required this.onComingSoon,
-  });
-
-  final String title;
-  final String subtitle;
-  final Future<void> Function() onRefresh;
-  final VoidCallback onComingSoon;
-
-  @override
-  Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(24, 80, 24, 40),
-        children: [
-          Icon(Icons.construction_outlined, size: 56, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 8),
-          Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)),
-          const SizedBox(height: 20),
-          FilledButton(onPressed: onComingSoon, child: const Text('Coming soon')),
-        ],
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            ],
+          ),
+        ),
       ),
     );
   }

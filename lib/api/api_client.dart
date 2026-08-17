@@ -138,6 +138,18 @@ class ApiClient {
     );
   }
 
+  Future<List<int>> getBytes(String path) async {
+    final res = await _withRetry(
+      () => _dio.get(
+        path,
+        options: Options(responseType: ResponseType.bytes),
+      ),
+    );
+    final data = res.data;
+    if (data is List<int>) return data;
+    return <int>[];
+  }
+
   Future<Response<dynamic>> post(
     String path, {
     Object? data,

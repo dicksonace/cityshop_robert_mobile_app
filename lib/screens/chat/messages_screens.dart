@@ -44,7 +44,10 @@ final _dayFmt = DateFormat('EEE, MMM d');
 final _money = NumberFormat.currency(locale: 'en_GH', symbol: 'GH₵', decimalDigits: 2);
 
 class MessagesTab extends StatefulWidget {
-  const MessagesTab({super.key});
+  const MessagesTab({super.key, this.shellTabIndex = 3});
+
+  /// Bottom-nav slot this tab lives in. Buyer shop shell is 3; seller hub is 4.
+  final int shellTabIndex;
 
   @override
   State<MessagesTab> createState() => _MessagesTabState();
@@ -55,7 +58,7 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
   String? error;
 
   @override
-  int? get tabIndex => 3;
+  int? get tabIndex => widget.shellTabIndex;
 
   @override
   Future<void> refreshTabData({required bool background}) => _load(background: background);

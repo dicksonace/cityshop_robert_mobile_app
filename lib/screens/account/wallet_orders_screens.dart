@@ -58,7 +58,10 @@ enum _StatementPeriod {
 }
 
 class WalletTab extends StatefulWidget {
-  const WalletTab({super.key});
+  const WalletTab({super.key, this.shellTabIndex = 1});
+
+  /// Bottom-nav slot this tab lives in. Buyer shop shell is 1; seller hub is 3.
+  final int shellTabIndex;
 
   @override
   State<WalletTab> createState() => _WalletTabState();
@@ -77,7 +80,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
   bool buildingStatement = false;
 
   @override
-  int? get tabIndex => 1;
+  int? get tabIndex => widget.shellTabIndex;
 
   @override
   Future<void> refreshTabData({required bool background}) => _load(background: background);

@@ -26,6 +26,10 @@ import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
 import '../screens/shop/shop_shell.dart';
 import '../screens/seller/seller_shell_screen.dart';
+import '../screens/seller/seller_orders_screens.dart';
+import '../screens/seller/seller_products_screens.dart';
+import '../screens/seller/seller_payment_methods_screen.dart';
+import '../screens/seller/seller_hub_screens.dart';
 import '../screens/wallet/qr_pay_screens.dart';
 import '../api/api_config.dart';
 import '../screens/live/watch_live_screen.dart';
@@ -131,6 +135,33 @@ GoRouter createRouter(AppStore store) {
         ),
       ),
       GoRoute(path: '/seller', builder: (_, __) => const SellerShellScreen()),
+      GoRoute(
+        path: '/seller/orders/:id',
+        builder: (_, state) => SellerOrderDetailScreen(
+          orderItemId: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
+        ),
+      ),
+      GoRoute(path: '/seller/products/new', builder: (_, __) => const SellerProductFormScreen()),
+      GoRoute(
+        path: '/seller/products/:id/edit',
+        builder: (_, state) => SellerProductFormScreen(
+          productId: int.tryParse(state.pathParameters['id'] ?? ''),
+        ),
+      ),
+      GoRoute(path: '/seller/payment-methods', builder: (_, __) => const SellerPaymentMethodsScreen()),
+      GoRoute(path: '/seller/reviews', builder: (_, __) => const SellerReviewsScreen()),
+      GoRoute(path: '/seller/promotions', builder: (_, __) => const SellerPromotionsScreen()),
+      GoRoute(path: '/seller/followers', builder: (_, __) => const SellerFollowersScreen()),
+      GoRoute(path: '/seller/refunds', builder: (_, __) => const SellerRefundsScreen()),
+      GoRoute(path: '/seller/store', builder: (_, __) => const SellerStoreAppearanceScreen()),
+      GoRoute(path: '/seller/activation', builder: (_, __) => const SellerActivationScreen()),
+      GoRoute(path: '/seller/order-sms', builder: (_, __) => const SellerOrderSmsScreen()),
+      GoRoute(
+        path: '/seller/products/:id/analytics',
+        builder: (_, state) => SellerProductAnalyticsScreen(
+          productId: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
+        ),
+      ),
       GoRoute(path: '/cart', builder: (_, __) => const CartScreen()),
       GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
       GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
