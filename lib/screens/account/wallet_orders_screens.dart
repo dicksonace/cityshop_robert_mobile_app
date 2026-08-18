@@ -243,11 +243,50 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     }
   }
 
+  Future<bool> _ensureKycToStoreFunds() async {
+    final store = context.read<AppStore>();
+    try {
+      await store.loadKyc();
+    } on ApiException catch (_) {}
+    if (!mounted) return false;
+    if (store.user?.canStoreWalletFunds == true) return true;
+    final kyc = store.user?.kyc ?? const KycInfo();
+    await showAppSheet<void>(
+      context: context,
+      builder: (ctx) => SheetShell(
+        action: FilledButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            context.push('/kyc');
+          },
+          style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
+          child: Text(kyc.isPending ? 'View verification' : 'Verify Ghana Card', style: const TextStyle(fontWeight: FontWeight.w800)),
+        ),
+        children: [
+          Text(kyc.statusLabel, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+          const SizedBox(height: 8),
+          Text(
+            kyc.isPending
+                ? 'Admin is reviewing your Ghana Card. You can still buy items with Paystack.'
+                : 'Verify your Ghana Card before you recharge or store money in your wallet. Buying with Paystack is still allowed.',
+            style: const TextStyle(color: AppColors.textSecondary, height: 1.4),
+          ),
+          if ((kyc.adminNotes ?? '').isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(kyc.adminNotes!, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ],
+        ],
+      ),
+    );
+    return false;
+  }
+
   Future<void> _openRecharge({
     required bool paystackConfigured,
     required bool manualEnabled,
   }) async {
     if (!paystackConfigured && !manualEnabled) return;
+    if (!await _ensureKycToStoreFunds()) return;
 
     // Only one path available — skip the chooser.
     if (paystackConfigured && !manualEnabled) {
@@ -544,6 +583,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
 
   /// Manual deposit lives on its own page, mirroring the web flow.
   Future<void> _openManualDeposit() async {
+    if (!await _ensureKycToStoreFunds()) return;
     await context.push('/wallet/manual-deposit');
     if (mounted) await _load();
   }
@@ -678,6 +718,24 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
             const Text(
               'Recharge is unavailable right now.',
               style: TextStyle(color: Color(0xFFB45309), fontSize: 12),
+            ),
+          ],
+          if (!(store.user?.canStoreWalletFunds ?? false)) ...[
+            const SizedBox(height: 10),
+            Material(
+              color: const Color(0xFFFFF7ED),
+              borderRadius: BorderRadius.circular(14),
+              child: ListTile(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                leading: const Icon(Icons.badge_outlined, color: AppColors.accent),
+                title: Text(
+                  store.user?.kyc.statusLabel ?? 'Not verified',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: const Text('Verify your Ghana Card before you recharge your wallet.'),
+                trailing: const Text('ACTIVATE', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w900, fontSize: 12)),
+                onTap: () => context.push('/kyc'),
+              ),
             ),
           ],
           const SizedBox(height: 18),

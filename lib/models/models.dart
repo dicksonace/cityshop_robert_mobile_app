@@ -456,6 +456,7 @@ class AppUser {
     this.city,
     this.avatar,
     this.hasPaymentPin = false,
+    this.kyc = const KycInfo(),
     this.sellerStoreName,
     this.sellerSlug,
     this.sellerStatus,
@@ -472,6 +473,7 @@ class AppUser {
   final String? city;
   final String? avatar;
   final bool hasPaymentPin;
+  final KycInfo kyc;
   final String? sellerStoreName;
   final String? sellerSlug;
   final String? sellerStatus;
@@ -479,6 +481,7 @@ class AppUser {
 
   bool get isSeller => (role ?? '').toLowerCase() == 'seller';
   bool get isBuyer => (role ?? '').toLowerCase() == 'buyer';
+  bool get canStoreWalletFunds => kyc.canStoreFunds;
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
     final seller = json['seller'] is Map ? Map<String, dynamic>.from(json['seller'] as Map) : null;
@@ -493,10 +496,60 @@ class AppUser {
       city: json['city'] as String?,
       avatar: json['avatar'] as String?,
       hasPaymentPin: json['has_payment_pin'] == true,
+      kyc: KycInfo.fromJson(json['kyc'] is Map ? Map<String, dynamic>.from(json['kyc'] as Map) : const {}),
       sellerStoreName: seller?['store_name'] as String?,
       sellerSlug: seller?['slug'] as String?,
       sellerStatus: seller?['status'] as String?,
       sellerStoreSetupComplete: seller?['store_setup_complete'] == true,
+    );
+  }
+}
+
+class KycInfo {
+  const KycInfo({
+    this.id,
+    this.status = 'unverified',
+    this.statusLabel = 'Not verified',
+    this.canStoreFunds = false,
+    this.canSubmit = true,
+    this.ghanaCardNumber,
+    this.fullName,
+    this.adminNotes,
+    this.frontUrl,
+    this.backUrl,
+    this.selfieUrl,
+  });
+
+  final int? id;
+  final String status;
+  final String statusLabel;
+  final bool canStoreFunds;
+  final bool canSubmit;
+  final String? ghanaCardNumber;
+  final String? fullName;
+  final String? adminNotes;
+  final String? frontUrl;
+  final String? backUrl;
+  final String? selfieUrl;
+
+  bool get isVerified => status == 'approved';
+  bool get isPending => status == 'pending';
+  bool get needsImprovement => status == 'needs_improvement';
+  bool get isRejected => status == 'rejected';
+
+  factory KycInfo.fromJson(Map<String, dynamic> json) {
+    return KycInfo(
+      id: json['id'] as int?,
+      status: json['status'] as String? ?? 'unverified',
+      statusLabel: json['status_label'] as String? ?? 'Not verified',
+      canStoreFunds: json['can_store_funds'] == true,
+      canSubmit: json['can_submit'] != false,
+      ghanaCardNumber: json['ghana_card_number'] as String?,
+      fullName: json['full_name'] as String?,
+      adminNotes: json['admin_notes'] as String?,
+      frontUrl: json['front_url'] as String?,
+      backUrl: json['back_url'] as String?,
+      selfieUrl: json['selfie_url'] as String?,
     );
   }
 }

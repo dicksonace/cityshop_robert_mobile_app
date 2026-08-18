@@ -32,10 +32,13 @@ class _SellerShellScreenState extends State<SellerShellScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _load();
+    });
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       loading = true;
       error = null;
@@ -89,39 +92,34 @@ class _SellerShellScreenState extends State<SellerShellScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: _tab == 0
+          ? AppBar(
+              title: Text(storeName.isEmpty ? 'Seller Hub' : storeName),
+              actions: [
+                IconButton(
+                  tooltip: 'View store',
+                  onPressed: () async {
+                    final url = dashboard['store_url'] as String?;
+                    if (url == null || url.isEmpty) return;
+                    final uri = Uri.tryParse(url);
+                    if (uri == null) return;
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
+                  icon: const Icon(Icons.storefront_outlined),
+                ),
+                IconButton(
+                  tooltip: 'Log out',
+                  onPressed: _logout,
+                  icon: const Icon(Icons.logout),
+                ),
+              ],
+            )
+          : null,
       body: SafeArea(
         bottom: false,
         child: ActiveTab(
           index: _tab,
-          child: IndexedStack(
-            index: _tab,
-            children: [
-              _OverviewTab(
-                loading: loading,
-                error: error,
-                dashboard: dashboard,
-                storeName: storeName,
-                onRefresh: _load,
-                onLogout: _logout,
-                onOpenOrders: _openOrders,
-                onOpenOrder: (id) => context.push('/seller/orders/$id'),
-                onOpenProducts: () => setState(() => _tab = 2),
-                onOpenWallet: () => setState(() => _tab = 3),
-                onOpenPayments: () => context.push('/seller/payment-methods'),
-                onOpenStore: () async {
-                  final url = dashboard['store_url'] as String?;
-                  if (url == null || url.isEmpty) return;
-                  final uri = Uri.tryParse(url);
-                  if (uri == null) return;
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                },
-              ),
-              SellerOrdersTab(initialStage: _ordersStage),
-              const SellerProductsTab(),
-              const SafeArea(bottom: false, child: WalletTab(shellTabIndex: 3)),
-              const SafeArea(bottom: false, child: MessagesTab(shellTabIndex: 4)),
-            ],
-          ),
+          child: _tabBody(storeName),
         ),
       ),
       bottomNavigationBar: NavigationBarTheme(
@@ -180,6 +178,32 @@ class _SellerShellScreenState extends State<SellerShellScreen> {
       ),
     );
   }
+
+  Widget _tabBody(String storeName) {
+    switch (_tab) {
+      case 1:
+        return SellerOrdersTab(initialStage: _ordersStage);
+      case 2:
+        return const SellerProductsTab();
+      case 3:
+        return const SafeArea(bottom: false, child: WalletTab(shellTabIndex: 3));
+      case 4:
+        return const SafeArea(bottom: false, child: MessagesTab(shellTabIndex: 4));
+      default:
+        return _OverviewTab(
+          loading: loading,
+          error: error,
+          dashboard: dashboard,
+          storeName: storeName,
+          onRefresh: _load,
+          onOpenOrders: _openOrders,
+          onOpenOrder: (id) => context.push('/seller/orders/$id'),
+          onOpenProducts: () => setState(() => _tab = 2),
+          onOpenWallet: () => setState(() => _tab = 3),
+          onOpenPayments: () => context.push('/seller/payment-methods'),
+        );
+    }
+  }
 }
 
 class _OverviewTab extends StatelessWidget {
@@ -189,8 +213,6 @@ class _OverviewTab extends StatelessWidget {
     required this.dashboard,
     required this.storeName,
     required this.onRefresh,
-    required this.onLogout,
-    required this.onOpenStore,
     required this.onOpenOrders,
     required this.onOpenOrder,
     required this.onOpenProducts,
@@ -203,8 +225,6 @@ class _OverviewTab extends StatelessWidget {
   final Map<String, dynamic> dashboard;
   final String storeName;
   final Future<void> Function() onRefresh;
-  final Future<void> Function() onLogout;
-  final Future<void> Function() onOpenStore;
   final void Function({String stage}) onOpenOrders;
   final void Function(int id) onOpenOrder;
   final VoidCallback onOpenProducts;
@@ -231,53 +251,25 @@ class _OverviewTab extends StatelessWidget {
         .toList();
     final tips = (health['tips'] as List? ?? []).take(3).map((tip) => '$tip').toList();
 
-    return ColoredBox(
-      color: AppColors.background,
-      child: Column(
-        children: [
-          Material(
-            color: Colors.white,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Seller Hub',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'View store',
-                    onPressed: onOpenStore,
-                    icon: const Icon(Icons.storefront_outlined),
-                  ),
-                  IconButton(
-                    tooltip: 'Log out',
-                    onPressed: onLogout,
-                    icon: const Icon(Icons.logout),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (loading) const LinearProgressIndicator(minHeight: 2),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: onRefresh,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                children: [
-                  Text(
-                    storeName,
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Overview of sales, stock, and payouts',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                  ),
+    return Column(
+      children: [
+        if (loading) const LinearProgressIndicator(minHeight: 2),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: onRefresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              children: [
+                Text(
+                  storeName,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Overview of sales, stock, and payouts',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                ),
                   if (error != null) ...[
                     const SizedBox(height: 12),
                     Material(
@@ -487,7 +479,6 @@ class _OverviewTab extends StatelessWidget {
             ),
           ),
         ],
-      ),
     );
   }
 }
@@ -508,6 +499,7 @@ class _StatCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
+          height: 96,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -519,10 +511,11 @@ class _StatCard extends StatelessWidget {
             children: [
               Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
               ),
             ],
           ),

@@ -1623,6 +1623,7 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
       (Icons.location_on_outlined, 'Addresses', 'Saved delivery addresses', '/addresses'),
       (Icons.favorite_border, 'Wishlist', 'Saved products', '/wishlist'),
       (Icons.storefront_outlined, 'Following', 'Sellers you follow', '/following'),
+      (Icons.badge_outlined, 'Verification & PIN', 'Ghana Card KYC before wallet recharge', '/kyc'),
       (Icons.pin_outlined, 'Payment PIN', '4-digit code for wallet & transfers', '/profile/payment-pin'),
       (Icons.lock_outline, 'Change password', 'Account security', '/profile/password'),
       (Icons.shopping_cart_outlined, 'My cart', 'Review items before checkout', '/cart'),
@@ -1664,9 +1665,9 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
                         color: AppColors.ringOrange,
                         borderRadius: BorderRadius.circular(999),
                       ),
-                      child: const Text(
-                        'Buyer',
-                        style: TextStyle(color: AppColors.accent, fontSize: 11, fontWeight: FontWeight.w700),
+                      child: Text(
+                        user.kyc.isVerified ? 'Verified' : user.kyc.statusLabel,
+                        style: const TextStyle(color: AppColors.accent, fontSize: 11, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],

@@ -721,6 +721,13 @@ class AppStore extends ChangeNotifier {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> removeSellerProductVideo(int id) async {
+    final res = await _api.post('/seller/products/$id/video', data: {
+      'remove_video': true,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> loadSellerReviews({String filter = 'all', int page = 1}) async {
     final res = await _api.get('/seller/reviews', query: {
       'filter': filter,
@@ -1065,6 +1072,63 @@ class AppStore extends ChangeNotifier {
       'password': password,
       'password_confirmation': passwordConfirmation,
     });
+  }
+
+  Future<KycInfo> loadKyc() async {
+    final res = await _api.get('/kyc');
+    final body = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    final data = body['data'] is Map ? Map<String, dynamic>.from(body['data'] as Map) : body;
+    final info = KycInfo.fromJson(data);
+    if (user != null) {
+      user = AppUser(
+        id: user!.id,
+        name: user!.name,
+        email: user!.email,
+        mobile: user!.mobile,
+        country: user!.country,
+        role: user!.role,
+        region: user!.region,
+        city: user!.city,
+        avatar: user!.avatar,
+        hasPaymentPin: user!.hasPaymentPin,
+        kyc: info,
+        sellerStoreName: user!.sellerStoreName,
+        sellerSlug: user!.sellerSlug,
+        sellerStatus: user!.sellerStatus,
+        sellerStoreSetupComplete: user!.sellerStoreSetupComplete,
+      );
+      notifyListeners();
+    }
+    return info;
+  }
+
+  Future<KycInfo> submitKyc({
+    required String ghanaCardNumber,
+    String? fullName,
+    required String frontPath,
+    required String backPath,
+    String? selfiePath,
+  }) async {
+    final res = await _api.postForm(
+      '/kyc',
+      {
+        'ghana_card_number': ghanaCardNumber,
+        if (fullName != null && fullName.trim().isNotEmpty) 'full_name': fullName.trim(),
+        'front': frontPath,
+        'back': backPath,
+        if (selfiePath != null) 'selfie': selfiePath,
+      },
+      fileFields: [
+        'front',
+        'back',
+        if (selfiePath != null) 'selfie',
+      ],
+    );
+    final body = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    final data = body['data'] is Map ? Map<String, dynamic>.from(body['data'] as Map) : body;
+    final info = KycInfo.fromJson(data);
+    await refreshMe();
+    return info;
   }
 
   Future<void> setPaymentPin({

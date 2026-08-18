@@ -6,11 +6,14 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../api/api_client.dart';
+import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/product_video_field.dart';
 import '../../widgets/tab_refresh.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
@@ -479,6 +482,12 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
   final removeImageIds = <int>{};
   final specs = <String, String>{};
   XFile? video;
+  int? videoDuration;
+  String? existingVideoUrl;
+  int? existingVideoDuration;
+  bool removeExistingVideo = false;
+  bool checkingVideo = false;
+  String? videoError;
   List<Map<String, dynamic>> categories = [];
   int? categoryId;
   String shippingType = 'buyer';
@@ -559,6 +568,13 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
         existingImages
           ..clear()
           ..addAll(_asMaps(product['images']));
+        existingVideoUrl = ApiConfig.resolveMediaUrl(product['video_url'] as String?);
+        if (existingVideoUrl != null && existingVideoUrl!.isEmpty) existingVideoUrl = null;
+        existingVideoDuration = (product['video_duration'] as num?)?.toInt();
+        removeExistingVideo = false;
+        video = null;
+        videoDuration = null;
+        videoError = null;
         final existingSpecs = _asMap(product['specifications']);
         specs
           ..clear()
@@ -576,9 +592,67 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
   }
 
   Future<void> _pickVideo() async {
-    final picked = await ImagePicker().pickVideo(source: ImageSource.gallery, maxDuration: const Duration(seconds: 60));
+    final picked = await ImagePicker().pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(seconds: 60),
+    );
     if (picked == null) return;
-    setState(() => video = picked);
+    setState(() {
+      checkingVideo = true;
+      videoError = null;
+    });
+    VideoPlayerController? probe;
+    try {
+      final bytes = await File(picked.path).length();
+      if (bytes > 50 * 1024 * 1024) {
+        if (!mounted) return;
+        setState(() {
+          checkingVideo = false;
+          videoError = 'Video must be 50MB or smaller. This file is ${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB.';
+        });
+        return;
+      }
+      probe = VideoPlayerController.file(File(picked.path));
+      await probe.initialize();
+      final seconds = probe.value.duration.inMilliseconds / 1000;
+      await probe.dispose();
+      probe = null;
+      if (seconds > 60.5) {
+        if (!mounted) return;
+        setState(() {
+          checkingVideo = false;
+          videoError = 'Video must be 1 minute or less. This one is ${formatVideoClock(Duration(milliseconds: (seconds * 1000).round()))}.';
+        });
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        video = picked;
+        videoDuration = seconds.isFinite && seconds > 0 ? seconds.round().clamp(1, 60) : null;
+        removeExistingVideo = false;
+        checkingVideo = false;
+        videoError = null;
+      });
+    } catch (_) {
+      await probe?.dispose();
+      if (!mounted) return;
+      setState(() {
+        checkingVideo = false;
+        videoError = 'Could not read this video. Use MP4, WebM, MOV, or 3GP under 1 minute.';
+      });
+    }
+  }
+
+  void _removeVideo() {
+    setState(() {
+      if (video != null) {
+        video = null;
+        videoDuration = null;
+      } else {
+        removeExistingVideo = true;
+      }
+      videoError = null;
+    });
   }
 
   Future<void> _pickImages() async {
@@ -657,7 +731,14 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
           await store.uploadSellerProductImages(widget.productId!, images.map((e) => e.path).toList());
         }
         if (video != null) {
-          await store.uploadSellerProductVideo(widget.productId!, filePath: video!.path);
+          await store.uploadSellerProductVideo(
+            widget.productId!,
+            filePath: video!.path,
+            duration: videoDuration,
+            filename: video!.name.trim().isEmpty ? 'product.mp4' : video!.name,
+          );
+        } else if (removeExistingVideo) {
+          await store.removeSellerProductVideo(widget.productId!);
         }
       } else {
         await store.createSellerProduct(
@@ -669,6 +750,7 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
           discountPrice: double.tryParse(discount.text.trim()),
           imagePaths: images.map((e) => e.path).toList(),
           videoPath: video?.path,
+          videoDuration: videoDuration,
           listing: listing,
         );
       }
@@ -689,7 +771,19 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text(isEdit ? 'Edit product' : 'Add product')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/seller');
+            }
+          },
+        ),
+        title: Text(isEdit ? 'Edit product' : 'Add product'),
+      ),
       body: loading
           ? const FullPageLoader(label: 'Loading…')
           : error != null
@@ -717,18 +811,33 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                       decoration: const InputDecoration(labelText: 'Quantity'),
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<int?>(
-                      value: categories.any((c) => (c['id'] as num?)?.toInt() == categoryId) ? categoryId : null,
-                      decoration: const InputDecoration(labelText: 'Category'),
-                      items: [
-                        const DropdownMenuItem<int?>(value: null, child: Text('No category')),
-                        for (final category in categories)
-                          DropdownMenuItem(
-                            value: (category['id'] as num).toInt(),
-                            child: Text(category['name'] as String? ?? 'Category'),
+                    InkWell(
+                      onTap: () async {
+                        final id = await Navigator.of(context).push<int?>(
+                          MaterialPageRoute(
+                            builder: (_) => _CategoryPickerScreen(
+                              categories: categories,
+                              selectedId: categoryId,
+                            ),
                           ),
-                      ],
-                      onChanged: (v) => setState(() => categoryId = v),
+                        );
+                        if (id == null || !mounted) return;
+                        setState(() => categoryId = id == 0 ? null : id);
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Category',
+                          suffixIcon: Icon(Icons.chevron_right),
+                        ),
+                        child: Text(
+                          selectedCategory?['name'] as String? ?? 'Select category',
+                          style: TextStyle(
+                            color: selectedCategory == null ? AppColors.textMuted : AppColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -810,10 +919,14 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                           ),
                         ],
                         const SizedBox(height: 8),
-                        OutlinedButton.icon(
-                          onPressed: _pickVideo,
-                          icon: const Icon(Icons.videocam_outlined),
-                          label: Text(video == null ? 'Add product video (max 1 min)' : 'Video selected'),
+                        ProductVideoField(
+                          networkUrl: removeExistingVideo ? null : existingVideoUrl,
+                          filePath: video?.path,
+                          durationSeconds: video != null ? videoDuration : existingVideoDuration,
+                          checking: checkingVideo,
+                          error: videoError,
+                          onPick: _pickVideo,
+                          onRemove: _removeVideo,
                         ),
                         const SizedBox(height: 8),
                       ],
@@ -974,6 +1087,47 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                     ),
                   ],
                 ),
+    );
+  }
+}
+
+class _CategoryPickerScreen extends StatelessWidget {
+  const _CategoryPickerScreen({
+    required this.categories,
+    this.selectedId,
+  });
+
+  final List<Map<String, dynamic>> categories;
+  final int? selectedId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text('All Category'),
+      ),
+      body: ListView(
+        children: [
+          ListTile(
+            title: const Text('No category'),
+            trailing: selectedId == null ? const Icon(Icons.check, color: AppColors.accent) : null,
+            onTap: () => Navigator.pop(context, 0),
+          ),
+          for (final category in categories)
+            ListTile(
+              title: Text(category['name'] as String? ?? 'Category'),
+              trailing: selectedId == (category['id'] as num?)?.toInt()
+                  ? const Icon(Icons.check, color: AppColors.accent)
+                  : null,
+              onTap: () => Navigator.pop(context, (category['id'] as num?)?.toInt()),
+            ),
+        ],
+      ),
     );
   }
 }

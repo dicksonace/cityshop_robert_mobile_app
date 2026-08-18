@@ -115,6 +115,23 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     });
   }
 
+  String _bankFeeCopy(WithdrawalOverview data) {
+    if (data.feeMode == 'percent' && data.feePercent > 0) {
+      final pct = data.feePercent.toStringAsFixed(data.feePercent % 1 == 0 ? 0 : 2);
+      return 'Bank withdrawals charge $pct% (Paystack). This comes out of your wallet with the amount.';
+    }
+    if (!data.feeEnabled || data.feeAppliesTo == 'none' || data.feeAppliesTo == 'momo') {
+      return 'No extra bank withdrawal fee on this payout.';
+    }
+    final tiers = data.bankTiers.isNotEmpty ? data.bankTiers : WithdrawalOverview.defaultBankTiers;
+    final bands = tiers.map((tier) {
+      final max = tier.max;
+      if (max == null) return 'from ${_money.format(tier.min)} → fee ${_money.format(tier.fee)}';
+      return '${_money.format(tier.min)}–${_money.format(max)} → ${_money.format(tier.fee)}';
+    }).join(' · ');
+    return 'Charged when you cash out to a Ghana bank: $bands. Deducted from your wallet with the amount.';
+  }
+
   /// Validates locally, shows the review sheet, then sends the request.
   Future<void> _submit() async {
     final amount = double.tryParse(amountCtrl.text.trim());
@@ -376,6 +393,14 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                     ),
                   ],
                 ),
+                if (_isBank) ...[
+                  const SizedBox(height: 12),
+                  _Notice(
+                    icon: Icons.account_balance_rounded,
+                    title: 'Bank withdrawal fee',
+                    body: _bankFeeCopy(overview),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 if (!_isBank) ...[
                   const Text(

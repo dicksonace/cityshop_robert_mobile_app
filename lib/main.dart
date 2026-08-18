@@ -11,6 +11,25 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ErrorWidget.builder = (details) {
+    return const Material(
+      color: Color(0xFFF8FAFC),
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'This page could not load. Switch tabs and try again.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF111827),
+            ),
+          ),
+        ),
+      ),
+    );
+  };
   final api = ApiClient();
   final store = AppStore(api);
   try {

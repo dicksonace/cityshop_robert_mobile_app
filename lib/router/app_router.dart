@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../screens/account/account_screens.dart';
+import '../screens/account/kyc_verification_screen.dart';
 import '../screens/account/manual_deposit_screen.dart';
 import '../screens/account/manual_deposit_status_screen.dart';
 import '../screens/account/notifications_screen.dart';
@@ -244,6 +245,7 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/profile/edit', builder: (_, __) => const ProfileEditScreen()),
       GoRoute(path: '/profile/password', builder: (_, __) => const ChangePasswordScreen()),
       GoRoute(path: '/profile/payment-pin', builder: (_, __) => const PaymentPinScreen()),
+      GoRoute(path: '/kyc', builder: (_, __) => const KycVerificationScreen()),
       GoRoute(
         path: '/products/:slug',
         builder: (_, state) => ProductDetailScreen(slug: state.pathParameters['slug']!),
