@@ -15,6 +15,14 @@ import 'seller_products_screens.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
+double _asDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? 0;
+  return 0;
+}
+
+int _asInt(dynamic value) => _asDouble(value).toInt();
+
 class SellerShellScreen extends StatefulWidget {
   const SellerShellScreen({super.key});
 
@@ -245,11 +253,14 @@ class _OverviewTab extends StatelessWidget {
     final health = dashboard['store_health'] is Map
         ? Map<String, dynamic>.from(dashboard['store_health'] as Map)
         : <String, dynamic>{};
-    final recent = (dashboard['recent_orders'] as List? ?? [])
+    final recent = (dashboard['recent_orders'] is List ? dashboard['recent_orders'] as List : const [])
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
-    final tips = (health['tips'] as List? ?? []).take(3).map((tip) => '$tip').toList();
+    final tips = (health['tips'] is List ? health['tips'] as List : const [])
+        .take(3)
+        .map((tip) => '$tip')
+        .toList();
 
     return Column(
       children: [
@@ -298,7 +309,7 @@ class _OverviewTab extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                       child: ListTile(
                         title: Text(
-                          'Pay GH₵${((profile['activation_fee'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)} seller fee',
+                          'Pay GH₵${_asDouble(profile['activation_fee']).toStringAsFixed(2)} seller fee',
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         subtitle: const Text('Your store stays hidden from buyers until this is paid.'),
@@ -313,7 +324,7 @@ class _OverviewTab extends StatelessWidget {
                       Expanded(
                         child: _StatCard(
                           label: 'Available',
-                          value: _money.format((stats['available_balance'] as num?)?.toDouble() ?? 0),
+                          value: _money.format(_asDouble(stats['available_balance'])),
                           onTap: onOpenWallet,
                         ),
                       ),
@@ -321,7 +332,7 @@ class _OverviewTab extends StatelessWidget {
                       Expanded(
                         child: _StatCard(
                           label: 'Earnings',
-                          value: _money.format((stats['total_earnings'] as num?)?.toDouble() ?? 0),
+                          value: _money.format(_asDouble(stats['total_earnings'])),
                           onTap: onOpenWallet,
                         ),
                       ),
@@ -333,7 +344,7 @@ class _OverviewTab extends StatelessWidget {
                       Expanded(
                         child: _StatCard(
                           label: 'Orders',
-                          value: '${(stats['total_orders'] as num?)?.toInt() ?? 0}',
+                          value: '${_asInt(stats['total_orders'])}',
                           onTap: () => onOpenOrders(),
                         ),
                       ),
@@ -341,7 +352,7 @@ class _OverviewTab extends StatelessWidget {
                       Expanded(
                         child: _StatCard(
                           label: 'Live products',
-                          value: '${(stats['live_products'] as num?)?.toInt() ?? 0}',
+                          value: '${_asInt(stats['live_products'])}',
                           onTap: onOpenProducts,
                         ),
                       ),
@@ -363,7 +374,7 @@ class _OverviewTab extends StatelessWidget {
                         ('Delivered', 'completed', pipeline['delivered']),
                       ])
                         ActionChip(
-                          label: Text('${entry.$1}: ${(entry.$3 as num?)?.toInt() ?? 0}'),
+                          label: Text('${entry.$1}: ${_asInt(entry.$3)}'),
                           backgroundColor: Colors.white,
                           side: const BorderSide(color: AppColors.border),
                           onPressed: () => onOpenOrders(stage: entry.$2),
@@ -382,12 +393,12 @@ class _OverviewTab extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Store health · ${((health['score'] as num?)?.toInt() ?? 0)}/100',
+                          'Store health · ${_asInt(health['score'])}/100',
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 6),
                         LinearProgressIndicator(
-                          value: (((health['score'] as num?)?.toDouble() ?? 0) / 100).clamp(0, 1),
+                          value: (_asDouble(health['score']) / 100).clamp(0, 1),
                           minHeight: 8,
                           borderRadius: BorderRadius.circular(8),
                           color: const Color(0xFF0F766E),
@@ -465,11 +476,11 @@ class _OverviewTab extends StatelessWidget {
                         ].whereType<String>().where((e) => e.isNotEmpty).join(' · '),
                       ),
                       trailing: Text(
-                        _money.format((item['amount'] as num?)?.toDouble() ?? 0),
+                        _money.format(_asDouble(item['amount'])),
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       onTap: () {
-                        final id = (item['id'] as num?)?.toInt() ?? 0;
+                        final id = _asInt(item['id']);
                         if (id > 0) onOpenOrder(id);
                       },
                     );
