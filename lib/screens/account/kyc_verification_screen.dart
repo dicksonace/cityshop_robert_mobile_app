@@ -116,7 +116,7 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
             selfiePath: selfie?.path,
           );
       if (!mounted) return;
-      _toast('Submitted. Admin will approve, reject, or ask you to improve the photos.');
+      _toast('Submitted. The system must approve your Ghana Card before you can transact with the CityShop wallet.');
       context.pop(true);
     } on ApiException catch (e) {
       if (mounted) _toast(e.message);
@@ -161,6 +161,11 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
                     _StatusBanner(kyc: kyc),
                     const SizedBox(height: 12),
                     const Text('Ghana Card', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'The system must approve your Ghana Card before you can transact with the CityShop wallet.',
+                      style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+                    ),
                     const SizedBox(height: 8),
                     _GhanaCardPreview(
                       onVerify: kyc.isVerified ? null : () async {
@@ -266,13 +271,13 @@ class _StatusBanner extends StatelessWidget {
           const Color(0xFF047857),
           const Color(0xFFECFDF5),
           'Verified',
-          'You can recharge and store money in your wallet.',
+          'You can now transact with the CityShop wallet.',
         ),
       'pending' => (
           const Color(0xFFB45309),
           const Color(0xFFFFFBEB),
-          'Waiting for admin',
-          'Admin will approve, reject, or ask you to improve the photos.',
+          'Waiting for approval',
+          'The system is reviewing your Ghana Card. You can still buy items with Paystack.',
         ),
       'needs_improvement' => (
           const Color(0xFFB45309),
@@ -284,13 +289,13 @@ class _StatusBanner extends StatelessWidget {
           const Color(0xFFB91C1C),
           const Color(0xFFFEF2F2),
           'Not approved',
-          kyc.adminNotes ?? 'Submit a new Ghana Card to store wallet funds.',
+          kyc.adminNotes ?? 'Submit a new Ghana Card to transact with the CityShop wallet.',
         ),
       _ => (
           AppColors.accent,
           AppColors.ringOrange,
           'Not verified',
-          'Verify your Ghana Card before you recharge your wallet.',
+          'The system must approve your Ghana Card before you can transact with the CityShop wallet.',
         ),
     };
 

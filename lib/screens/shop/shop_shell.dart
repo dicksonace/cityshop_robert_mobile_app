@@ -1623,7 +1623,7 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
       (Icons.location_on_outlined, 'Addresses', 'Saved delivery addresses', '/addresses'),
       (Icons.favorite_border, 'Wishlist', 'Saved products', '/wishlist'),
       (Icons.storefront_outlined, 'Following', 'Sellers you follow', '/following'),
-      (Icons.badge_outlined, 'Verification & PIN', 'Ghana Card KYC before wallet recharge', '/kyc'),
+      (Icons.badge_outlined, 'Verification & PIN', 'Ghana Card approval before CityShop wallet', '/kyc'),
       (Icons.pin_outlined, 'Payment PIN', '4-digit code for wallet & transfers', '/profile/payment-pin'),
       (Icons.lock_outline, 'Change password', 'Account security', '/profile/password'),
       (Icons.shopping_cart_outlined, 'My cart', 'Review items before checkout', '/cart'),

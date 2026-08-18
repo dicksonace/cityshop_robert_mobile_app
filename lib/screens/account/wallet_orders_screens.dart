@@ -267,8 +267,8 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
           const SizedBox(height: 8),
           Text(
             kyc.isPending
-                ? 'Admin is reviewing your Ghana Card. You can still buy items with Paystack.'
-                : 'Verify your Ghana Card before you recharge or store money in your wallet. Buying with Paystack is still allowed.',
+                ? 'The system is reviewing your Ghana Card. You can still buy items with Paystack.'
+                : 'The system must approve your Ghana Card before you can transact with the CityShop wallet.',
             style: const TextStyle(color: AppColors.textSecondary, height: 1.4),
           ),
           if ((kyc.adminNotes ?? '').isNotEmpty) ...[
@@ -732,7 +732,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                   store.user?.kyc.statusLabel ?? 'Not verified',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
-                subtitle: const Text('Verify your Ghana Card before you recharge your wallet.'),
+                subtitle: const Text('The system must approve your Ghana Card before you can transact with the CityShop wallet.'),
                 trailing: const Text('ACTIVATE', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w900, fontSize: 12)),
                 onTap: () => context.push('/kyc'),
               ),
