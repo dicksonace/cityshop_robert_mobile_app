@@ -156,17 +156,12 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   children: [
                     _StatusBanner(kyc: kyc),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     const Text('Ghana Card', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Admin must approve your Ghana Card before you can recharge or store money in your wallet. You can still buy items and pay with Paystack.',
-                      style: TextStyle(color: AppColors.textSecondary, height: 1.4),
-                    ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 8),
                     _GhanaCardPreview(
                       onVerify: kyc.isVerified ? null : () async {
                         final picked = await _pickPhoto('front');
@@ -174,7 +169,42 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
                       },
                       verified: kyc.isVerified,
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
+                    const Text('Email', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Text(user?.email ?? '—', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Security PIN', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                              SizedBox(height: 4),
+                              Text(
+                                'Set your PIN to approve payments',
+                                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => context.push('/profile/payment-pin'),
+                          child: Text(user?.hasPaymentPin == true ? 'Change PIN' : 'Set PIN'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     TextField(
                       controller: cardNumber,
                       enabled: !kyc.isVerified,
@@ -203,7 +233,6 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
                       label: 'Selfie with card (optional)',
                       file: selfie,
                       url: kyc.selfieUrl,
-                      tall: true,
                       onTap: kyc.isVerified
                           ? null
                           : () async {
@@ -219,38 +248,6 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
                         onPressed: saving ? null : _submit,
                       ),
                     ],
-                    const SizedBox(height: 28),
-                    const Text('Email', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Text(user?.email ?? '—', style: const TextStyle(fontWeight: FontWeight.w600)),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Security PIN', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                              SizedBox(height: 4),
-                              Text('Set your PIN to approve payments', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                            ],
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => context.push('/profile/payment-pin'),
-                          child: Text(user?.hasPaymentPin == true ? 'Change PIN' : 'Set PIN'),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
     );
@@ -325,7 +322,7 @@ class _GhanaCardPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AspectRatio(
-      aspectRatio: 1.58,
+      aspectRatio: 1.85,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
         child: Stack(
@@ -399,7 +396,7 @@ class _PhotoSlot extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Container(
-          height: tall ? 140 : 110,
+          height: tall ? 96 : 88,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.border),
