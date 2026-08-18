@@ -136,7 +136,7 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Verification & PIN'),
+        title: const Text('Verification'),
         leading: BackButton(onPressed: () => goBackOr(context, '/shop?tab=account')),
       ),
       body: loading
@@ -186,28 +186,6 @@ class _KycVerificationScreenState extends State<KycVerificationScreen> {
                         border: Border.all(color: AppColors.border),
                       ),
                       child: Text(user?.email ?? '—', style: const TextStyle(fontWeight: FontWeight.w600)),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Security PIN', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                              SizedBox(height: 4),
-                              Text(
-                                'Set your PIN to approve payments',
-                                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                              ),
-                            ],
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => context.push('/profile/payment-pin'),
-                          child: Text(user?.hasPaymentPin == true ? 'Change PIN' : 'Set PIN'),
-                        ),
-                      ],
                     ),
                     const SizedBox(height: 16),
                     TextField(
