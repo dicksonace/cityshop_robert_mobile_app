@@ -120,7 +120,10 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       final pct = data.feePercent.toStringAsFixed(data.feePercent % 1 == 0 ? 0 : 2);
       return 'Bank withdrawals charge $pct% (Paystack). This comes out of your wallet with the amount.';
     }
-    if (!data.feeEnabled || data.feeAppliesTo == 'none' || data.feeAppliesTo == 'momo') {
+    if (data.feeAppliesTo == 'none' || data.feeAppliesTo == 'momo') {
+      return 'No extra bank withdrawal fee on this payout.';
+    }
+    if (!data.feeEnabled && data.feeMode != 'percent') {
       return 'No extra bank withdrawal fee on this payout.';
     }
     final tiers = data.bankTiers.isNotEmpty ? data.bankTiers : WithdrawalOverview.defaultBankTiers;
@@ -130,6 +133,20 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       return '${_money.format(tier.min)}–${_money.format(max)} → ${_money.format(tier.fee)}';
     }).join(' · ');
     return 'Charged when you cash out to a Ghana bank: $bands. Deducted from your wallet with the amount.';
+  }
+
+  String _bankFeeHint(WithdrawalOverview data, double amount) {
+    final tiers = data.bankTiers.isNotEmpty ? data.bankTiers : WithdrawalOverview.defaultBankTiers;
+    for (final tier in tiers) {
+      final max = tier.max;
+      if (amount + 0.0001 >= tier.min && (max == null || amount <= max + 0.0001)) {
+        if (max == null) {
+          return 'From ${_money.format(tier.min)} → fee ${_money.format(tier.fee)}';
+        }
+        return '${_money.format(tier.min)}–${_money.format(max)} → fee ${_money.format(tier.fee)}';
+      }
+    }
+    return 'Bank fee ${_money.format(data.feeFor('bank', amount))}';
   }
 
   /// Validates locally, shows the review sheet, then sends the request.
@@ -217,6 +234,8 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   }
 
   Future<bool?> _review(double amount, String number, String name) {
+    final fee = overview.feeFor(payoutType, amount);
+    final total = amount + fee;
     return showAppSheet<bool>(
       context: context,
       builder: (ctx) => SheetShell(
@@ -274,25 +293,49 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
+                const Text('You receive', style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
                 Text(
                   _money.format(amount),
                   style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 26),
                 ),
-                if (overview.feeFor(payoutType, amount) > 0) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    overview.feeMode == 'percent'
-                        ? 'Withdrawal fee ${overview.feePercent.toStringAsFixed(overview.feePercent % 1 == 0 ? 0 : 2)}% (${_money.format(overview.feeFor(payoutType, amount))})'
-                        : 'Withdrawal fee ${_money.format(overview.feeFor(payoutType, amount))}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  Text(
-                    'Total deducted ${_money.format(amount + overview.feeFor(payoutType, amount))}',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  child: Column(
+                    children: [
+                      _FeeRow(
+                        label: _isBank ? 'Bank withdrawal fee' : 'MoMo withdrawal fee',
+                        value: fee > 0 ? _money.format(fee) : 'No fee',
+                        emphasize: fee > 0,
+                      ),
+                      if (fee > 0 && _isBank && overview.feeMode != 'percent') ...[
+                        const SizedBox(height: 4),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            _bankFeeHint(overview, amount),
+                            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      const Divider(height: 1),
+                      const SizedBox(height: 8),
+                      _FeeRow(
+                        label: 'Total deducted from wallet',
+                        value: _money.format(total),
+                        emphasize: true,
+                      ),
+                    ],
                   ),
-                ],
-                const SizedBox(height: 2),
+                ),
+                const SizedBox(height: 8),
                 Text(
                   overview.autoPaystack
                       ? 'Paystack will send this payout automatically.'
@@ -541,6 +584,44 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _FeeRow extends StatelessWidget {
+  const _FeeRow({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: emphasize ? 13 : 12.5,
+              fontWeight: emphasize ? FontWeight.w800 : FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: emphasize ? 14 : 13,
+            fontWeight: FontWeight.w900,
+            color: emphasize ? AppColors.textPrimary : AppColors.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }

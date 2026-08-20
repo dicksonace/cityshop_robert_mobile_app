@@ -33,6 +33,11 @@ class ApiConfig {
     return '${_webOrigin()}/app/products/$slug';
   }
 
+  /// Public website storefront — opens in the browser, not the app.
+  static String storeWebUrl(String slug) {
+    return '${_webOrigin()}/store/${Uri.encodeComponent(slug)}';
+  }
+
   /// Public storefront URL the app shares (opens the app when installed).
   static String storeShareUrl(String slug) {
     return '${_webOrigin()}/app/store/$slug';

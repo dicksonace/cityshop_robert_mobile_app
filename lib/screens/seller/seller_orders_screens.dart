@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
+import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import 'seller_hub_screens.dart';
@@ -281,11 +284,27 @@ class _SellerOrderDetailScreenState extends State<SellerOrderDetailScreen> {
   bool busy = false;
   String? error;
   Map<String, dynamic> item = {};
+  final vehicleCtrl = TextEditingController();
+  final driverCtrl = TextEditingController();
+  String? newPackagePath;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    vehicleCtrl.dispose();
+    driverCtrl.dispose();
+    super.dispose();
+  }
+
+  void _syncDeliveryFields(Map<String, dynamic> data) {
+    vehicleCtrl.text = data['vehicle_number'] as String? ?? '';
+    driverCtrl.text = data['driver_phone'] as String? ?? '';
+    newPackagePath = null;
   }
 
   Future<void> _load() async {
@@ -298,6 +317,7 @@ class _SellerOrderDetailScreenState extends State<SellerOrderDetailScreen> {
       if (!mounted) return;
       setState(() {
         item = data;
+        _syncDeliveryFields(data);
         loading = false;
       });
     } on ApiException catch (e) {
@@ -321,7 +341,10 @@ class _SellerOrderDetailScreenState extends State<SellerOrderDetailScreen> {
       final res = await action();
       if (!mounted) return;
       final data = res['data'];
-      if (data is Map) item = Map<String, dynamic>.from(data);
+      if (data is Map) {
+        item = Map<String, dynamic>.from(data);
+        _syncDeliveryFields(item);
+      }
       final message = res['message'] as String?;
       setState(() => busy = false);
       if (message != null) {
@@ -338,80 +361,39 @@ class _SellerOrderDetailScreenState extends State<SellerOrderDetailScreen> {
     }
   }
 
-  Future<void> _advance(Map<String, dynamic> action) async {
-    final status = action['status'] as String?;
-    if (status == null) return;
-    String? vehicle;
-    String? driver;
-    String? photo;
-    if (action['needs_delivery_details'] == true) {
-      final details = await _askDeliveryDetails();
-      if (details == null) return;
-      vehicle = details.$1;
-      driver = details.$2;
-      photo = details.$3;
-    }
+  Future<void> _saveDeliveryDetails() async {
     await _run(() => context.read<AppStore>().updateSellerOrder(
           widget.orderItemId,
-          status: status,
-          vehicleNumber: vehicle,
-          driverPhone: driver,
-          packageImagePath: photo,
+          vehicleNumber: vehicleCtrl.text.trim(),
+          driverPhone: driverCtrl.text.trim(),
+          packageImagePath: newPackagePath,
+          saveDeliveryDetails: true,
         ));
   }
 
-  Future<(String?, String?, String?)?> _askDeliveryDetails() async {
-    final vehicleCtrl = TextEditingController(text: item['vehicle_number'] as String? ?? '');
-    final driverCtrl = TextEditingController(text: item['driver_phone'] as String? ?? '');
-    String? photoPath;
-    return showAppSheet<(String?, String?, String?)>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModal) {
-            return SheetShell(
-              action: FilledButton(
-                onPressed: () => Navigator.pop(ctx, (
-                  vehicleCtrl.text.trim().isEmpty ? null : vehicleCtrl.text.trim(),
-                  driverCtrl.text.trim().isEmpty ? null : driverCtrl.text.trim(),
-                  photoPath,
-                )),
-                child: const Text('Continue'),
-              ),
-              children: [
-                const Text('Delivery details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 6),
-                const Text(
-                  'Optional, but buyers can see the vehicle, driver number, and package photo.',
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: vehicleCtrl,
-                  decoration: const InputDecoration(labelText: 'Vehicle number'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: driverCtrl,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Driver phone'),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 82);
-                    if (picked == null) return;
-                    setModal(() => photoPath = picked.path);
-                  },
-                  icon: const Icon(Icons.photo_outlined),
-                  label: Text(photoPath == null ? 'Add package photo' : 'Photo selected'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+  Future<void> _advance(Map<String, dynamic> action) async {
+    final status = action['status'] as String?;
+    if (status == null) return;
+    final needsDelivery = action['needs_delivery_details'] == true;
+    await _run(() => context.read<AppStore>().updateSellerOrder(
+          widget.orderItemId,
+          status: status,
+          vehicleNumber: needsDelivery || vehicleCtrl.text.trim().isNotEmpty ? vehicleCtrl.text.trim() : null,
+          driverPhone: needsDelivery || driverCtrl.text.trim().isNotEmpty ? driverCtrl.text.trim() : null,
+          packageImagePath: newPackagePath,
+          saveDeliveryDetails: needsDelivery,
+        ));
+  }
+
+  bool get _showDeliverySection {
+    final status = item['status'] as String? ?? '';
+    if (status == 'cancelled' || status == 'refunded' || status == 'pending') return false;
+    return true;
+  }
+
+  bool get _needsDeliveryHighlight {
+    final actions = _asMaps(item['next_actions']);
+    return actions.isNotEmpty && actions.first['needs_delivery_details'] == true;
   }
 
   Future<void> _cancel() async {
@@ -590,6 +572,110 @@ class _SellerOrderDetailScreenState extends State<SellerOrderDetailScreen> {
                           ),
                       ],
                     ),
+                    if (_showDeliverySection) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: _needsDeliveryHighlight ? const Color(0xFFFFF7ED) : Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: _needsDeliveryHighlight ? const Color(0xFFFDBA74) : AppColors.border,
+                            width: _needsDeliveryHighlight ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _needsDeliveryHighlight ? 'Delivery details (optional)' : 'Delivery details',
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Optional. Add if a driver is delivering for you; leave blank if you bring it yourself. Buyer only sees what you enter.',
+                              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.35),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: vehicleCtrl,
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: const InputDecoration(
+                                labelText: 'Vehicle / car number',
+                                hintText: 'e.g. GR 1234-20',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: driverCtrl,
+                              keyboardType: TextInputType.phone,
+                              decoration: const InputDecoration(
+                                labelText: 'Driver phone',
+                                hintText: 'e.g. 024 000 0000',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            const Text('Package photo', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                            const SizedBox(height: 8),
+                            if (newPackagePath != null)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.file(
+                                  File(newPackagePath!),
+                                  width: 120,
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            else if ((item['package_image'] as String?)?.isNotEmpty == true)
+                              InkWell(
+                                onTap: () => showImageViewer(
+                                  context,
+                                  urls: [ApiConfig.resolveMediaUrl(item['package_image'] as String)],
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: CachedNetworkImage(
+                                    imageUrl: ApiConfig.resolveMediaUrl(item['package_image'] as String),
+                                    width: 120,
+                                    height: 120,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: busy
+                                  ? null
+                                  : () async {
+                                      final picked = await ImagePicker().pickImage(
+                                        source: ImageSource.gallery,
+                                        imageQuality: 82,
+                                      );
+                                      if (picked == null || !mounted) return;
+                                      setState(() => newPackagePath = picked.path);
+                                    },
+                              icon: const Icon(Icons.photo_outlined),
+                              label: Text(
+                                newPackagePath != null || (item['package_image'] as String?)?.isNotEmpty == true
+                                    ? 'Change package photo'
+                                    : 'Add package photo',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: busy ? null : _saveDeliveryDetails,
+                                child: Text(busy ? 'Saving…' : 'Save delivery info'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (item['can_confirm_direct_payment'] == true) ...[
                       const SizedBox(height: 12),
                       FilledButton(

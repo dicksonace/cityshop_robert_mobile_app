@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
+import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_sheet.dart';
@@ -890,10 +891,16 @@ class _SellerStoreAppearanceScreenState extends State<SellerStoreAppearanceScree
                     FilledButton(onPressed: saving ? null : () => _save(), child: Text(saving ? 'Saving…' : 'Save draft')),
                     const SizedBox(height: 8),
                     OutlinedButton(onPressed: saving ? null : () => _save(publish: true), child: const Text('Publish to shop')),
-                    if ((store['store_url'] as String?)?.isNotEmpty == true)
+                    if ('${store['slug'] ?? store['store_url'] ?? ''}'.trim().isNotEmpty)
                       TextButton(
-                        onPressed: () => launchUrl(Uri.parse(store['store_url'] as String), mode: LaunchMode.externalApplication),
-                        child: const Text('View store'),
+                        onPressed: () {
+                          final slug = '${store['slug'] ?? ''}'.trim();
+                          final url = slug.isNotEmpty
+                              ? ApiConfig.storeWebUrl(slug)
+                              : '${store['store_url']}';
+                          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                        },
+                        child: const Text('Open store on the web'),
                       ),
                   ],
                 ),

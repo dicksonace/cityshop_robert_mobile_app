@@ -932,21 +932,21 @@ class WithdrawalOverview {
   }
 
   double feeFor(String payoutType, [double amount = 0]) {
-    if (!feeEnabled) return 0;
-    if (feeMode == 'percent') {
-      return feePercent > 0 ? double.parse((amount * feePercent / 100).toStringAsFixed(2)) : 0;
+    // Match server PlatformSettings::feeForWithdrawal — percent only when % > 0.
+    if (feeMode == 'percent' && feePercent > 0) {
+      return double.parse((amount * feePercent / 100).toStringAsFixed(2));
     }
+    // Legacy API sent mode=percent + percent=0 + enabled=false when auto Paystack
+    // was on with 0% — still apply bank tiers (do not treat as "No fee").
+    if (!feeEnabled && feeMode != 'percent') return 0;
     if (feeAppliesTo == 'none') return 0;
     final type = payoutType == 'bank' ? 'bank' : 'momo';
     if (type == 'momo') {
       return momoFeeAmount > 0 ? momoFeeAmount : 0;
     }
     if (!(feeAppliesTo == 'all' || feeAppliesTo == 'bank')) return 0;
-    if (type == 'bank') {
-      final tiers = bankTiers.isNotEmpty ? bankTiers : defaultBankTiers;
-      return feeFromBankTiers(amount, tiers, feeAmount);
-    }
-    return feeAmount > 0 ? feeAmount : 0;
+    final tiers = bankTiers.isNotEmpty ? bankTiers : defaultBankTiers;
+    return feeFromBankTiers(amount, tiers, feeAmount);
   }
 
   double maxWithdrawable(String payoutType) {

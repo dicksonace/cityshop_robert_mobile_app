@@ -18,6 +18,36 @@ import '../../widgets/tab_refresh.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
+String _categoryEmoji(Map<String, dynamic> category) {
+  final stored = '${category['icon'] ?? ''}'.trim();
+  if (stored.isNotEmpty && !stored.contains('/') && stored.length <= 4) {
+    return stored;
+  }
+  final key = '${category['slug'] ?? ''} ${category['name'] ?? ''}'.toLowerCase();
+  if (key.contains('phone') || key.contains('tablet')) return '📱';
+  if (key.contains('computer') || key.contains('laptop')) return '💻';
+  if (key.contains('electronic')) return '⚡';
+  if (key.contains('appliance')) return '🔌';
+  if (key.contains('fashion') || key.contains('cloth')) return '👗';
+  if (key.contains('bag') || key.contains('shoe')) return '👜';
+  if (key.contains('beauty')) return '💄';
+  if (key.contains('home') || key.contains('garden')) return '🏠';
+  if (key.contains('food') || key.contains('beverage')) return '🍔';
+  if (key.contains('groc')) return '🛒';
+  if (key.contains('health') || key.contains('pharm')) return '💊';
+  if (key.contains('baby') || key.contains('kid')) return '🍼';
+  if (key.contains('sport')) return '⚽';
+  if (key.contains('toy') || key.contains('game')) return '🎮';
+  if (key.contains('book') || key.contains('educat')) return '📚';
+  if (key.contains('office') || key.contains('station')) return '📎';
+  if (key.contains('jewel') || key.contains('watch')) return '💍';
+  if (key.contains('vehicle') || key.contains('car')) return '🚗';
+  if (key.contains('auto') || key.contains('part')) return '🔧';
+  if (key.contains('tool') || key.contains('hardware')) return '🛠️';
+  if (key.contains('pet')) return '🐾';
+  return '📦';
+}
+
 Map<String, dynamic> _asMap(dynamic value) {
   if (value is Map) return Map<String, dynamic>.from(value);
   return {};
@@ -830,12 +860,22 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                           labelText: 'Category',
                           suffixIcon: Icon(Icons.chevron_right),
                         ),
-                        child: Text(
-                          selectedCategory?['name'] as String? ?? 'Select category',
-                          style: TextStyle(
-                            color: selectedCategory == null ? AppColors.textMuted : AppColors.textPrimary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        child: Row(
+                          children: [
+                            if (selectedCategory != null) ...[
+                              Text(_categoryEmoji(selectedCategory!), style: const TextStyle(fontSize: 18)),
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(
+                              child: Text(
+                                selectedCategory?['name'] as String? ?? 'Select category',
+                                style: TextStyle(
+                                  color: selectedCategory == null ? AppColors.textMuted : AppColors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -1102,31 +1142,49 @@ class _CategoryPickerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rows = <({int? id, String name, String emoji})>[
+      (id: null, name: 'No category', emoji: '🏷️'),
+      for (final category in categories)
+        (
+          id: (category['id'] as num?)?.toInt(),
+          name: category['name'] as String? ?? 'Category',
+          emoji: _categoryEmoji(category),
+        ),
+    ];
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        backgroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('All Category'),
+        title: const Text('Select category', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
-      body: ListView(
-        children: [
-          ListTile(
-            title: const Text('No category'),
-            trailing: selectedId == null ? const Icon(Icons.check, color: AppColors.accent) : null,
-            onTap: () => Navigator.pop(context, 0),
-          ),
-          for (final category in categories)
-            ListTile(
-              title: Text(category['name'] as String? ?? 'Category'),
-              trailing: selectedId == (category['id'] as num?)?.toInt()
-                  ? const Icon(Icons.check, color: AppColors.accent)
-                  : null,
-              onTap: () => Navigator.pop(context, (category['id'] as num?)?.toInt()),
+      body: ListView.separated(
+        itemCount: rows.length,
+        separatorBuilder: (_, _) => const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6), indent: 56),
+        itemBuilder: (context, index) {
+          final row = rows[index];
+          final selected = row.id == selectedId;
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            leading: Text(row.emoji, style: const TextStyle(fontSize: 22)),
+            title: Text(
+              row.name,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
             ),
-        ],
+            trailing: Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              color: selected ? AppColors.accent : const Color(0xFFD1D5DB),
+            ),
+            onTap: () => Navigator.pop(context, row.id ?? 0),
+          );
+        },
       ),
     );
   }

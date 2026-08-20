@@ -466,11 +466,12 @@ class AppStore extends ChangeNotifier {
     String? vehicleNumber,
     String? driverPhone,
     String? packageImagePath,
+    bool saveDeliveryDetails = false,
   }) async {
     final fields = <String, dynamic>{
       if (status != null) 'status': status,
-      if (vehicleNumber != null) 'vehicle_number': vehicleNumber,
-      if (driverPhone != null) 'driver_phone': driverPhone,
+      if (saveDeliveryDetails || vehicleNumber != null) 'vehicle_number': vehicleNumber ?? '',
+      if (saveDeliveryDetails || driverPhone != null) 'driver_phone': driverPhone ?? '',
     };
     if (packageImagePath != null && packageImagePath.isNotEmpty) {
       final res = await _api.postForm(
