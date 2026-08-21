@@ -115,7 +115,9 @@ class _ImageViewerState extends State<ImageViewer> {
               );
 
               // Only the visible page owns the shared zoom controller.
-              if (i != _index) return image;
+              if (i != _index) {
+                return SizedBox.expand(child: Center(child: image));
+              }
 
               return GestureDetector(
                 onDoubleTapDown: _toggleZoom,
@@ -123,7 +125,10 @@ class _ImageViewerState extends State<ImageViewer> {
                 child: InteractiveViewer(
                   transformationController: _transform,
                   maxScale: _maxScale,
-                  child: image,
+                  minScale: 1,
+                  child: SizedBox.expand(
+                    child: Center(child: image),
+                  ),
                 ),
               );
             },

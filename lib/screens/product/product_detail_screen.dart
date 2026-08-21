@@ -1278,166 +1278,179 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
 
     return Column(
       children: [
-        AspectRatio(
-          aspectRatio: 1,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Container(
-                color: const Color(0xFFF8FAFC),
-                child: total == 0
-                    ? const Icon(Icons.image, size: 64, color: AppColors.textMuted)
-                    : PageView.builder(
-                        controller: _pageController,
-                        itemCount: total,
-                        onPageChanged: (i) {
-                          setState(() => _index = i);
-                          _scrollThumbIntoView(i);
-                          if (items[i].isVideo) {
-                            _ensureVideo();
-                          } else {
-                            _videoController?.pause();
-                          }
-                        },
-                        itemBuilder: (context, i) {
-                          final item = items[i];
-                          if (item.isVideo) {
-                            return _buildVideoPane();
-                          }
-                          return GestureDetector(
-                            onTap: () => _openFullScreen(i),
-                            child: CachedNetworkImage(
-                              imageUrl: item.url,
-                              fit: BoxFit.contain,
-                              placeholder: (_, __) => const Center(child: AppLoader()),
-                              errorWidget: (_, __, ___) =>
-                                  const Icon(Icons.broken_image_outlined, size: 48, color: AppColors.textMuted),
+        LayoutBuilder(
+          builder: (context, _) {
+            // Same idea as mobile web: shorter than full-width square so
+            // tall product photos don't dominate the first screen.
+            final size = MediaQuery.sizeOf(context);
+            final maxH = (size.height * 0.42).clamp(220.0, 320.0);
+            final height = (size.width * 0.75).clamp(200.0, maxH);
+            return SizedBox(
+              height: height,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(
+                    color: const Color(0xFFF8FAFC),
+                    child: total == 0
+                        ? const Icon(Icons.image, size: 64, color: AppColors.textMuted)
+                        : PageView.builder(
+                            controller: _pageController,
+                            itemCount: total,
+                            onPageChanged: (i) {
+                              setState(() => _index = i);
+                              _scrollThumbIntoView(i);
+                              if (items[i].isVideo) {
+                                _ensureVideo();
+                              } else {
+                                _videoController?.pause();
+                              }
+                            },
+                            itemBuilder: (context, i) {
+                              final item = items[i];
+                              if (item.isVideo) {
+                                return _buildVideoPane();
+                              }
+                              return GestureDetector(
+                                onTap: () => _openFullScreen(i),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: CachedNetworkImage(
+                                    imageUrl: item.url,
+                                    fit: BoxFit.contain,
+                                    placeholder: (_, __) => const Center(child: AppLoader()),
+                                    errorWidget: (_, __, ___) =>
+                                        const Icon(Icons.broken_image_outlined, size: 48, color: AppColors.textMuted),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  // Back / home — critical for shared product links (no nav stack).
+                  if (widget.onBack != null)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Material(
+                        color: Colors.white.withValues(alpha: 0.92),
+                        shape: const CircleBorder(),
+                        elevation: 2,
+                        shadowColor: Colors.black26,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: widget.onBack,
+                          child: const SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: Icon(Icons.arrow_back, size: 22, color: Color(0xFF1F2937)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (widget.discountPct != null)
+                    Positioned(
+                      top: 12,
+                      left: discountLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.danger,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '-${widget.discountPct}%',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  if (currentIsVideo)
+                    Positioned(
+                      top: 12,
+                      left: topBadgeLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          _durationLabel(),
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                  if (total > 1) ...[
+                    Positioned(
+                      left: 8,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: _GalleryNavButton(
+                          icon: Icons.chevron_left,
+                          onTap: () => _goTo(_index - 1),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      right: 8,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: _GalleryNavButton(
+                          icon: Icons.chevron_right,
+                          onTap: () => _goTo(_index + 1),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 12,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(total, (i) {
+                          final active = i == _index;
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: active ? 18 : 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: active ? AppColors.accent : Colors.white.withValues(alpha: 0.85),
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 4,
+                                ),
+                              ],
                             ),
                           );
-                        },
-                      ),
-              ),
-              // Back / home — critical for shared product links (no nav stack).
-              if (widget.onBack != null)
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Material(
-                    color: Colors.white.withValues(alpha: 0.92),
-                    shape: const CircleBorder(),
-                    elevation: 2,
-                    shadowColor: Colors.black26,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: widget.onBack,
-                      child: const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Icon(Icons.arrow_back, size: 22, color: Color(0xFF1F2937)),
+                        }),
                       ),
                     ),
-                  ),
-                ),
-              if (widget.discountPct != null)
-                Positioned(
-                  top: 12,
-                  left: discountLeft,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.danger,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '-${widget.discountPct}%',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12),
-                    ),
-                  ),
-                ),
-              if (currentIsVideo)
-                Positioned(
-                  top: 12,
-                  left: topBadgeLeft,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      _durationLabel(),
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-              if (total > 1) ...[
-                Positioned(
-                  left: 8,
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: _GalleryNavButton(
-                      icon: Icons.chevron_left,
-                      onTap: () => _goTo(_index - 1),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 8,
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: _GalleryNavButton(
-                      icon: Icons.chevron_right,
-                      onTap: () => _goTo(_index + 1),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 12,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(total, (i) {
-                      final active = i == _index;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        width: active ? 18 : 7,
-                        height: 7,
+                    Positioned(
+                      top: 12,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: active ? AppColors.accent : Colors.white.withValues(alpha: 0.85),
+                          color: Colors.black.withValues(alpha: 0.55),
                           borderRadius: BorderRadius.circular(999),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 4,
-                            ),
-                          ],
                         ),
-                      );
-                    }),
-                  ),
-                ),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      borderRadius: BorderRadius.circular(999),
+                        child: Text(
+                          '${_index + 1}/$total',
+                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ),
                     ),
-                    child: Text(
-                      '${_index + 1}/$total',
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
+                  ],
+                ],
+              ),
+            );
+          },
         ),
         if (total > 1)
           SizedBox(
