@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -77,6 +78,18 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
     if (parsed == null || parsed < 1) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter at least GH₵1.00')),
+      );
+      return;
+    }
+
+    final available = context.read<AppStore>().wallet?.availableBalance ?? 0;
+    if (parsed > available) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Not enough balance (${_money.format(available)}). Add money via Mobile Money / Card first.',
+          ),
+        ),
       );
       return;
     }
@@ -166,6 +179,8 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
     final wallet = context.watch<AppStore>().wallet;
     final available = wallet?.availableBalance ?? 0;
     final canSend = (_parsedAmount ?? 0) >= 1 && !sending;
+    final amount = _parsedAmount ?? 0;
+    final balanceCovers = amount >= 1 && amount <= available;
     final bottomPad = MediaQuery.paddingOf(context).bottom;
     final avatar = widget.recipientAvatar;
     final mobile = (widget.recipientMobile ?? '').trim();
@@ -320,6 +335,11 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
                         ),
                       ),
                     const Spacer(),
+                    _PaymentMethodRow(
+                      available: available,
+                      amount: amount,
+                      onTopUp: () => context.go('/shop?tab=wallet'),
+                    ),
                   ],
                 ),
               ),
@@ -382,11 +402,11 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
                             child: Padding(
                               padding: const EdgeInsets.all(0.4),
                               child: Material(
-                                color: canSend
+                                color: canSend && balanceCovers
                                     ? const Color(0xFF07C160)
                                     : const Color(0xFF07C160).withValues(alpha: 0.35),
                                 child: InkWell(
-                                  onTap: canSend ? _send : null,
+                                  onTap: canSend && balanceCovers ? _send : null,
                                   child: Center(
                                     child: sending
                                         ? const SizedBox(
@@ -421,6 +441,94 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PaymentMethodRow extends StatelessWidget {
+  const _PaymentMethodRow({
+    required this.available,
+    required this.amount,
+    required this.onTopUp,
+  });
+
+  final double available;
+  final double amount;
+  final VoidCallback onTopUp;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAmount = amount >= 1;
+    final sufficient = hasAmount && amount <= available;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: sufficient ? const Color(0xFFF0FDF4) : const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: sufficient ? const Color(0xFFBBF7D0) : const Color(0xFFE5E7EB),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: sufficient ? const Color(0xFF07C160) : const Color(0xFFE5E7EB),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.account_balance_wallet_rounded,
+                  size: 20,
+                  color: sufficient ? Colors.white : const Color(0xFF6B7280),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Balance',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                    ),
+                    Text(
+                      sufficient
+                          ? 'Pay from wallet · ${_money.format(available)} available'
+                          : hasAmount
+                              ? 'Insufficient · ${_money.format(available)} available'
+                              : '${_money.format(available)} available',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: sufficient
+                            ? const Color(0xFF047857)
+                            : (hasAmount ? const Color(0xFFDC2626) : const Color(0xFF888888)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (sufficient)
+                const Icon(Icons.check_circle_rounded, color: Color(0xFF07C160), size: 22),
+            ],
+          ),
+        ),
+        if (hasAmount && !sufficient) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: onTopUp,
+              child: const Text('Add money via Mobile Money / Card'),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

@@ -58,6 +58,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  void _applyDefaultPaymentMethod(CheckoutPreview p) {
+    if (p.walletAvailable >= p.grandTotal) {
+      paymentMethod = 'wallet';
+      return;
+    }
+    if (paymentMethod == 'cash' && _storesWithoutCash(p).isNotEmpty) {
+      paymentMethod = p.paystackConfigured ? 'momo' : 'wallet';
+      return;
+    }
+    if (paymentMethod == 'wallet') {
+      paymentMethod = p.paystackConfigured ? 'momo' : paymentMethod;
+    }
+    if (paymentMethod != 'cash' && paymentMethod != 'wallet') {
+      paymentMethod = p.paystackConfigured ? 'momo' : 'wallet';
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       loading = true;
@@ -67,14 +84,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final p = await context.read<AppStore>().loadCheckoutPreview();
       if (!mounted) return;
       _initSellerPayments(p);
+      _applyDefaultPaymentMethod(p);
       setState(() {
         preview = p;
         addressId =
             p.addresses.where((a) => a.isDefault).firstOrNull?.id ??
             p.addresses.firstOrNull?.id;
-        if (paymentMethod == 'cash' && _storesWithoutCash(p).isNotEmpty) {
-          paymentMethod = 'momo';
-        }
         loading = false;
       });
     } on ApiException catch (e) {
@@ -416,8 +431,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Widget _form(CheckoutPreview p) {
     final selected = p.addresses.where((a) => a.id == addressId).firstOrNull;
     final walletShort = p.walletAvailable < p.grandTotal;
+    final walletCanPay = !walletShort;
     final noCashStores = _storesWithoutCash(p);
     final cashAllowed = noCashStores.isEmpty;
+
+    Widget walletRow() => _PayRow(
+          icon: Icons.account_balance_wallet_rounded,
+          title: 'Balance',
+          subtitle: walletCanPay
+              ? 'CityShop wallet · ${_money.format(p.walletAvailable)}'
+              : '${_money.format(p.walletAvailable)} · not enough for this order',
+          selected: paymentMethod == 'wallet',
+          warn: walletShort,
+          onTap: () => setState(() => paymentMethod = 'wallet'),
+        );
+
+    Widget momoRow() => _PayRow(
+          icon: Icons.credit_card_rounded,
+          title: 'Mobile Money / Card',
+          subtitle: p.paystackConfigured
+              ? 'Paystack secure payment'
+              : 'Unavailable right now',
+          selected: paymentMethod == 'momo',
+          warn: !p.paystackConfigured,
+          enabled: p.paystackConfigured,
+          onTap: () => setState(() => paymentMethod = 'momo'),
+        );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -438,27 +477,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _CardShell(
           child: Column(
             children: [
-              _PayRow(
-                icon: Icons.credit_card_rounded,
-                title: 'Mobile Money / Card',
-                subtitle: p.paystackConfigured
-                    ? 'Paystack secure payment'
-                    : 'Unavailable right now',
-                selected: paymentMethod == 'momo',
-                warn: !p.paystackConfigured,
-                onTap: () => setState(() => paymentMethod = 'momo'),
-              ),
-              const _RowDivider(),
-              _PayRow(
-                icon: Icons.account_balance_wallet_rounded,
-                title: 'CityShop Wallet',
-                subtitle: walletShort
-                    ? '${_money.format(p.walletAvailable)} · not enough'
-                    : 'Balance ${_money.format(p.walletAvailable)}',
-                selected: paymentMethod == 'wallet',
-                warn: walletShort,
-                onTap: () => setState(() => paymentMethod = 'wallet'),
-              ),
+              if (walletCanPay) ...[
+                walletRow(),
+                const _RowDivider(),
+                momoRow(),
+              ] else ...[
+                momoRow(),
+                const _RowDivider(),
+                walletRow(),
+              ],
               const _RowDivider(),
               _PayRow(
                 icon: Icons.payments_rounded,
