@@ -712,6 +712,17 @@ class AppStore extends ChangeNotifier {
     int? duration,
     String filename = 'product.mp4',
   }) async {
+    var name = filename.trim();
+    if (name.isEmpty) name = 'product.mp4';
+    final lower = name.toLowerCase();
+    if (!lower.endsWith('.mp4') &&
+        !lower.endsWith('.mov') &&
+        !lower.endsWith('.webm') &&
+        !lower.endsWith('.m4v') &&
+        !lower.endsWith('.3gp') &&
+        !lower.endsWith('.3gpp')) {
+      name = '$name.mp4';
+    }
     final res = await _api.postForm(
       '/seller/products/$id/video',
       {
@@ -719,7 +730,7 @@ class AppStore extends ChangeNotifier {
         if (duration != null) 'video_duration': duration,
       },
       fileFields: const ['video'],
-      filenames: {'video': filename},
+      filenames: {'video': name},
     );
     return Map<String, dynamic>.from(res.data as Map);
   }

@@ -792,7 +792,12 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      final msg = e.message.trim().isEmpty || e.message == 'Server Error'
+          ? (video != null
+              ? 'Could not save this video. Try another MP4 under 1 minute, or compress it first.'
+              : 'Something went wrong. Please try again.')
+          : e.message;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       if (!mounted) return;
       setState(() => saving = false);
