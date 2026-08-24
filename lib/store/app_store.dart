@@ -8,6 +8,7 @@ import '../api/api_config.dart';
 import '../api/chat_realtime.dart';
 import '../models/models.dart';
 import '../services/recent_views.dart';
+import '../widgets/product_image_limits.dart';
 
 class AppStore extends ChangeNotifier {
   AppStore(this._api);
@@ -545,6 +546,21 @@ class AppStore extends ChangeNotifier {
     int? videoDuration,
     Map<String, dynamic> listing = const {},
   }) async {
+    if (imagePaths.isEmpty) {
+      throw ApiException('Add at least one product photo.');
+    }
+    if (imagePaths.length > ProductImageLimits.maxImages) {
+      throw ApiException('Maximum ${ProductImageLimits.maxImages} photos per product.');
+    }
+
+    // First request: enough photos to create + optional video. Rest uploaded in batches
+    // so hosts with low max_file_uploads still accept 50+ galleries.
+    final initialCount = videoPath != null
+        ? (ProductImageLimits.uploadBatchSize - 1).clamp(1, imagePaths.length)
+        : ProductImageLimits.uploadBatchSize.clamp(1, imagePaths.length);
+    final initial = imagePaths.take(initialCount).toList();
+    final remaining = imagePaths.skip(initialCount).toList();
+
     final data = <String, dynamic>{
       'name': name,
       'price': price,
@@ -552,13 +568,13 @@ class AppStore extends ChangeNotifier {
       if (description != null && description.trim().isNotEmpty) 'description': description.trim(),
       if (categoryId != null) 'category_id': categoryId,
       if (discountPrice != null) 'discount_price': discountPrice,
-      'image_count': imagePaths.length,
+      'image_count': initial.length,
       if (videoDuration != null) 'video_duration': videoDuration,
       ..._flattenSellerListing(listing, form: true),
     };
     final fileFields = <String>[];
-    for (var i = 0; i < imagePaths.length; i++) {
-      data['images[$i]'] = imagePaths[i];
+    for (var i = 0; i < initial.length; i++) {
+      data['images[$i]'] = initial[i];
       fileFields.add('images[$i]');
     }
     if (videoPath != null) {
@@ -566,7 +582,15 @@ class AppStore extends ChangeNotifier {
       fileFields.add('video');
     }
     final res = await _api.postForm('/seller/products', data, fileFields: fileFields);
-    return Map<String, dynamic>.from(res.data as Map);
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final productData = body['data'];
+    final productId = productData is Map ? (productData['id'] as num?)?.toInt() : null;
+
+    if (remaining.isNotEmpty && productId != null) {
+      await uploadSellerProductImages(productId, remaining);
+    }
+
+    return body;
   }
 
   Future<Map<String, dynamic>> updateSellerProduct(
@@ -594,14 +618,23 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> uploadSellerProductImages(int id, List<String> imagePaths) async {
-    final data = <String, dynamic>{};
-    final fileFields = <String>[];
-    for (var i = 0; i < imagePaths.length; i++) {
-      data['images[$i]'] = imagePaths[i];
-      fileFields.add('images[$i]');
+    if (imagePaths.isEmpty) {
+      return {};
     }
-    final res = await _api.postForm('/seller/products/$id/images', data, fileFields: fileFields);
-    return Map<String, dynamic>.from(res.data as Map);
+    Map<String, dynamic> last = {};
+    for (var start = 0; start < imagePaths.length; start += ProductImageLimits.uploadBatchSize) {
+      final end = (start + ProductImageLimits.uploadBatchSize).clamp(0, imagePaths.length);
+      final chunk = imagePaths.sublist(start, end);
+      final data = <String, dynamic>{};
+      final fileFields = <String>[];
+      for (var i = 0; i < chunk.length; i++) {
+        data['images[$i]'] = chunk[i];
+        fileFields.add('images[$i]');
+      }
+      final res = await _api.postForm('/seller/products/$id/images', data, fileFields: fileFields);
+      last = Map<String, dynamic>.from(res.data as Map);
+    }
+    return last;
   }
 
   Future<Map<String, dynamic>> bulkSellerProducts({
@@ -2103,25 +2136,39 @@ class AppStore extends ChangeNotifier {
 
   Future<void> postStatus({
     String? imagePath,
+    String? videoPath,
     String? caption,
     String? backgroundColor,
     String filename = 'status.jpg',
   }) async {
-    final res = imagePath != null && imagePath.isNotEmpty
+    final hasImage = imagePath != null && imagePath.isNotEmpty;
+    final hasVideo = videoPath != null && videoPath.isNotEmpty;
+    final res = hasVideo
         ? await _api.postMultipart(
             '/status',
             fields: {
               if (caption != null && caption.trim().isNotEmpty) 'body': caption.trim(),
               if (backgroundColor != null) 'background_color': backgroundColor,
             },
-            fileField: 'image',
-            filePath: imagePath,
-            filename: filename,
+            fileField: 'video',
+            filePath: videoPath,
+            filename: filename.isNotEmpty ? filename : 'status.mp4',
           )
-        : await _api.post('/status', data: {
-            if (caption != null) 'body': caption,
-            if (backgroundColor != null) 'background_color': backgroundColor,
-          });
+        : hasImage
+            ? await _api.postMultipart(
+                '/status',
+                fields: {
+                  if (caption != null && caption.trim().isNotEmpty) 'body': caption.trim(),
+                  if (backgroundColor != null) 'background_color': backgroundColor,
+                },
+                fileField: 'image',
+                filePath: imagePath,
+                filename: filename,
+              )
+            : await _api.post('/status', data: {
+                if (caption != null) 'body': caption,
+                if (backgroundColor != null) 'background_color': backgroundColor,
+              });
     if (res.statusCode != null && res.statusCode! >= 400) {
       throw ApiException('Could not post status.');
     }

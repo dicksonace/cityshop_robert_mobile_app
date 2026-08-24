@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -160,63 +159,6 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Material(
-                    color: const Color(0xFFEEF2FF),
-                    borderRadius: BorderRadius.circular(16),
-                    child: InkWell(
-                      onTap: () async {
-                        final uri = Uri.parse('https://buy-rmb.com');
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      },
-                      borderRadius: BorderRadius.circular(16),
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: const [
-                                  Text(
-                                    'Also on buy-rmb.com',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      color: Color(0xFF312E81),
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'Open the partner desk anytime from CityShop.',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF4338CA),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF6366F1),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: const Text(
-                                'Open ↗',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
                   ),
                   const SizedBox(height: 22),

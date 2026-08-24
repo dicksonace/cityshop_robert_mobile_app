@@ -1,13 +1,17 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../api/api_client.dart';
 import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/product_video_limits.dart';
 
 const _statusColors = [
   Color(0xFFEA580C),
@@ -111,6 +115,11 @@ Future<void> _openComposer(BuildContext context) async {
               onTap: () => Navigator.pop(ctx, 'gallery'),
             ),
             ListTile(
+              leading: const Icon(Icons.videocam_outlined, color: AppColors.accent),
+              title: const Text('Video'),
+              onTap: () => Navigator.pop(ctx, 'video'),
+            ),
+            ListTile(
               leading: const Icon(Icons.text_fields_rounded, color: AppColors.accent),
               title: const Text('Text'),
               onTap: () => Navigator.pop(ctx, 'text'),
@@ -126,6 +135,34 @@ Future<void> _openComposer(BuildContext context) async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const StatusTextComposerScreen()),
     );
+    return;
+  }
+
+  if (choice == 'video') {
+    final file = await ImagePicker().pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(seconds: ProductVideoLimits.maxSeconds),
+    );
+    if (file == null || !context.mounted) return;
+
+    final sizeError = ProductVideoLimits.sizeError(await File(file.path).length());
+    if (sizeError != null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(sizeError)));
+      }
+      return;
+    }
+
+    try {
+      await context.read<AppStore>().postStatus(
+            videoPath: file.path,
+            filename: file.name.isNotEmpty ? file.name : 'status.mp4',
+          );
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
     return;
   }
 
@@ -313,7 +350,11 @@ class _StatusTextComposerScreenState extends State<StatusTextComposerScreen> {
                   ),
                   cursorColor: Colors.white,
                   decoration: const InputDecoration(
+                    filled: false,
+                    fillColor: Colors.transparent,
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
                     hintText: 'Type a status',
                     hintStyle: TextStyle(color: Colors.white54, fontWeight: FontWeight.w700),
                   ),
@@ -420,7 +461,9 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> {
           : Stack(
               fit: StackFit.expand,
               children: [
-                if (item.isImage && media.isNotEmpty)
+                if (item.isVideo && media.isNotEmpty)
+                  _StatusVideoPlayer(key: ValueKey('status-video-${item.id}'), url: media)
+                else if (item.isImage && media.isNotEmpty)
                   CachedNetworkImage(imageUrl: media, fit: BoxFit.contain)
                 else
                   Padding(
@@ -496,7 +539,9 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> {
                               ),
                           ],
                         ),
-                        if (item.body != null && item.body!.trim().isNotEmpty && item.isImage) ...[
+                        if (item.body != null &&
+                            item.body!.trim().isNotEmpty &&
+                            (item.isImage || item.isVideo)) ...[
                           const Spacer(),
                           Padding(
                             padding: const EdgeInsets.all(16),
@@ -513,6 +558,66 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _StatusVideoPlayer extends StatefulWidget {
+  const _StatusVideoPlayer({super.key, required this.url});
+
+  final String url;
+
+  @override
+  State<_StatusVideoPlayer> createState() => _StatusVideoPlayerState();
+}
+
+class _StatusVideoPlayerState extends State<_StatusVideoPlayer> {
+  late final VideoPlayerController _controller;
+  bool ready = false;
+  bool failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..setLooping(true)
+      ..initialize().then((_) async {
+        if (!mounted) return;
+        setState(() => ready = true);
+        await _controller.play();
+      }).catchError((_) {
+        if (mounted) setState(() => failed = true);
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (failed) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.videocam_off_outlined, color: Colors.white70, size: 48),
+            SizedBox(height: 12),
+            Text('Could not play this video', style: TextStyle(color: Colors.white70)),
+          ],
+        ),
+      );
+    }
+    if (!ready) {
+      return const Center(child: CircularProgressIndicator(color: Colors.white));
+    }
+    return Center(
+      child: AspectRatio(
+        aspectRatio: _controller.value.aspectRatio == 0 ? 9 / 16 : _controller.value.aspectRatio,
+        child: VideoPlayer(_controller),
+      ),
     );
   }
 }

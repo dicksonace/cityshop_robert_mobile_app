@@ -2211,6 +2211,8 @@ class StatusItem {
 
   bool get isImage => type == 'image';
 
+  bool get isVideo => type == 'video';
+
   StatusItem copyWith({bool? viewed, int? viewCount}) {
     return StatusItem(
       id: id,

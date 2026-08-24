@@ -9,16 +9,9 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
-const buyRmbPartnerUrl = 'https://buy-rmb.com';
-
 final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
-Future<void> openBuyRmbSite() async {
-  final uri = Uri.parse(buyRmbPartnerUrl);
-  await launchUrl(uri, mode: LaunchMode.externalApplication);
-}
-
-/// Buy-rmb.com style: Today's Rate, You send / They receive, arrival, Continue.
+/// Buy RMB calculator: Today's Rate, You send / They receive, arrival, Continue.
 class BuyRmbCalculatorCard extends StatefulWidget {
   const BuyRmbCalculatorCard({
     super.key,
@@ -201,18 +194,6 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: openBuyRmbSite,
-            child: const Text(
-              'Or open buy-rmb.com',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF4F46E5),
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -351,18 +332,7 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Buy RMB'),
-        actions: [
-          TextButton(
-            onPressed: openBuyRmbSite,
-            child: const Text(
-              'buy-rmb.com',
-              style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF4F46E5)),
-            ),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Buy RMB')),
       body: loading
           ? const FullPageLoader(label: 'Loading rates…')
           : RefreshIndicator(
@@ -372,7 +342,7 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
                 children: [
                   if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
                   Text(
-                    'Send GHS, receive CNY in China via Alipay. You can also open buy-rmb.com anytime.',
+                    'Send GHS, receive CNY in China via Alipay.',
                     style: TextStyle(color: Colors.grey.shade700, height: 1.35),
                   ),
                   if ((config['instructions'] as String?)?.isNotEmpty == true) ...[
@@ -409,26 +379,17 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(color: const Color(0xFFD1D5DB), style: BorderStyle.solid),
                       ),
-                      child: Column(
+                      child: const Column(
                         children: [
-                          const Text(
+                          Text(
                             'Rate not published yet',
                             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
                           ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'You can still use the partner desk meanwhile.',
+                          SizedBox(height: 8),
+                          Text(
+                            'China transfers will open here once admin publishes a rate.',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: Colors.black54),
-                          ),
-                          const SizedBox(height: 16),
-                          FilledButton(
-                            onPressed: openBuyRmbSite,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF6366F1),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                            ),
-                            child: const Text('Open buy-rmb.com', style: TextStyle(fontWeight: FontWeight.w800)),
                           ),
                         ],
                       ),

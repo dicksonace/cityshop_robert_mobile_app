@@ -13,6 +13,7 @@ import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/product_image_limits.dart';
 import '../../widgets/product_video_field.dart';
 import '../../widgets/product_video_limits.dart';
 import '../../widgets/tab_refresh.dart';
@@ -715,9 +716,12 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
   }
 
   Future<void> _pickImages() async {
-    final remaining = 6 - (existingImages.length - removeImageIds.length) - images.length;
+    final keptExisting = existingImages.length - removeImageIds.length;
+    final remaining = ProductImageLimits.maxImages - keptExisting - images.length;
     if (remaining <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Maximum 6 photos.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Maximum ${ProductImageLimits.maxImages} photos.')),
+      );
       return;
     }
     final picked = await ImagePicker().pickMultiImage(imageQuality: 82, limit: remaining);
@@ -982,10 +986,23 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                           ),
                         ],
                         const SizedBox(height: 8),
-                        OutlinedButton.icon(
-                          onPressed: _pickImages,
-                          icon: const Icon(Icons.photo_library_outlined),
-                          label: Text(images.isEmpty ? 'Add photos' : '${images.length} new photo(s)'),
+                        Builder(
+                          builder: (context) {
+                            final kept = existingImages.length - removeImageIds.length;
+                            final total = kept + images.length;
+                            final canAdd = total < ProductImageLimits.maxImages;
+                            return OutlinedButton.icon(
+                              onPressed: canAdd ? _pickImages : null,
+                              icon: const Icon(Icons.photo_library_outlined),
+                              label: Text(
+                                images.isEmpty && kept == 0
+                                    ? 'Add photos (up to ${ProductImageLimits.maxImages})'
+                                    : canAdd
+                                        ? 'Add more photos ($total/${ProductImageLimits.maxImages})'
+                                        : 'Photos full ($total/${ProductImageLimits.maxImages})',
+                              ),
+                            );
+                          },
                         ),
                         if (images.isNotEmpty) ...[
                           const SizedBox(height: 12),
