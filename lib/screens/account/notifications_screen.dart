@@ -58,6 +58,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'admin_message':
       case 'dispute':
         return Icons.shield_outlined;
+      case 'seller_activation_due':
+      case 'seller_activation_paid':
+        return Icons.workspace_premium_outlined;
       case 'product_out_of_stock':
         return Icons.warning_amber_outlined;
       default:
@@ -100,6 +103,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     if (n.type == 'payment' || n.type == 'wallet' || n.type == 'qr_payment') {
       context.go('/shop?tab=wallet');
+      return;
+    }
+    if (n.type == 'seller_activation_due' || n.type == 'seller_activation_paid') {
+      context.push('/seller/activation');
+      return;
     }
   }
 

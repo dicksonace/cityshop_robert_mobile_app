@@ -144,6 +144,17 @@ class _SellerShellScreenState extends State<SellerShellScreen> {
               title: Text(storeName.isEmpty ? 'Seller Hub' : storeName),
               actions: [
                 IconButton(
+                  tooltip: 'Notifications',
+                  onPressed: () => context.push('/notifications'),
+                  icon: Badge(
+                    isLabelVisible: store.unreadNotifications > 0,
+                    label: Text(
+                      '${store.unreadNotifications > 9 ? '9+' : store.unreadNotifications}',
+                    ),
+                    child: const Icon(Icons.notifications_outlined),
+                  ),
+                ),
+                IconButton(
                   tooltip: 'Open store on the web',
                   onPressed: _openStoreOnWeb,
                   icon: const Icon(Icons.storefront_outlined),
