@@ -9,7 +9,288 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 
+const buyRmbPartnerUrl = 'https://buy-rmb.com';
+
 final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
+
+Future<void> openBuyRmbSite() async {
+  final uri = Uri.parse(buyRmbPartnerUrl);
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
+}
+
+/// Buy-rmb.com style: Today's Rate, You send / They receive, arrival, Continue.
+class BuyRmbCalculatorCard extends StatefulWidget {
+  const BuyRmbCalculatorCard({
+    super.key,
+    required this.ghsPerRmb,
+    required this.rmbPerGhs,
+    required this.feeMode,
+    required this.feeValue,
+    required this.enabled,
+    this.initialGhs,
+    required this.onContinue,
+  });
+
+  final double ghsPerRmb;
+  final double rmbPerGhs;
+  final String feeMode;
+  final double feeValue;
+  final bool enabled;
+  final String? initialGhs;
+  final void Function(String ghsAmount) onContinue;
+
+  @override
+  State<BuyRmbCalculatorCard> createState() => _BuyRmbCalculatorCardState();
+}
+
+class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
+  late final TextEditingController ghs;
+  late final TextEditingController cny;
+  bool syncing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final start = widget.initialGhs?.trim() ?? '';
+    ghs = TextEditingController(text: start);
+    final send = double.tryParse(start) ?? 0;
+    cny = TextEditingController(
+      text: send > 0 && widget.ghsPerRmb > 0
+          ? (send / widget.ghsPerRmb).toStringAsFixed(2)
+          : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    ghs.dispose();
+    cny.dispose();
+    super.dispose();
+  }
+
+  void _fromGhs(String raw) {
+    if (syncing) return;
+    syncing = true;
+    final cleaned = raw.replaceAll(RegExp(r'[^\d.]'), '');
+    if (cleaned != raw) {
+      ghs.value = TextEditingValue(
+        text: cleaned,
+        selection: TextSelection.collapsed(offset: cleaned.length),
+      );
+    }
+    final send = double.tryParse(cleaned) ?? 0;
+    if (send > 0 && widget.ghsPerRmb > 0) {
+      cny.text = (send / widget.ghsPerRmb).toStringAsFixed(2);
+    } else {
+      cny.text = '';
+    }
+    syncing = false;
+    setState(() {});
+  }
+
+  void _fromCny(String raw) {
+    if (syncing) return;
+    syncing = true;
+    final cleaned = raw.replaceAll(RegExp(r'[^\d.]'), '');
+    if (cleaned != raw) {
+      cny.value = TextEditingValue(
+        text: cleaned,
+        selection: TextSelection.collapsed(offset: cleaned.length),
+      );
+    }
+    final receive = double.tryParse(cleaned) ?? 0;
+    if (receive > 0 && widget.ghsPerRmb > 0) {
+      ghs.text = (receive * widget.ghsPerRmb).toStringAsFixed(2);
+    } else {
+      ghs.text = '';
+    }
+    syncing = false;
+    setState(() {});
+  }
+
+  double get send => double.tryParse(ghs.text) ?? 0;
+  double get receive =>
+      widget.ghsPerRmb > 0 && send > 0 ? send / widget.ghsPerRmb : 0;
+  double get fee =>
+      widget.feeMode == 'percent' ? send * widget.feeValue / 100 : widget.feeValue;
+  bool get canContinue => widget.enabled && send > 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            "Today's Rate",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF6B7280)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '1 GHS = ${widget.rmbPerGhs.toStringAsFixed(2)} CNY',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF4F46E5),
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text('You send', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF4B5563))),
+          const SizedBox(height: 8),
+          _AmountField(
+            symbol: '₵',
+            code: 'GHS',
+            controller: ghs,
+            onChanged: _fromGhs,
+          ),
+          const SizedBox(height: 14),
+          const Text('They receive', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF4B5563))),
+          const SizedBox(height: 8),
+          _AmountField(
+            symbol: '¥',
+            code: 'CNY',
+            controller: cny,
+            onChanged: _fromCny,
+          ),
+          if (fee > 0 && send > 0) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Fee ${_ghs.format(fee)} · Total ${_ghs.format(send + fee)}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+            ),
+          ],
+          const SizedBox(height: 14),
+          const Text(
+            'Arrives in 5–30 minutes',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF059669),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 52,
+            child: FilledButton(
+              onPressed: canContinue ? () => widget.onContinue(send.toStringAsFixed(2)) : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF6366F1),
+                disabledBackgroundColor: const Color(0xFFD1D5DB),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+              ),
+              child: Text(
+                widget.enabled ? 'Continue' : 'Transfers paused',
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: openBuyRmbSite,
+            child: const Text(
+              'Or open buy-rmb.com',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF4F46E5),
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AmountField extends StatefulWidget {
+  const _AmountField({
+    required this.symbol,
+    required this.code,
+    required this.controller,
+    required this.onChanged,
+  });
+
+  final String symbol;
+  final String code;
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_AmountField> createState() => _AmountFieldState();
+}
+
+class _AmountFieldState extends State<_AmountField> {
+  bool focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (v) => setState(() => focused = v),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        decoration: BoxDecoration(
+          color: focused ? Colors.white : const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: focused ? const Color(0xFF6366F1) : const Color(0xFFE5E7EB),
+            width: 2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              widget.symbol,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF9CA3AF)),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: widget.controller,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                onChanged: widget.onChanged,
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  hintText: '0.00',
+                  hintStyle: TextStyle(color: Color(0xFFD1D5DB), fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F4F6),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                widget.code,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF4B5563)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class ChinaTransferHubScreen extends StatefulWidget {
   const ChinaTransferHubScreen({super.key});
@@ -23,18 +304,11 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
   String? error;
   Map<String, dynamic> config = {};
   List<Map<String, dynamic>> transfers = [];
-  final amount = TextEditingController(text: '1000');
 
   @override
   void initState() {
     super.initState();
     _load();
-  }
-
-  @override
-  void dispose() {
-    amount.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -62,21 +336,33 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
     }
   }
 
-  Map<String, dynamic>? get rate => config['rate'] is Map ? Map<String, dynamic>.from(config['rate'] as Map) : null;
+  Map<String, dynamic>? get rate =>
+      config['rate'] is Map ? Map<String, dynamic>.from(config['rate'] as Map) : null;
 
   @override
   Widget build(BuildContext context) {
     final ghsPerRmb = (rate?['ghs_per_rmb'] as num?)?.toDouble() ?? 0;
-    final rmbPerGhs = (rate?['rmb_per_ghs'] as num?)?.toDouble() ?? 0;
+    final rmbPerGhs = (rate?['rmb_per_ghs'] as num?)?.toDouble() ??
+        (ghsPerRmb > 0 ? 1 / ghsPerRmb : 0);
     final feeMode = rate?['fee_mode'] as String? ?? 'flat';
     final feeValue = (rate?['fee_value'] as num?)?.toDouble() ?? 0;
-    final send = double.tryParse(amount.text) ?? 0;
-    final rmb = ghsPerRmb > 0 ? send / ghsPerRmb : 0.0;
-    final fee = feeMode == 'percent' ? send * feeValue / 100 : feeValue;
     final enabled = config['enabled'] == true;
+    final minGhs = (rate?['min_ghs'] as num?)?.toDouble();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Buy RMB')),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('Buy RMB'),
+        actions: [
+          TextButton(
+            onPressed: openBuyRmbSite,
+            child: const Text(
+              'buy-rmb.com',
+              style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF4F46E5)),
+            ),
+          ),
+        ],
+      ),
       body: loading
           ? const FullPageLoader(label: 'Loading rates…')
           : RefreshIndicator(
@@ -85,93 +371,92 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
                 children: [
                   if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF5B21B6), Color(0xFF6D28D9)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Current Exchange Rates', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 4),
-                        const Text('GHS to RMB · Alipay only', style: TextStyle(color: Colors.white60, fontSize: 12)),
-                        const SizedBox(height: 16),
-                        Text(
-                          rate == null ? 'Rate not published yet' : '1 GHS → ${rmbPerGhs.toStringAsFixed(3)} RMB',
-                          style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
-                        ),
-                        if (rate != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text('1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}', style: const TextStyle(color: Colors.white70)),
-                          ),
-                      ],
-                    ),
+                  Text(
+                    'Send GHS, receive CNY in China via Alipay. You can also open buy-rmb.com anytime.',
+                    style: TextStyle(color: Colors.grey.shade700, height: 1.35),
                   ),
                   if ((config['instructions'] as String?)?.isNotEmpty == true) ...[
                     const SizedBox(height: 12),
-                    Text('${config['instructions']}', style: const TextStyle(color: Color(0xFF9A3412))),
-                  ],
-                  if (rate != null) ...[
-                    const SizedBox(height: 18),
-                    const Text('Amount to send (GHS)', style: TextStyle(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: amount,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(border: OutlineInputBorder()),
-                    ),
-                    const SizedBox(height: 12),
-                    _row('RMB value', '¥${rmb.toStringAsFixed(2)}'),
-                    _row('Transfer fee', _ghs.format(fee)),
-                    _row('Total payment', _ghs.format(send + fee), bold: true),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: enabled
-                          ? () => context.push('/wallet/china-transfer/create', extra: amount.text)
-                          : null,
-                      child: Text(enabled ? 'Continue to Alipay details' : 'Transfers paused'),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF7ED),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        '${config['instructions']}',
+                        style: const TextStyle(color: Color(0xFF9A3412)),
+                      ),
                     ),
                   ],
+                  const SizedBox(height: 16),
+                  if (rate != null)
+                    BuyRmbCalculatorCard(
+                      ghsPerRmb: ghsPerRmb,
+                      rmbPerGhs: rmbPerGhs,
+                      feeMode: feeMode,
+                      feeValue: feeValue,
+                      enabled: enabled,
+                      initialGhs: minGhs != null && minGhs > 0 ? minGhs.toStringAsFixed(0) : null,
+                      onContinue: (amount) =>
+                          context.push('/wallet/china-transfer/create', extra: amount),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0xFFD1D5DB), style: BorderStyle.solid),
+                      ),
+                      child: Column(
+                        children: [
+                          const Text(
+                            'Rate not published yet',
+                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'You can still use the partner desk meanwhile.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: openBuyRmbSite,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF6366F1),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                            ),
+                            child: const Text('Open buy-rmb.com', style: TextStyle(fontWeight: FontWeight.w800)),
+                          ),
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 28),
                   const Text('Your transfers', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 8),
-                  if (transfers.isEmpty) const Text('No China transfers yet.', style: TextStyle(color: Colors.black54)),
+                  if (transfers.isEmpty)
+                    const Text('No China transfers yet.', style: TextStyle(color: Colors.black54)),
                   ...transfers.map((item) {
-                    final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
+                    final quote =
+                        item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text('${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w800)),
                       subtitle: Text(
                         '${_ghs.format((quote['total_payable_ghs'] as num?)?.toDouble() ?? 0)} → ¥${((quote['rmb_amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
                       ),
-                      trailing: Text('${item['status_label']}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
+                      trailing: Text(
+                        '${item['status_label']}',
+                        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
+                      ),
                       onTap: () => context.push('/wallet/china-transfer/${item['id']}'),
                     );
                   }),
                 ],
               ),
             ),
-    );
-  }
-
-  Widget _row(String label, String value, {bool bold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.black54, fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
-          Text(value, style: TextStyle(fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
-        ],
-      ),
     );
   }
 }
