@@ -42,6 +42,7 @@ class AppStore extends ChangeNotifier {
   List<OrderModel> orders = [];
   WalletInfo? wallet;
   List<ConversationModel> conversations = [];
+  StatusFeed? statusFeed;
   List<BuyerAddress> addresses = [];
   List<String> regions = [];
   Map<String, List<String>> citiesByRegion = {};
@@ -620,6 +621,7 @@ class AppStore extends ChangeNotifier {
     final out = <String, dynamic>{};
     listing.forEach((key, value) {
       if (value == null) return;
+      if (value is String && value.trim().isEmpty) return;
       if (key == 'specifications' && value is Map) {
         if (form) {
           value.forEach((specKey, specValue) {
@@ -2010,11 +2012,13 @@ class AppStore extends ChangeNotifier {
     String filePath, {
     String? caption,
     String filename = 'chat.jpg',
+    bool viewOnce = false,
   }) async {
     final res = await _api.postMultipart(
       '/messages/$conversationId/image',
       fields: {
         if (caption != null && caption.trim().isNotEmpty) 'caption': caption.trim(),
+        if (viewOnce) 'view_once': '1',
       },
       fileField: 'image',
       filePath: filePath,
@@ -2033,12 +2037,14 @@ class AppStore extends ChangeNotifier {
     String? caption,
     String filename = 'chat.mp4',
     int? durationSeconds,
+    bool viewOnce = false,
   }) async {
     final res = await _api.postMultipart(
       '/messages/$conversationId/video',
       fields: {
         if (caption != null && caption.trim().isNotEmpty) 'caption': caption.trim(),
         if (durationSeconds != null) 'duration_seconds': '$durationSeconds',
+        if (viewOnce) 'view_once': '1',
       },
       fileField: 'video',
       filePath: filePath,
@@ -2049,6 +2055,75 @@ class AppStore extends ChangeNotifier {
       Map<String, dynamic>.from(msg as Map),
       myUserId: user?.id ?? 0,
     );
+  }
+
+  Future<({ChatMessage message, String? imageUrl, String? videoUrl})> openViewOnce(
+    int conversationId,
+    int messageId,
+  ) async {
+    final res = await _api.post('/messages/$conversationId/messages/$messageId/view-once');
+    final data = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    final msg = data['message'];
+    return (
+      message: ChatMessage.fromJson(
+        Map<String, dynamic>.from(msg as Map? ?? const {}),
+        myUserId: user?.id ?? 0,
+      ),
+      imageUrl: data['image_url'] as String?,
+      videoUrl: data['video_url'] as String?,
+    );
+  }
+
+  Future<void> loadStatusFeed() async {
+    if (!isLoggedIn) {
+      statusFeed = null;
+      notifyListeners();
+      return;
+    }
+    try {
+      final res = await _api.get('/status');
+      final data = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : null;
+      if (data != null) {
+        statusFeed = StatusFeed.fromJson(data);
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> postStatus({
+    String? imagePath,
+    String? caption,
+    String? backgroundColor,
+    String filename = 'status.jpg',
+  }) async {
+    final res = imagePath != null && imagePath.isNotEmpty
+        ? await _api.postMultipart(
+            '/status',
+            fields: {
+              if (caption != null && caption.trim().isNotEmpty) 'body': caption.trim(),
+              if (backgroundColor != null) 'background_color': backgroundColor,
+            },
+            fileField: 'image',
+            filePath: imagePath,
+            filename: filename,
+          )
+        : await _api.post('/status', data: {
+            if (caption != null) 'body': caption,
+            if (backgroundColor != null) 'background_color': backgroundColor,
+          });
+    if (res.statusCode != null && res.statusCode! >= 400) {
+      throw ApiException('Could not post status.');
+    }
+    await loadStatusFeed();
+  }
+
+  Future<void> viewStatus(int statusId) async {
+    await _api.post('/status/$statusId/view');
+  }
+
+  Future<void> deleteStatus(int statusId) async {
+    await _api.delete('/status/$statusId');
+    await loadStatusFeed();
   }
 
   Future<ChatMessage> sendFileMessage(

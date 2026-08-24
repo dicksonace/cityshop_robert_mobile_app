@@ -521,7 +521,7 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
   List<Map<String, dynamic>> categories = [];
   int? categoryId;
   String shippingType = 'buyer';
-  String? condition;
+  String condition = 'new';
   bool negotiable = false;
   bool cashOnDelivery = false;
   bool pickup = false;
@@ -589,7 +589,10 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
         lowStock.text = product['low_stock_alert'] == null ? '' : '${product['low_stock_alert']}';
         categoryId = (product['category_id'] as num?)?.toInt();
         shippingType = product['shipping_type'] as String? ?? 'buyer';
-        condition = product['condition'] as String?;
+        final savedCondition = product['condition'] as String?;
+        condition = const {'new', 'used', 'refurbished'}.contains(savedCondition)
+            ? savedCondition!
+            : 'new';
         negotiable = product['is_negotiable'] == true;
         cashOnDelivery = product['cash_on_delivery'] == true;
         pickup = product['pickup_available'] == true;
@@ -979,16 +982,15 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                         const SizedBox(height: 12),
                         TextField(controller: brand, decoration: const InputDecoration(labelText: 'Brand')),
                         const SizedBox(height: 12),
-                        DropdownButtonFormField<String?>(
+                        DropdownButtonFormField<String>(
                           value: condition,
                           decoration: const InputDecoration(labelText: 'Condition'),
                           items: const [
-                            DropdownMenuItem(value: null, child: Text('Not set')),
                             DropdownMenuItem(value: 'new', child: Text('New')),
                             DropdownMenuItem(value: 'used', child: Text('Used')),
                             DropdownMenuItem(value: 'refurbished', child: Text('Refurbished')),
                           ],
-                          onChanged: (v) => setState(() => condition = v),
+                          onChanged: (v) => setState(() => condition = v ?? 'new'),
                         ),
                         const SizedBox(height: 12),
                         TextField(

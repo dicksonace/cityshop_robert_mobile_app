@@ -38,6 +38,8 @@ import '../../widgets/video_viewer.dart';
 import '../../widgets/wallet_receipt_sheet.dart';
 import 'chat_settings_screen.dart';
 import 'friend_chat_screens.dart';
+import 'media_caption_screen.dart';
+import 'status_screens.dart';
 
 final _timeFmt = DateFormat('h:mm a');
 final _dayFmt = DateFormat('EEE, MMM d');
@@ -77,6 +79,7 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
     }
     try {
       await store.loadConversations();
+      await store.loadStatusFeed();
       await store.refreshNotificationCounts();
       error = null;
     } on ApiException catch (e) {
@@ -186,43 +189,73 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
     }
     if (store.conversations.isEmpty) {
       // Scrollable so an empty inbox can still be pulled down to refresh.
-      return RefreshIndicator(
-        onRefresh: refreshNow,
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
-          children: [
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: AppColors.ringOrange,
-                  borderRadius: BorderRadius.circular(20),
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Chats',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22),
+                  ),
                 ),
-                child: const Icon(Icons.forum_outlined, size: 36, color: AppColors.accent),
+                IconButton(
+                  tooltip: 'Search mobile number',
+                  onPressed: () => context.push('/messages/new'),
+                  icon: const Icon(Icons.search),
+                ),
+                IconButton(
+                  tooltip: 'New chat or group',
+                  onPressed: () => _openComposeMenu(context),
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
+              ],
+            ),
+          ),
+          const StatusTray(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: refreshNow,
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                children: [
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: AppColors.ringOrange,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Icon(Icons.forum_outlined, size: 36, color: AppColors.accent),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No conversations yet',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Search a CityShop mobile number to chat with friends, or open a product and tap Chat.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _openComposeMenu(context),
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('New chat or group'),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'No conversations yet',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Search a CityShop mobile number to chat with friends, or open a product and tap Chat.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: ElevatedButton.icon(
-                onPressed: () => _openComposeMenu(context),
-                icon: const Icon(Icons.add_circle_outline),
-                label: const Text('New chat or group'),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
@@ -251,6 +284,7 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
             ],
           ),
         ),
+        const StatusTray(),
         Expanded(
           child: RefreshIndicator(
       onRefresh: refreshNow,
@@ -853,6 +887,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final canForwardMessage = !message.isEvent &&
         !message.isSignalling &&
         !message.isTransfer &&
+        !message.viewOnce &&
         forwardable.contains(message.type);
     final canForwardInGroup = conversation?.isGroup == true &&
         canForwardMessage &&
@@ -866,7 +901,8 @@ class _ChatScreenState extends State<ChatScreen> {
     final canEdit = message.stillEditable;
     final canReact = !message.isDeleted &&
         !message.isEvent &&
-        !message.isSignalling;
+        !message.isSignalling &&
+        !message.viewOnce;
     if (!canReply && !canDelete && !canForwardMessage && !canCopy && !canEdit && !canReact) return;
 
     final action = await showModalBottomSheet<String>(
@@ -1208,6 +1244,38 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _openViewOnce(ChatMessage message) async {
+    if (!message.isViewOnceMedia) return;
+    if (message.mine || message.viewOnceOpened) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message.viewOnceOpened ? 'Opened' : 'View once ${message.isViewOnceVideo ? 'video' : 'photo'}')),
+      );
+      return;
+    }
+    try {
+      final opened = await context.read<AppStore>().openViewOnce(widget.conversationId, message.id);
+      if (!mounted) return;
+      setState(() {
+        messages = [
+          for (final item in messages)
+            if (item.id == message.id) opened.message else item,
+        ];
+      });
+      final image = (opened.imageUrl ?? '').trim();
+      final video = (opened.videoUrl ?? '').trim();
+      if (video.isNotEmpty) {
+        await showVideoViewer(context, url: video);
+      } else if (image.isNotEmpty) {
+        await showImageViewer(context, urls: [ApiConfig.resolveMediaUrl(image)]);
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
   Future<void> _sendPhoto(ImageSource source) async {
     final file = await ImagePicker().pickImage(
       source: source,
@@ -1215,15 +1283,25 @@ class _ChatScreenState extends State<ChatScreen> {
       maxWidth: 1600,
     );
     if (file == null || !mounted) return;
-    final caption = _controller.text.trim();
+    final draft = await Navigator.of(context).push<MediaSendDraft>(
+      MaterialPageRoute(
+        builder: (_) => MediaCaptionScreen(
+          path: file.path,
+          isVideo: false,
+          initialCaption: _controller.text.trim(),
+        ),
+      ),
+    );
+    if (draft == null || !mounted) return;
     await _appendMedia(() async {
       final msg = await context.read<AppStore>().sendImageMessage(
             widget.conversationId,
             file.path,
-            caption: caption.isEmpty ? null : caption,
+            caption: draft.caption.isEmpty ? null : draft.caption,
             filename: file.name.isNotEmpty ? file.name : 'chat.jpg',
+            viewOnce: draft.viewOnce,
           );
-      if (caption.isNotEmpty && mounted) _controller.clear();
+      if (draft.caption.isNotEmpty && mounted) _controller.clear();
       return msg;
     });
   }
@@ -1234,15 +1312,25 @@ class _ChatScreenState extends State<ChatScreen> {
       maxDuration: const Duration(minutes: 3),
     );
     if (file == null || !mounted) return;
-    final caption = _controller.text.trim();
+    final draft = await Navigator.of(context).push<MediaSendDraft>(
+      MaterialPageRoute(
+        builder: (_) => MediaCaptionScreen(
+          path: file.path,
+          isVideo: true,
+          initialCaption: _controller.text.trim(),
+        ),
+      ),
+    );
+    if (draft == null || !mounted) return;
     await _appendMedia(() async {
       final msg = await context.read<AppStore>().sendVideoMessage(
             widget.conversationId,
             file.path,
-            caption: caption.isEmpty ? null : caption,
+            caption: draft.caption.isEmpty ? null : draft.caption,
             filename: file.name.isNotEmpty ? file.name : 'chat.mp4',
+            viewOnce: draft.viewOnce,
           );
-      if (caption.isNotEmpty && mounted) _controller.clear();
+      if (draft.caption.isNotEmpty && mounted) _controller.clear();
       return msg;
     });
   }
@@ -1871,6 +1959,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                             _ChatTransferCard(message: m)
                                           else if (m.isFile)
                                             _ChatFileCard(message: m)
+                                          else if (m.isViewOnceMedia)
+                                            _ChatViewOnce(
+                                              message: m,
+                                              onOpen: () => unawaited(_openViewOnce(m)),
+                                            )
                                           else if (m.isPhoto) ...[
                                             _ChatPhoto(
                                               url: m.imageUrl!,
@@ -2494,6 +2587,8 @@ class _ReplyingStrip extends StatelessWidget {
     final photo = ApiConfig.resolveMediaUrl(message.productImage);
     final label = message.isProduct
         ? (message.productName ?? 'Product')
+        : message.isViewOnceMedia
+            ? (message.viewOnceOpened ? 'Opened' : 'View once ${message.isViewOnceVideo ? 'video' : 'photo'}')
         : message.isPhoto
             ? (message.body.trim().isEmpty ? 'Photo' : message.body.trim())
             : message.isVideo
@@ -3145,6 +3240,83 @@ class _EventChip extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: AppColors.textSecondary,
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatViewOnce extends StatelessWidget {
+  const _ChatViewOnce({required this.message, required this.onOpen});
+
+  final ChatMessage message;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final opened = message.viewOnceOpened;
+    final video = message.isViewOnceVideo;
+    final label = opened
+        ? 'Opened'
+        : (message.mine
+            ? 'View once ${video ? 'video' : 'photo'}'
+            : 'View once ${video ? 'video' : 'photo'}');
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 200,
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111B21),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white70, width: 1.6),
+                ),
+                child: Text(
+                  opened ? '✓' : '1',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (!opened && !message.mine)
+                      const Text(
+                        'Tap to open',
+                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                  ],
+                ),
+              ),
+              Icon(
+                video ? Icons.videocam_outlined : Icons.photo_outlined,
+                color: Colors.white70,
+                size: 18,
               ),
             ],
           ),

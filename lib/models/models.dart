@@ -1721,6 +1721,8 @@ class ChatMessage {
     this.canDelete = false,
     this.canEdit = false,
     this.reactions = const [],
+    this.viewOnce = false,
+    this.viewOnceOpened = false,
   });
 
   final int id;
@@ -1757,6 +1759,8 @@ class ChatMessage {
   final bool canDelete;
   final bool canEdit;
   final List<ChatReaction> reactions;
+  final bool viewOnce;
+  final bool viewOnceOpened;
 
   bool get isEdited => (editedAt ?? '').isNotEmpty;
 
@@ -1777,9 +1781,15 @@ class ChatMessage {
 
   bool get isSignalling => signallingTypes.contains(type);
 
-  bool get isPhoto => type == 'image' && (imageUrl ?? '').isNotEmpty && !isDeleted;
+  bool get isPhoto => type == 'image' && (imageUrl ?? '').isNotEmpty && !isDeleted && !viewOnce;
 
-  bool get isVideo => type == 'video' && (videoUrl ?? '').isNotEmpty && !isDeleted;
+  bool get isVideo => type == 'video' && (videoUrl ?? '').isNotEmpty && !isDeleted && !viewOnce;
+
+  bool get isViewOncePhoto => type == 'image' && viewOnce && !isDeleted;
+
+  bool get isViewOnceVideo => type == 'video' && viewOnce && !isDeleted;
+
+  bool get isViewOnceMedia => isViewOncePhoto || isViewOnceVideo;
 
   bool get isVoice => type == 'voice' && (voiceUrl ?? '').isNotEmpty && !isDeleted;
 
@@ -1835,6 +1845,13 @@ class ChatMessage {
         (meta is Map && meta['deleted_at'] != null);
     String? media(String key) {
       if (deleted) return null;
+      final viewOnce = json['view_once'] == true ||
+          (meta is Map && meta['view_once'] == true);
+      if (viewOnce) {
+        final top = json[key] as String?;
+        if (top != null && top.trim().isNotEmpty) return top;
+        return null;
+      }
       // Prefer top-level URL from formatMessage (rewritten for current APP_URL).
       final top = json[key] as String?;
       if (top != null && top.trim().isNotEmpty) return top;
@@ -1931,6 +1948,9 @@ class ChatMessage {
             .where((e) => e.emoji.isNotEmpty)
             .toList();
       }(),
+      viewOnce: json['view_once'] == true ||
+          (meta is Map && meta['view_once'] == true),
+      viewOnceOpened: json['view_once_opened'] == true,
     );
   }
 
@@ -1940,9 +1960,12 @@ class ChatMessage {
     bool? canDelete,
     bool? canEdit,
     String? imageUrl,
+    String? videoUrl,
     String? readAt,
     String? editedAt,
     List<ChatReaction>? reactions,
+    bool? viewOnce,
+    bool? viewOnceOpened,
   }) {
     return ChatMessage(
       id: id,
@@ -1952,7 +1975,7 @@ class ChatMessage {
       type: type,
       createdAt: createdAt,
       imageUrl: imageUrl ?? this.imageUrl,
-      videoUrl: videoUrl,
+      videoUrl: videoUrl ?? this.videoUrl,
       voiceUrl: voiceUrl,
       durationSeconds: durationSeconds,
       metadata: metadata,
@@ -1979,6 +2002,8 @@ class ChatMessage {
       canDelete: canDelete ?? this.canDelete,
       canEdit: canEdit ?? this.canEdit,
       reactions: reactions ?? this.reactions,
+      viewOnce: viewOnce ?? this.viewOnce,
+      viewOnceOpened: viewOnceOpened ?? this.viewOnceOpened,
     );
   }
 }
@@ -2134,6 +2159,142 @@ class AppNotificationItem {
       data: data is Map ? Map<String, dynamic>.from(data) : null,
       readAt: json['read_at'] as String?,
       createdAt: json['created_at'] as String?,
+    );
+  }
+}
+
+class StatusAuthor {
+  const StatusAuthor({
+    required this.id,
+    required this.name,
+    this.avatar,
+    this.role,
+  });
+
+  final int id;
+  final String name;
+  final String? avatar;
+  final String? role;
+
+  factory StatusAuthor.fromJson(Map<String, dynamic> json) {
+    return StatusAuthor(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name'] as String? ?? 'User',
+      avatar: json['avatar'] as String?,
+      role: json['role'] as String?,
+    );
+  }
+}
+
+class StatusItem {
+  const StatusItem({
+    required this.id,
+    required this.type,
+    this.body,
+    this.mediaUrl,
+    this.backgroundColor,
+    this.createdAt,
+    this.expiresAt,
+    this.viewed = false,
+    this.viewCount,
+  });
+
+  final int id;
+  final String type;
+  final String? body;
+  final String? mediaUrl;
+  final String? backgroundColor;
+  final String? createdAt;
+  final String? expiresAt;
+  final bool viewed;
+  final int? viewCount;
+
+  bool get isImage => type == 'image';
+
+  StatusItem copyWith({bool? viewed, int? viewCount}) {
+    return StatusItem(
+      id: id,
+      type: type,
+      body: body,
+      mediaUrl: mediaUrl,
+      backgroundColor: backgroundColor,
+      createdAt: createdAt,
+      expiresAt: expiresAt,
+      viewed: viewed ?? this.viewed,
+      viewCount: viewCount ?? this.viewCount,
+    );
+  }
+
+  factory StatusItem.fromJson(Map<String, dynamic> json) {
+    return StatusItem(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      type: json['type'] as String? ?? 'text',
+      body: json['body'] as String?,
+      mediaUrl: json['media_url'] as String?,
+      backgroundColor: json['background_color'] as String?,
+      createdAt: json['created_at'] as String?,
+      expiresAt: json['expires_at'] as String?,
+      viewed: json['viewed'] == true,
+      viewCount: (json['view_count'] as num?)?.toInt(),
+    );
+  }
+}
+
+class StatusBundle {
+  const StatusBundle({
+    required this.user,
+    required this.items,
+    this.unseenCount = 0,
+    this.latestAt,
+  });
+
+  final StatusAuthor user;
+  final List<StatusItem> items;
+  final int unseenCount;
+  final String? latestAt;
+
+  bool get hasItems => items.isNotEmpty;
+
+  bool get hasUnseen => unseenCount > 0;
+
+  factory StatusBundle.fromJson(Map<String, dynamic> json) {
+    final items = json['items'];
+    final user = json['user'];
+    return StatusBundle(
+      user: StatusAuthor.fromJson(
+        user is Map ? Map<String, dynamic>.from(user) : const <String, dynamic>{},
+      ),
+      items: items is List
+          ? items
+              .whereType<Map>()
+              .map((e) => StatusItem.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+      unseenCount: (json['unseen_count'] as num?)?.toInt() ?? 0,
+      latestAt: json['latest_at'] as String?,
+    );
+  }
+}
+
+class StatusFeed {
+  const StatusFeed({required this.mine, this.users = const []});
+
+  final StatusBundle mine;
+  final List<StatusBundle> users;
+
+  factory StatusFeed.fromJson(Map<String, dynamic> json) {
+    final mine = json['mine'];
+    final users = json['users'];
+    return StatusFeed(
+      mine: StatusBundle.fromJson(
+        mine is Map ? Map<String, dynamic>.from(mine) : const <String, dynamic>{},
+      ),
+      users: users is List
+          ? users
+              .whereType<Map>()
+              .map((e) => StatusBundle.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
     );
   }
 }
