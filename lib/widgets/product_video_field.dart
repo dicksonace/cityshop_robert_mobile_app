@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 import '../api/api_config.dart';
 import '../theme/app_theme.dart';
 import 'common_widgets.dart';
+import 'product_video_limits.dart';
 
 String formatVideoClock(Duration duration) {
   final total = duration.inSeconds.clamp(0, 24 * 60 * 60);
@@ -21,6 +22,7 @@ class ProductVideoField extends StatefulWidget {
     this.networkUrl,
     this.filePath,
     this.durationSeconds,
+    this.fileSizeBytes,
     this.checking = false,
     this.error,
     required this.onPick,
@@ -30,6 +32,7 @@ class ProductVideoField extends StatefulWidget {
   final String? networkUrl;
   final String? filePath;
   final int? durationSeconds;
+  final int? fileSizeBytes;
   final bool checking;
   final String? error;
   final VoidCallback onPick;
@@ -178,7 +181,7 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
           const Text('Product video (optional)', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
           const SizedBox(height: 4),
           const Text(
-            'Show buyers a short clip of the item. Max 1 minute. MP4/WebM/MOV/3GP, up to 50MB.',
+            'Show buyers a short clip of the item. Max 1 minute · up to 50 MB · MP4 / WebM / MOV / 3GP.',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
           ),
           if (widget.checking) ...[
@@ -187,7 +190,7 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
               children: [
                 SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                 SizedBox(width: 10),
-                Text('Checking video length…', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                Text('Checking video size & length…', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
               ],
             ),
           ],
@@ -199,9 +202,7 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
               children: [
                 Expanded(
                   child: Text(
-                    widget.filePath != null
-                        ? 'New video${_durationLabel().isEmpty ? '' : ' · ${_durationLabel()}'}'
-                        : 'Current video${_durationLabel().isEmpty ? '' : ' · ${_durationLabel()}'}',
+                    _statusLabel(),
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -212,6 +213,15 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
                 ),
               ],
             ),
+            if (widget.fileSizeBytes != null && widget.fileSizeBytes! > ProductVideoLimits.warnBytes) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Large file (${ProductVideoLimits.formatMb(widget.fileSizeBytes!)}). Keep under 50 MB or upload may fail.',
+                  style: TextStyle(color: Colors.amber.shade900, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
             OutlinedButton(
               onPressed: widget.checking ? null : widget.onPick,
               child: const Text('Replace video'),
@@ -219,11 +229,22 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
           ],
           if ((widget.error ?? '').isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(widget.error!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
+            Text(widget.error!, style: const TextStyle(color: AppColors.danger, fontSize: 13, fontWeight: FontWeight.w600)),
           ],
         ],
       ),
     );
+  }
+
+  String _statusLabel() {
+    final parts = <String>[
+      widget.filePath != null ? 'New video' : 'Current video',
+    ];
+    final duration = _durationLabel();
+    if (duration.isNotEmpty) parts.add(duration);
+    final bytes = widget.fileSizeBytes;
+    if (bytes != null && bytes > 0) parts.add(ProductVideoLimits.formatMb(bytes));
+    return parts.join(' · ');
   }
 
   Widget _emptyPicker() {
@@ -246,7 +267,7 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
               SizedBox(height: 8),
               Text('Select product video', style: TextStyle(fontWeight: FontWeight.w800)),
               SizedBox(height: 2),
-              Text('Optional · max 1 minute', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              Text('Optional · max 1 minute · max 50 MB', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
             ],
           ),
         ),

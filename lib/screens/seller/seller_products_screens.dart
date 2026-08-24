@@ -14,6 +14,7 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/product_video_field.dart';
+import '../../widgets/product_video_limits.dart';
 import '../../widgets/tab_refresh.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
@@ -513,6 +514,7 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
   final specs = <String, String>{};
   XFile? video;
   int? videoDuration;
+  int? videoBytes;
   String? existingVideoUrl;
   int? existingVideoDuration;
   bool removeExistingVideo = false;
@@ -607,6 +609,7 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
         removeExistingVideo = false;
         video = null;
         videoDuration = null;
+        videoBytes = null;
         videoError = null;
         final existingSpecs = _asMap(product['specifications']);
         specs
@@ -627,7 +630,7 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
   Future<void> _pickVideo() async {
     final picked = await ImagePicker().pickVideo(
       source: ImageSource.gallery,
-      maxDuration: const Duration(seconds: 60),
+      maxDuration: const Duration(seconds: ProductVideoLimits.maxSeconds),
     );
     if (picked == null) return;
     setState(() {
@@ -636,32 +639,53 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
     });
     VideoPlayerController? probe;
     try {
-      final bytes = await File(picked.path).length();
-      if (bytes > 50 * 1024 * 1024) {
+      // Prefer XFile.length() — more reliable than File() on some Android content paths.
+      var bytes = 0;
+      try {
+        bytes = await picked.length();
+      } catch (_) {
+        bytes = 0;
+      }
+      if (bytes <= 0) {
+        try {
+          bytes = await File(picked.path).length();
+        } catch (_) {
+          bytes = 0;
+        }
+      }
+      final sizeErr = ProductVideoLimits.sizeError(bytes);
+      if (sizeErr != null) {
         if (!mounted) return;
         setState(() {
           checkingVideo = false;
-          videoError = 'Video must be 50MB or smaller. This file is ${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB.';
+          videoError = sizeErr;
         });
         return;
       }
+
       probe = VideoPlayerController.file(File(picked.path));
       await probe.initialize();
       final seconds = probe.value.duration.inMilliseconds / 1000;
       await probe.dispose();
       probe = null;
-      if (seconds > 60.5) {
+
+      final durationErr = ProductVideoLimits.durationError(seconds);
+      if (durationErr != null) {
         if (!mounted) return;
         setState(() {
           checkingVideo = false;
-          videoError = 'Video must be 1 minute or less. This one is ${formatVideoClock(Duration(milliseconds: (seconds * 1000).round()))}.';
+          videoError = durationErr;
         });
         return;
       }
+
       if (!mounted) return;
       setState(() {
         video = picked;
-        videoDuration = seconds.isFinite && seconds > 0 ? seconds.round().clamp(1, 60) : null;
+        videoBytes = bytes;
+        videoDuration = seconds.isFinite && seconds > 0
+            ? seconds.round().clamp(1, ProductVideoLimits.maxSeconds)
+            : null;
         removeExistingVideo = false;
         checkingVideo = false;
         videoError = null;
@@ -671,7 +695,8 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
       if (!mounted) return;
       setState(() {
         checkingVideo = false;
-        videoError = 'Could not read this video. Use MP4, WebM, MOV, or 3GP under 1 minute.';
+        videoError =
+            'Could not read this video. Use MP4, WebM, MOV, or 3GP under 1 minute and 50 MB.';
       });
     }
   }
@@ -681,6 +706,7 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
       if (video != null) {
         video = null;
         videoDuration = null;
+        videoBytes = null;
       } else {
         removeExistingVideo = true;
       }
@@ -743,6 +769,16 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
         const SnackBar(content: Text('Add at least one product photo.')),
       );
       return;
+    }
+    if (video != null) {
+      final bytes = videoBytes ?? 0;
+      final sizeErr = ProductVideoLimits.sizeError(bytes > 0 ? bytes : -1);
+      if (bytes <= 0 || sizeErr != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(sizeErr ?? 'Video file size could not be verified. Pick the clip again.')),
+        );
+        return;
+      }
     }
     setState(() => saving = true);
     try {
@@ -971,6 +1007,7 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                           networkUrl: removeExistingVideo ? null : existingVideoUrl,
                           filePath: video?.path,
                           durationSeconds: video != null ? videoDuration : existingVideoDuration,
+                          fileSizeBytes: video != null ? videoBytes : null,
                           checking: checkingVideo,
                           error: videoError,
                           onPick: _pickVideo,
