@@ -6,6 +6,7 @@ import '../../api/api_client.dart';
 import '../../services/push_notifications.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/auth_help_link.dart';
 import '../../widgets/common_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -214,6 +215,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ],
+                const SizedBox(height: 8),
+                const AuthHelpLink(),
               ],
             ),
           ),

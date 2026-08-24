@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../api/api_client.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/auth_help_link.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/reset_via_picker.dart';
 
@@ -271,6 +272,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                 ),
+                const AuthHelpLink(),
               ],
             ),
           ),

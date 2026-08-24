@@ -7,6 +7,7 @@ import '../../services/push_notifications.dart';
 import '../../store/app_store.dart';
 import '../../support/countries.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/auth_help_link.dart';
 import '../../widgets/common_widgets.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -157,6 +158,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onPressed: () => context.pop(),
                   child: const Text('Already have an account? Log in'),
                 ),
+                const AuthHelpLink(),
               ],
             ),
           ),
