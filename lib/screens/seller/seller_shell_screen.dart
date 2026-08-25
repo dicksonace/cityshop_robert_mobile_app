@@ -32,7 +32,7 @@ class SellerShellScreen extends StatefulWidget {
   State<SellerShellScreen> createState() => _SellerShellScreenState();
 }
 
-class _SellerShellScreenState extends State<SellerShellScreen> {
+class _SellerShellScreenState extends State<SellerShellScreen> with AutoRefreshTab {
   int _tab = 0;
   String _ordersStage = 'all';
   bool loading = true;
@@ -40,36 +40,45 @@ class _SellerShellScreenState extends State<SellerShellScreen> {
   Map<String, dynamic> dashboard = {};
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _load();
-    });
-  }
+  int? get tabIndex => 0;
 
-  Future<void> _load() async {
+  @override
+  bool get tabAlreadyHasData => dashboard.isNotEmpty;
+
+  @override
+  Future<void> refreshTabData({required bool background}) => _load(background: background);
+
+  Future<void> _load({bool background = false}) async {
     if (!mounted) return;
-    setState(() {
-      loading = true;
-      error = null;
-    });
+    if (!background) {
+      setState(() {
+        loading = true;
+        error = null;
+      });
+    }
     try {
-      final data = await context.read<AppStore>().loadSellerDashboard();
+      final store = context.read<AppStore>();
+      final data = await store.loadSellerDashboard();
+      // Keep the bell badge current while Home is on screen.
+      try {
+        await store.loadNotifications();
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         dashboard = data;
+        error = null;
         loading = false;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
-        error = e.message;
+        if (!background || dashboard.isEmpty) error = e.message;
         loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        error = e.toString();
+        if (!background || dashboard.isEmpty) error = e.toString();
         loading = false;
       });
     }
