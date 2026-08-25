@@ -2140,6 +2140,7 @@ class AppStore extends ChangeNotifier {
     String? caption,
     String? backgroundColor,
     String filename = 'status.jpg',
+    bool refreshFeed = true,
   }) async {
     final hasImage = imagePath != null && imagePath.isNotEmpty;
     final hasVideo = videoPath != null && videoPath.isNotEmpty;
@@ -2172,7 +2173,9 @@ class AppStore extends ChangeNotifier {
     if (res.statusCode != null && res.statusCode! >= 400) {
       throw ApiException('Could not post status.');
     }
-    await loadStatusFeed();
+    if (refreshFeed) {
+      await loadStatusFeed();
+    }
   }
 
   Future<void> viewStatus(int statusId) async {

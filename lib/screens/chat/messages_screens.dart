@@ -18,6 +18,7 @@ import '../../api/api_config.dart';
 import '../../api/chat_realtime.dart';
 import '../../models/models.dart';
 import '../../services/chat_call_service.dart';
+import '../../services/media_cache.dart';
 import '../../services/money_sound.dart';
 import '../../services/document_picker.dart';
 import '../../store/app_store.dart';
@@ -1244,6 +1245,50 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _appendManyMedia(List<Future<ChatMessage> Function()> sends) async {
+    if (sends.isEmpty || sending || uploadingMedia) return;
+    setState(() {
+      uploadingMedia = true;
+      showAttachPanel = false;
+    });
+    final sent = <ChatMessage>[];
+    try {
+      for (final send in sends) {
+        sent.add(await send());
+      }
+      if (!mounted) return;
+      setState(() => messages = [...messages, ...sent]);
+      _jumpToEnd();
+    } on ApiException catch (e) {
+      if (mounted) {
+        if (sent.isNotEmpty) {
+          setState(() => messages = [...messages, ...sent]);
+          _jumpToEnd();
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (e) {
+      if (mounted) {
+        if (sent.isNotEmpty) {
+          setState(() => messages = [...messages, ...sent]);
+          _jumpToEnd();
+        }
+        final detail = e.toString().replaceFirst(RegExp(r'^[^:]+:\s*'), '').trim();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              detail.isEmpty || detail.length > 120
+                  ? 'Could not send all media. Try again.'
+                  : detail,
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => uploadingMedia = false);
+    }
+  }
+
   Future<void> _openViewOnce(ChatMessage message) async {
     if (!message.isViewOnceMedia) return;
     if (message.mine || message.viewOnceOpened) {
@@ -1277,62 +1322,99 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendPhoto(ImageSource source) async {
-    final file = await ImagePicker().pickImage(
-      source: source,
-      imageQuality: 85,
-      maxWidth: 1600,
-    );
-    if (file == null || !mounted) return;
-    final draft = await Navigator.of(context).push<MediaSendDraft>(
+    final picker = ImagePicker();
+    final List<XFile> files;
+    if (source == ImageSource.camera) {
+      final file = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+      files = file == null ? const [] : [file];
+    } else {
+      files = await picker.pickMultiImage(
+        imageQuality: 85,
+        maxWidth: 1600,
+        limit: 10,
+      );
+    }
+    if (files.isEmpty || !mounted) return;
+
+    final drafts = await Navigator.of(context).push<List<MediaSendDraft>>(
       MaterialPageRoute(
         builder: (_) => MediaCaptionScreen(
-          path: file.path,
-          isVideo: false,
+          items: [
+            for (final file in files.take(10))
+              ChatMediaDraft(
+                path: file.path,
+                filename: file.name.isNotEmpty ? file.name : 'chat.jpg',
+                isVideo: false,
+              ),
+          ],
           initialCaption: _controller.text.trim(),
         ),
       ),
     );
-    if (draft == null || !mounted) return;
-    await _appendMedia(() async {
-      final msg = await context.read<AppStore>().sendImageMessage(
-            widget.conversationId,
-            file.path,
-            caption: draft.caption.isEmpty ? null : draft.caption,
-            filename: file.name.isNotEmpty ? file.name : 'chat.jpg',
-            viewOnce: draft.viewOnce,
-          );
-      if (draft.caption.isNotEmpty && mounted) _controller.clear();
-      return msg;
-    });
+    if (drafts == null || drafts.isEmpty || !mounted) return;
+
+    var clearComposer = false;
+    await _appendManyMedia([
+      for (final draft in drafts)
+        () async {
+          final msg = await context.read<AppStore>().sendImageMessage(
+                widget.conversationId,
+                draft.path,
+                caption: draft.caption.isEmpty ? null : draft.caption,
+                filename: draft.filename,
+                viewOnce: draft.viewOnce,
+              );
+          if (draft.caption.isNotEmpty) clearComposer = true;
+          return msg;
+        },
+    ]);
+    if (clearComposer && mounted) _controller.clear();
   }
 
   Future<void> _sendVideo() async {
-    final file = await ImagePicker().pickVideo(
-      source: ImageSource.gallery,
+    final files = await ImagePicker().pickMultiVideo(
       maxDuration: const Duration(minutes: 3),
+      limit: 10,
     );
-    if (file == null || !mounted) return;
-    final draft = await Navigator.of(context).push<MediaSendDraft>(
+    if (files.isEmpty || !mounted) return;
+
+    final drafts = await Navigator.of(context).push<List<MediaSendDraft>>(
       MaterialPageRoute(
         builder: (_) => MediaCaptionScreen(
-          path: file.path,
-          isVideo: true,
+          items: [
+            for (final file in files.take(10))
+              ChatMediaDraft(
+                path: file.path,
+                filename: file.name.isNotEmpty ? file.name : 'chat.mp4',
+                isVideo: true,
+              ),
+          ],
           initialCaption: _controller.text.trim(),
         ),
       ),
     );
-    if (draft == null || !mounted) return;
-    await _appendMedia(() async {
-      final msg = await context.read<AppStore>().sendVideoMessage(
-            widget.conversationId,
-            file.path,
-            caption: draft.caption.isEmpty ? null : draft.caption,
-            filename: file.name.isNotEmpty ? file.name : 'chat.mp4',
-            viewOnce: draft.viewOnce,
-          );
-      if (draft.caption.isNotEmpty && mounted) _controller.clear();
-      return msg;
-    });
+    if (drafts == null || drafts.isEmpty || !mounted) return;
+
+    var clearComposer = false;
+    await _appendManyMedia([
+      for (final draft in drafts)
+        () async {
+          final msg = await context.read<AppStore>().sendVideoMessage(
+                widget.conversationId,
+                draft.path,
+                caption: draft.caption.isEmpty ? null : draft.caption,
+                filename: draft.filename,
+                viewOnce: draft.viewOnce,
+              );
+          if (draft.caption.isNotEmpty) clearComposer = true;
+          return msg;
+        },
+    ]);
+    if (clearComposer && mounted) _controller.clear();
   }
 
   Future<void> _sendFile() async {
@@ -3723,8 +3805,8 @@ class _ChatVoiceState extends State<_ChatVoice> {
     setState(() => _loading = true);
     try {
       if (_position.inMilliseconds == 0) {
-        final resolved = ApiConfig.resolveMediaUrl(widget.url);
-        await _player.play(UrlSource(resolved));
+        final file = await MediaCache.fileFor(widget.url);
+        await _player.play(DeviceFileSource(file.path));
       } else {
         await _player.resume();
       }

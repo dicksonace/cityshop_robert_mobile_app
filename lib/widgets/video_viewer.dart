@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 import '../api/api_config.dart';
+import '../services/media_cache.dart';
 import '../theme/app_theme.dart';
 
 /// Full-screen chat / media video player — tap play, scrub, close.
+/// Downloads once, then plays from local cache (no data on replay).
 Future<void> showVideoViewer(
   BuildContext context, {
   required String url,
@@ -31,25 +35,38 @@ class VideoViewer extends StatefulWidget {
 }
 
 class _VideoViewerState extends State<VideoViewer> {
-  late final VideoPlayerController _controller;
+  VideoPlayerController? _controller;
   bool _ready = false;
   bool _failed = false;
   bool _showControls = true;
+  String? _errorDetail;
 
   @override
   void initState() {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-      ..initialize().then((_) async {
-        if (!mounted) return;
-        setState(() => _ready = true);
-        await _controller.play();
-        setState(() {});
-      }).catchError((_) {
-        if (mounted) setState(() => _failed = true);
+    _open();
+  }
+
+  Future<void> _open() async {
+    try {
+      final file = await MediaCache.fileFor(widget.url);
+      if (!mounted) return;
+      final controller = VideoPlayerController.file(File(file.path));
+      _controller = controller;
+      controller.addListener(_onTick);
+      await controller.initialize();
+      if (!mounted) return;
+      setState(() => _ready = true);
+      await controller.play();
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _failed = true;
+        _errorDetail = e.toString();
       });
-    _controller.addListener(_onTick);
+    }
   }
 
   void _onTick() {
@@ -58,21 +75,23 @@ class _VideoViewerState extends State<VideoViewer> {
 
   @override
   void dispose() {
-    _controller.removeListener(_onTick);
-    _controller.dispose();
+    final controller = _controller;
+    controller?.removeListener(_onTick);
+    controller?.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
   Future<void> _togglePlay() async {
-    if (!_ready) return;
-    if (_controller.value.isPlaying) {
-      await _controller.pause();
+    final controller = _controller;
+    if (!_ready || controller == null) return;
+    if (controller.value.isPlaying) {
+      await controller.pause();
     } else {
-      if (_controller.value.position >= _controller.value.duration) {
-        await _controller.seekTo(Duration.zero);
+      if (controller.value.position >= controller.value.duration) {
+        await controller.seekTo(Duration.zero);
       }
-      await _controller.play();
+      await controller.play();
     }
     setState(() => _showControls = true);
   }
@@ -86,9 +105,10 @@ class _VideoViewerState extends State<VideoViewer> {
 
   @override
   Widget build(BuildContext context) {
-    final playing = _ready && _controller.value.isPlaying;
-    final position = _ready ? _controller.value.position : Duration.zero;
-    final duration = _ready ? _controller.value.duration : Duration.zero;
+    final controller = _controller;
+    final playing = _ready && controller != null && controller.value.isPlaying;
+    final position = _ready && controller != null ? controller.value.position : Duration.zero;
+    final duration = _ready && controller != null ? controller.value.duration : Duration.zero;
     final progress = duration.inMilliseconds == 0
         ? 0.0
         : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
@@ -103,21 +123,41 @@ class _VideoViewerState extends State<VideoViewer> {
               onTap: () => setState(() => _showControls = !_showControls),
               child: Center(
                 child: _failed
-                    ? const Column(
+                    ? Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.videocam_off_outlined, color: Colors.white70, size: 48),
-                          SizedBox(height: 12),
-                          Text('Could not play this video', style: TextStyle(color: Colors.white70)),
+                          const Icon(Icons.videocam_off_outlined, color: Colors.white70, size: 48),
+                          const SizedBox(height: 12),
+                          const Text('Could not play this video', style: TextStyle(color: Colors.white70)),
+                          if ((_errorDetail ?? '').isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: Text(
+                                _errorDetail!,
+                                textAlign: TextAlign.center,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white38, fontSize: 11),
+                              ),
+                            ),
+                          ],
                         ],
                       )
-                    : !_ready
-                        ? const CircularProgressIndicator(color: AppColors.accent)
+                    : !_ready || controller == null
+                        ? const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(color: AppColors.accent),
+                              SizedBox(height: 12),
+                              Text('Downloading for offline play…', style: TextStyle(color: Colors.white54)),
+                            ],
+                          )
                         : AspectRatio(
-                            aspectRatio: _controller.value.aspectRatio == 0
+                            aspectRatio: controller.value.aspectRatio == 0
                                 ? 16 / 9
-                                : _controller.value.aspectRatio,
-                            child: VideoPlayer(_controller),
+                                : controller.value.aspectRatio,
+                            child: VideoPlayer(controller),
                           ),
               ),
             ),
@@ -131,7 +171,7 @@ class _VideoViewerState extends State<VideoViewer> {
                   icon: const Icon(Icons.close_rounded, color: Colors.white),
                 ),
               ),
-              if (_ready && !_failed)
+              if (_ready && !_failed && controller != null)
                 Center(
                   child: Material(
                     color: Colors.black54,
@@ -146,7 +186,7 @@ class _VideoViewerState extends State<VideoViewer> {
                     ),
                   ),
                 ),
-              if (_ready && !_failed)
+              if (_ready && !_failed && controller != null)
                 Positioned(
                   left: 16,
                   right: 16,
@@ -169,7 +209,7 @@ class _VideoViewerState extends State<VideoViewer> {
                             final target = Duration(
                               milliseconds: (duration.inMilliseconds * v).round(),
                             );
-                            _controller.seekTo(target);
+                            controller.seekTo(target);
                           },
                         ),
                       ),

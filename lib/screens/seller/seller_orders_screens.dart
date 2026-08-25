@@ -483,6 +483,9 @@ class _SellerOrderDetailScreenState extends State<SellerOrderDetailScreen> {
     final order = _asMap(item['order']);
     final buyer = _asMap(order['buyer']);
     final actions = _asMaps(item['next_actions']);
+    final previousAction = item['previous_action'] is Map
+        ? Map<String, dynamic>.from(item['previous_action'] as Map)
+        : null;
     final phone = (order['receiver_phone'] as String?) ?? (buyer['mobile'] as String?);
 
     return Scaffold(
@@ -695,12 +698,20 @@ class _SellerOrderDetailScreenState extends State<SellerOrderDetailScreen> {
                         child: const Text('Reject payment claim'),
                       ),
                     ],
-                    if (actions.isNotEmpty) ...[
+                    if (previousAction != null || actions.isNotEmpty) ...[
                       const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: busy ? null : () => _advance(actions.first),
-                        child: Text(actions.first['label'] as String? ?? 'Update status'),
-                      ),
+                      if (previousAction != null)
+                        OutlinedButton.icon(
+                          onPressed: busy ? null : () => _advance(previousAction),
+                          icon: const Icon(Icons.chevron_left),
+                          label: Text(previousAction['label'] as String? ?? 'Move back'),
+                        ),
+                      if (previousAction != null && actions.isNotEmpty) const SizedBox(height: 8),
+                      if (actions.isNotEmpty)
+                        FilledButton(
+                          onPressed: busy ? null : () => _advance(actions.first),
+                          child: Text(actions.first['label'] as String? ?? 'Update status'),
+                        ),
                     ],
                     const SizedBox(height: 8),
                     OutlinedButton.icon(

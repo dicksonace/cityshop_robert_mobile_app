@@ -115,20 +115,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     });
   }
 
-  String _bankFeeHint(WithdrawalOverview data, double amount) {
-    final tiers = data.bankTiers.isNotEmpty ? data.bankTiers : WithdrawalOverview.defaultBankTiers;
-    for (final tier in tiers) {
-      final max = tier.max;
-      if (amount + 0.0001 >= tier.min && (max == null || amount <= max + 0.0001)) {
-        if (max == null) {
-          return 'From ${_money.format(tier.min)} → fee ${_money.format(tier.fee)}';
-        }
-        return '${_money.format(tier.min)}–${_money.format(max)} → fee ${_money.format(tier.fee)}';
-      }
-    }
-    return 'Bank fee ${_money.format(data.feeFor('bank', amount))}';
-  }
-
   /// Validates locally, shows the review sheet, then sends the request.
   Future<void> _submit() async {
     final amount = double.tryParse(amountCtrl.text.trim());
@@ -294,16 +280,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                         value: fee > 0 ? _money.format(fee) : 'No fee',
                         emphasize: fee > 0,
                       ),
-                      if (fee > 0 && _isBank && overview.feeMode != 'percent') ...[
-                        const SizedBox(height: 4),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            _bankFeeHint(overview, amount),
-                            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                          ),
-                        ),
-                      ],
                       const SizedBox(height: 8),
                       const Divider(height: 1),
                       const SizedBox(height: 8),
@@ -506,9 +482,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                           ' · Available ${_money.format(overview.availableBalance)}';
                       if (overview.feeMode == 'percent' && overview.feePercent > 0) {
                         return '$base · ${overview.feePercent.toStringAsFixed(overview.feePercent % 1 == 0 ? 0 : 2)}% fee';
-                      }
-                      if (_isBank && overview.bankTiers.isNotEmpty && typed <= 0) {
-                        return '$base · Bank fee by amount (below GH₵1,000 → GH₵10 · from GH₵1,000 → GH₵20)';
                       }
                       if (fee <= 0) return base;
                       return '$base · ${_isBank ? 'Bank' : 'MoMo'} fee ${_money.format(fee)}';
