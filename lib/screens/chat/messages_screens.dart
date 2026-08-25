@@ -20,6 +20,7 @@ import '../../models/models.dart';
 import '../../services/chat_call_service.dart';
 import '../../services/media_cache.dart';
 import '../../services/money_sound.dart';
+import '../../services/video_thumbnail_cache.dart';
 import '../../services/document_picker.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
@@ -2067,7 +2068,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 ),
                                               ),
                                           ] else if (m.isVideo) ...[
-                                            _ChatVideo(url: m.videoUrl!, mine: m.mine),
+                                            _ChatVideo(
+                                              url: m.videoUrl!,
+                                              mine: m.mine,
+                                              durationSeconds: m.durationSeconds,
+                                              fileSize: m.fileSize,
+                                            ),
                                             if (m.body.trim().isNotEmpty)
                                               Padding(
                                                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
@@ -3630,20 +3636,70 @@ class _MessageTick extends StatelessWidget {
   }
 }
 
-class _ChatVideo extends StatelessWidget {
-  const _ChatVideo({required this.url, required this.mine});
+class _ChatVideo extends StatefulWidget {
+  const _ChatVideo({
+    required this.url,
+    required this.mine,
+    this.durationSeconds,
+    this.fileSize,
+  });
 
   final String url;
   final bool mine;
+  final int? durationSeconds;
+  final int? fileSize;
+
+  @override
+  State<_ChatVideo> createState() => _ChatVideoState();
+}
+
+class _ChatVideoState extends State<_ChatVideo> {
+  File? _thumb;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThumb();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatVideo oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _thumb = null;
+      _loading = true;
+      _loadThumb();
+    }
+  }
+
+  Future<void> _loadThumb() async {
+    final file = await VideoThumbnailCache.thumbnailFor(widget.url);
+    if (!mounted) return;
+    setState(() {
+      _thumb = file;
+      _loading = false;
+    });
+  }
 
   Future<void> _open(BuildContext context) async {
-    await showVideoViewer(context, url: url);
+    await showVideoViewer(context, url: widget.url);
+  }
+
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} kB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  String _formatDuration(int seconds) {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
-    // Do not create VideoPlayerController here — initializing every video in the
-    // thread freezes the chat for seconds on open. Tap opens the full viewer.
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -3652,40 +3708,75 @@ class _ChatVideo extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: SizedBox(
-            width: 220,
-            height: 160,
+            width: 240,
+            height: 168,
             child: Stack(
               fit: StackFit.expand,
               children: [
-                ColoredBox(
-                  color: mine ? Colors.white24 : AppColors.background,
-                  child: const Center(
-                    child: Icon(Icons.videocam_rounded, color: AppColors.textMuted, size: 36),
+                if (_thumb != null)
+                  Image.file(_thumb!, fit: BoxFit.cover)
+                else
+                  ColoredBox(
+                    color: widget.mine ? Colors.white24 : AppColors.background,
+                    child: _loading
+                        ? const Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : const Center(
+                            child: Icon(Icons.videocam_rounded, color: AppColors.textMuted, size: 36),
+                          ),
+                  ),
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.08),
+                        Colors.black.withValues(alpha: 0.45),
+                      ],
+                    ),
                   ),
                 ),
-                Container(
-                  color: Colors.black26,
-                  alignment: Alignment.center,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36),
+                  ),
+                ),
+                Positioned(
+                  left: 8,
+                  right: 8,
+                  bottom: 8,
+                  child: Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: const BoxDecoration(
-                          color: Colors.black54,
-                          shape: BoxShape.circle,
+                      if (widget.fileSize != null && widget.fileSize! > 0)
+                        Text(
+                          _formatSize(widget.fileSize!),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
                         ),
-                        child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 36),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Tap to play',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
+                      const Spacer(),
+                      if (widget.durationSeconds != null && widget.durationSeconds! > 0)
+                        Text(
+                          _formatDuration(widget.durationSeconds!),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

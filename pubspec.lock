@@ -281,6 +281,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.2"
+  ffmpeg_kit_flutter_new_min:
+    dependency: "direct main"
+    description:
+      name: ffmpeg_kit_flutter_new_min
+      sha256: ae8eb220659cfc941ed651da1c32f910796b461dd6611abf12b863f665aa8ca5
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.6.2"
+  ffmpeg_kit_flutter_platform_interface:
+    dependency: transitive
+    description:
+      name: ffmpeg_kit_flutter_platform_interface
+      sha256: addf046ae44e190ad0101b2fde2ad909a3cd08a2a109f6106d2f7048b7abedee
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.1"
   file:
     dependency: transitive
     description:
@@ -438,6 +454,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.3"
+  flutter_native_video_trimmer:
+    dependency: transitive
+    description:
+      name: flutter_native_video_trimmer
+      sha256: d31159c34fb4e56fe53919b5b9978f75b5fb4b2934ceb05c6b369929139d3b72
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.9"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -520,6 +544,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.3"
+  get_thumbnail_video:
+    dependency: "direct main"
+    description:
+      name: get_thumbnail_video
+      sha256: ff61495b42051765d2a9e93bd14dac7ede5853033837bde71c27575a192c53fc
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.3"
   go_router:
     dependency: "direct main"
     description:
@@ -1285,6 +1317,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.10.1"
+  transparent_image:
+    dependency: transitive
+    description:
+      name: transparent_image
+      sha256: e8991d955a2094e197ca24c645efec2faf4285772a4746126ca12875e54ca02f
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.1"
   typed_data:
     dependency: transitive
     description:
@@ -1413,6 +1453,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.0"
+  video_trimmer:
+    dependency: "direct main"
+    description:
+      name: video_trimmer
+      sha256: a7e24512ec6bf47c99e3e192264a1c19a2b30e21d92add1b43ecd0995659a0b4
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.0.0"
   vm_service:
     dependency: transitive
     description:
