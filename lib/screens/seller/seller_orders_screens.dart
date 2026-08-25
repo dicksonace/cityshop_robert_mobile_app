@@ -572,6 +572,13 @@ class _SellerOrderDetailScreenState extends State<SellerOrderDetailScreen> {
                           ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    _FulfillmentCard(
+                      status: item['status'] as String? ?? '',
+                      isCod: (order['payment_method'] as String?)?.toLowerCase() == 'cash' ||
+                          (order['payment_method'] as String?)?.toLowerCase() == 'cod',
+                      fundsReleaseStatus: item['funds_release_status'] as String?,
+                    ),
                     if (_showDeliverySection) ...[
                       const SizedBox(height: 12),
                       Container(
@@ -730,6 +737,175 @@ class _Card extends StatelessWidget {
         border: Border.all(color: AppColors.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+    );
+  }
+}
+
+class _FulfillmentCard extends StatelessWidget {
+  const _FulfillmentCard({
+    required this.status,
+    required this.isCod,
+    this.fundsReleaseStatus,
+  });
+
+  final String status;
+  final bool isCod;
+  final String? fundsReleaseStatus;
+
+  static const _paidSteps = [
+    ('processing', 'Start processing'),
+    ('packed', 'Mark as packing'),
+    ('shipped', 'Out for delivery'),
+    ('awaiting_confirmation', 'Mark as delivered'),
+  ];
+
+  static const _codSteps = [
+    ('pending', 'Cash on delivery'),
+    ('processing', 'Start processing'),
+    ('call_confirmed', 'Call buyer'),
+    ('packed', 'Mark as packing'),
+    ('shipped', 'Package on the way'),
+    ('delivered', 'Complete (cash collected)'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = isCod ? _codSteps : _paidSteps;
+    final stepIdx = steps.indexWhere((s) => s.$1 == status);
+    final terminal = status == 'cancelled' || status == 'refunded';
+    final allDone = status == 'delivered' || (!isCod && status == 'awaiting_confirmation');
+
+    return _Card(
+      children: [
+        const Text('Fulfillment', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+        const SizedBox(height: 4),
+        Text(
+          'Current: ${status.replaceAll('_', ' ')}',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        ),
+        if (status == 'pending' && !isCod) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFDE68A)),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('New order — payment received', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF92400E))),
+                SizedBox(height: 4),
+                Text(
+                  'Tap “Start processing” below when you begin preparing this order.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFFB45309), height: 1.35),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (!terminal) ...[
+          const SizedBox(height: 12),
+          for (var i = 0; i < steps.length; i++) ...[
+            if (i > 0) const SizedBox(height: 6),
+            Builder(
+              builder: (_) {
+                final done = allDone || (stepIdx >= 0 && stepIdx >= i);
+                final isNext = !allDone && stepIdx >= 0 && i == stepIdx + 1;
+                // Pending paid orders: first action is Start processing (index of processing).
+                final pendingNext = !isCod && status == 'pending' && steps[i].$1 == 'processing';
+                final highlightNext = isNext || pendingNext;
+                return Row(
+                  children: [
+                    if (done)
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle),
+                        child: const Icon(Icons.check, size: 14, color: Colors.white),
+                      )
+                    else
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: highlightNext ? const Color(0xFFFFF7ED) : Colors.white,
+                          border: Border.all(
+                            color: highlightNext ? const Color(0xFFFB923C) : const Color(0xFFD1D5DB),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        steps[i].$2,
+                        style: TextStyle(
+                          fontWeight: done || highlightNext ? FontWeight.w700 : FontWeight.w500,
+                          color: done
+                              ? AppColors.textPrimary
+                              : highlightNext
+                                  ? AppColors.textPrimary
+                                  : AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ],
+        if (status == 'awaiting_confirmation') ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFBFDBFE)),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Waiting for buyer confirmation', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1E3A8A))),
+                SizedBox(height: 4),
+                Text(
+                  'The buyer must confirm receipt to complete the order.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF1D4ED8), height: 1.35),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (status == 'delivered' && fundsReleaseStatus == 'pending') ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFDE68A)),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Waiting for fund release', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF92400E))),
+                SizedBox(height: 4),
+                Text(
+                  'Delivery is complete. Earnings stay in Pending until admin releases to Available.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFFB45309), height: 1.35),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
