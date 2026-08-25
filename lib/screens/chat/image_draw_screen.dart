@@ -4,15 +4,22 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../theme/app_theme.dart';
 
-/// WhatsApp-style pen doodle on a photo. Pops the saved PNG path.
-/// Captures only the photo bounds (no black letterbox / “space behind”).
+/// WhatsApp-style pen doodle on a photo or video.
+/// Photos: pops a baked PNG path.
+/// Videos: pops a transparent overlay PNG path (burn with [VideoOverlay]).
 class ImageDrawScreen extends StatefulWidget {
-  const ImageDrawScreen({super.key, required this.path});
+  const ImageDrawScreen({
+    super.key,
+    required this.path,
+    this.isVideo = false,
+  });
 
   final String path;
+  final bool isVideo;
 
   @override
   State<ImageDrawScreen> createState() => _ImageDrawScreenState();
@@ -34,6 +41,8 @@ class _ImageDrawScreenState extends State<ImageDrawScreen> {
   double _width = 6;
   bool _saving = false;
   Size? _imageSize;
+  VideoPlayerController? _video;
+  bool _videoReady = false;
 
   static const _palette = [
     Color(0xFFFF3B30),
@@ -47,7 +56,33 @@ class _ImageDrawScreenState extends State<ImageDrawScreen> {
   @override
   void initState() {
     super.initState();
-    _loadImageSize();
+    if (widget.isVideo) {
+      _initVideo();
+    } else {
+      _loadImageSize();
+    }
+  }
+
+  @override
+  void dispose() {
+    _video?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initVideo() async {
+    final c = VideoPlayerController.file(File(widget.path));
+    _video = c;
+    try {
+      await c.initialize();
+      await c.pause();
+      if (!mounted) return;
+      setState(() {
+        _videoReady = true;
+        _imageSize = c.value.size;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _imageSize = const Size(1080, 1920));
+    }
   }
 
   Future<void> _loadImageSize() async {
@@ -84,15 +119,60 @@ class _ImageDrawScreenState extends State<ImageDrawScreen> {
     if (_saving) return;
     setState(() => _saving = true);
     try {
+      final dir = await getTemporaryDirectory();
+      final out = File('${dir.path}/chat_draw_${DateTime.now().millisecondsSinceEpoch}.png');
+
+      if (widget.isVideo) {
+        final size = _imageSize ?? const Size(1080, 1920);
+        final w = size.width.round().clamp(2, 4096);
+        final h = size.height.round().clamp(2, 4096);
+        final box = _boundaryKey.currentContext?.findRenderObject() as RenderBox?;
+        final previewW = box?.size.width ?? size.width;
+        final previewH = box?.size.height ?? size.height;
+        final sx = w / previewW;
+        final sy = h / previewH;
+
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder);
+        for (final stroke in _strokes) {
+          if (stroke.points.isEmpty) continue;
+          final paint = Paint()
+            ..color = stroke.color
+            ..strokeWidth = stroke.width * sx
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..style = PaintingStyle.stroke;
+          if (stroke.points.length == 1) {
+            canvas.drawCircle(
+              Offset(stroke.points.first.dx * sx, stroke.points.first.dy * sy),
+              stroke.width * sx / 2,
+              paint..style = PaintingStyle.fill,
+            );
+            continue;
+          }
+          final path = Path()
+            ..moveTo(stroke.points.first.dx * sx, stroke.points.first.dy * sy);
+          for (var i = 1; i < stroke.points.length; i++) {
+            path.lineTo(stroke.points[i].dx * sx, stroke.points[i].dy * sy);
+          }
+          canvas.drawPath(path, paint);
+        }
+        final image = await recorder.endRecording().toImage(w, h);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        if (bytes == null) throw StateError('encode');
+        await out.writeAsBytes(bytes.buffer.asUint8List());
+        if (!mounted) return;
+        Navigator.pop(context, out.path);
+        return;
+      }
+
       final boundary = _boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) throw StateError('Could not capture drawing');
       final image = await boundary.toImage(pixelRatio: 2);
       final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
       image.dispose();
       if (bytes == null) throw StateError('Could not encode drawing');
-
-      final dir = await getTemporaryDirectory();
-      final out = File('${dir.path}/chat_draw_${DateTime.now().millisecondsSinceEpoch}.png');
       await out.writeAsBytes(bytes.buffer.asUint8List());
       if (!mounted) return;
       Navigator.pop(context, out.path);
@@ -143,7 +223,7 @@ class _ImageDrawScreenState extends State<ImageDrawScreen> {
       body: Column(
         children: [
           Expanded(
-            child: imageSize == null
+            child: imageSize == null || (widget.isVideo && !_videoReady)
                 ? const Center(child: CircularProgressIndicator(color: Colors.white54))
                 : LayoutBuilder(
                     builder: (context, constraints) {
@@ -160,11 +240,21 @@ class _ImageDrawScreenState extends State<ImageDrawScreen> {
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
-                                  Image.file(
-                                    File(widget.path),
-                                    fit: BoxFit.fill,
-                                    filterQuality: FilterQuality.medium,
-                                  ),
+                                  if (widget.isVideo && _video != null)
+                                    FittedBox(
+                                      fit: BoxFit.fill,
+                                      child: SizedBox(
+                                        width: _video!.value.size.width,
+                                        height: _video!.value.size.height,
+                                        child: VideoPlayer(_video!),
+                                      ),
+                                    )
+                                  else
+                                    Image.file(
+                                      File(widget.path),
+                                      fit: BoxFit.fill,
+                                      filterQuality: FilterQuality.medium,
+                                    ),
                                   GestureDetector(
                                     behavior: HitTestBehavior.opaque,
                                     onPanStart: (details) {

@@ -9,10 +9,14 @@ import 'package:video_player/video_player.dart';
 import '../../api/api_client.dart';
 import '../../api/api_config.dart';
 import '../../models/models.dart';
+import '../../services/media_cache.dart';
+import '../../services/video_overlay.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
-import '../../services/media_cache.dart';
 import '../../widgets/product_video_limits.dart';
+import 'image_draw_screen.dart';
+import 'media_text_screen.dart';
+import 'video_trim_screen.dart';
 
 const _statusColors = [
   Color(0xFFEA580C),
@@ -317,6 +321,7 @@ class _StatusMediaComposerScreenState extends State<StatusMediaComposerScreen> {
   int index = 0;
   bool sending = false;
   bool videoReady = false;
+  bool busy = false;
   int? postingIndex;
 
   @override
@@ -393,6 +398,103 @@ class _StatusMediaComposerScreenState extends State<StatusMediaComposerScreen> {
     });
     _pageController.jumpToPage(index);
     _loadVideoFor(index);
+  }
+
+  Future<void> _replaceCurrent({
+    required String path,
+    required String filename,
+    required bool isVideo,
+  }) async {
+    final caption = _items[index].caption;
+    setState(() {
+      _items[index] = StatusMediaDraft(
+        path: path,
+        filename: filename,
+        isVideo: isVideo,
+      )..caption = caption;
+    });
+    if (isVideo) {
+      await _loadVideoFor(index);
+    } else {
+      await _video?.dispose();
+      _video = null;
+      videoReady = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _trimCurrent() async {
+    final item = _items[index];
+    if (!item.isVideo || busy || sending) return;
+    final trimmed = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => VideoTrimScreen(path: item.path)),
+    );
+    if (trimmed == null || trimmed.isEmpty || !mounted) return;
+    await _replaceCurrent(path: trimmed, filename: 'status_trim.mp4', isVideo: true);
+  }
+
+  Future<void> _textCurrent() async {
+    final item = _items[index];
+    if (busy || sending) return;
+    final result = await Navigator.of(context).push<MediaTextResult>(
+      MaterialPageRoute(
+        builder: (_) => MediaTextScreen(path: item.path, isVideo: item.isVideo),
+      ),
+    );
+    if (result == null || result.path.isEmpty || !mounted) return;
+    if (!item.isVideo || !result.isOverlayOnly) {
+      await _replaceCurrent(path: result.path, filename: 'status_text.png', isVideo: false);
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      final burned = await VideoOverlay.burnOverlay(
+        videoPath: item.path,
+        overlayPngPath: result.path,
+      );
+      if (!mounted) return;
+      await _replaceCurrent(path: burned, filename: 'status_text.mp4', isVideo: true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not add text to this video')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _drawCurrent() async {
+    final item = _items[index];
+    if (busy || sending) return;
+    final drawnPath = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => ImageDrawScreen(path: item.path, isVideo: item.isVideo),
+      ),
+    );
+    if (drawnPath == null || drawnPath.isEmpty || !mounted) return;
+    if (!item.isVideo) {
+      await _replaceCurrent(path: drawnPath, filename: 'status_draw.png', isVideo: false);
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      final burned = await VideoOverlay.burnOverlay(
+        videoPath: item.path,
+        overlayPngPath: drawnPath,
+      );
+      if (!mounted) return;
+      await _replaceCurrent(path: burned, filename: 'status_draw.mp4', isVideo: true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not add drawing to this video')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
 
   Future<void> _post() async {
@@ -492,19 +594,40 @@ class _StatusMediaComposerScreenState extends State<StatusMediaComposerScreen> {
                       ),
                       Expanded(
                         child: Text(
-                          total > 1 ? '${index + 1} of $total' : (current.isVideo ? 'Video' : 'Photo'),
+                          busy
+                              ? 'Applying…'
+                              : total > 1
+                                  ? '${index + 1} of $total'
+                                  : (current.isVideo ? 'Video' : 'Photo'),
                           textAlign: TextAlign.center,
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
                         ),
                       ),
+                      if (current.isVideo)
+                        IconButton(
+                          tooltip: 'Trim',
+                          onPressed: sending || busy ? null : _trimCurrent,
+                          icon: const Icon(Icons.content_cut, color: Colors.white),
+                        ),
+                      IconButton(
+                        tooltip: 'Text',
+                        onPressed: sending || busy ? null : _textCurrent,
+                        icon: const Text(
+                          'Aa',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Pen',
+                        onPressed: sending || busy ? null : _drawCurrent,
+                        icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                      ),
                       if (total > 1)
                         IconButton(
                           tooltip: 'Remove this one',
-                          onPressed: sending ? null : _removeCurrent,
+                          onPressed: sending || busy ? null : _removeCurrent,
                           icon: const Icon(Icons.delete_outline, color: Colors.white),
-                        )
-                      else
-                        const SizedBox(width: 48),
+                        ),
                     ],
                   ),
                 ),

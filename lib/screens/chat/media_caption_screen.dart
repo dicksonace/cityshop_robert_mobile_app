@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../services/video_overlay.dart';
 import '../../theme/app_theme.dart';
 import 'image_draw_screen.dart';
+import 'media_text_screen.dart';
+import 'video_trim_screen.dart';
 
 class ChatMediaDraft {
   ChatMediaDraft({
@@ -73,6 +76,7 @@ class _MediaCaptionScreenState extends State<MediaCaptionScreen> {
   VideoPlayerController? _video;
   bool viewOnce = false;
   bool videoReady = false;
+  bool busy = false;
   int index = 0;
 
   @override
@@ -173,11 +177,87 @@ class _MediaCaptionScreenState extends State<MediaCaptionScreen> {
     );
   }
 
+  Future<void> _replaceCurrent({
+    required String path,
+    required String filename,
+    required bool isVideo,
+  }) async {
+    final caption = _items[index].caption;
+    setState(() {
+      _items[index] = ChatMediaDraft(
+        path: path,
+        filename: filename,
+        isVideo: isVideo,
+        caption: caption,
+      );
+    });
+    if (isVideo) {
+      await _loadVideoFor(index);
+    } else {
+      await _video?.dispose();
+      _video = null;
+      videoReady = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _trimCurrent() async {
+    final item = _items[index];
+    if (!item.isVideo || busy) return;
+    final trimmed = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => VideoTrimScreen(path: item.path)),
+    );
+    if (trimmed == null || trimmed.isEmpty || !mounted) return;
+    await _replaceCurrent(
+      path: trimmed,
+      filename: 'chat_trim.mp4',
+      isVideo: true,
+    );
+  }
+
+  Future<void> _textCurrent() async {
+    final item = _items[index];
+    if (busy) return;
+    final result = await Navigator.of(context).push<MediaTextResult>(
+      MaterialPageRoute(
+        builder: (_) => MediaTextScreen(path: item.path, isVideo: item.isVideo),
+      ),
+    );
+    if (result == null || result.path.isEmpty || !mounted) return;
+
+    if (!item.isVideo || !result.isOverlayOnly) {
+      await _replaceCurrent(
+        path: result.path,
+        filename: 'chat_text.png',
+        isVideo: false,
+      );
+      return;
+    }
+
+    setState(() => busy = true);
+    try {
+      final burned = await VideoOverlay.burnOverlay(
+        videoPath: item.path,
+        overlayPngPath: result.path,
+      );
+      if (!mounted) return;
+      await _replaceCurrent(path: burned, filename: 'chat_text.mp4', isVideo: true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not add text to this video')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> _cropCurrent() async {
     final item = _items[index];
     if (item.isVideo) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Crop works on photos. Videos send as recorded.')),
+        const SnackBar(content: Text('Use Trim for videos.')),
       );
       return;
     }
@@ -214,16 +294,13 @@ class _MediaCaptionScreenState extends State<MediaCaptionScreen> {
         ],
       );
       if (cropped == null || !mounted) return;
-      setState(() {
-        _items[index] = ChatMediaDraft(
-          path: cropped.path,
-          filename: cropped.path.split('/').last.isNotEmpty
-              ? cropped.path.split('/').last
-              : 'chat_crop.jpg',
-          isVideo: false,
-          caption: item.caption,
-        );
-      });
+      await _replaceCurrent(
+        path: cropped.path,
+        filename: cropped.path.split('/').last.isNotEmpty
+            ? cropped.path.split('/').last
+            : 'chat_crop.jpg',
+        isVideo: false,
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -235,24 +312,36 @@ class _MediaCaptionScreenState extends State<MediaCaptionScreen> {
 
   Future<void> _drawCurrent() async {
     final item = _items[index];
-    if (item.isVideo) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pen works on photos. Videos send as recorded.')),
-      );
-      return;
-    }
+    if (busy) return;
     final drawnPath = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => ImageDrawScreen(path: item.path)),
+      MaterialPageRoute(
+        builder: (_) => ImageDrawScreen(path: item.path, isVideo: item.isVideo),
+      ),
     );
     if (drawnPath == null || drawnPath.isEmpty || !mounted) return;
-    setState(() {
-      _items[index] = ChatMediaDraft(
-        path: drawnPath,
-        filename: 'chat_draw.png',
-        isVideo: false,
-        caption: item.caption,
+
+    if (!item.isVideo) {
+      await _replaceCurrent(path: drawnPath, filename: 'chat_draw.png', isVideo: false);
+      return;
+    }
+
+    setState(() => busy = true);
+    try {
+      final burned = await VideoOverlay.burnOverlay(
+        videoPath: item.path,
+        overlayPngPath: drawnPath,
       );
-    });
+      if (!mounted) return;
+      await _replaceCurrent(path: burned, filename: 'chat_draw.mp4', isVideo: true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not add drawing to this video')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
 
   @override
@@ -275,38 +364,51 @@ class _MediaCaptionScreenState extends State<MediaCaptionScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: busy ? null : () => Navigator.pop(context),
                     icon: const Icon(Icons.close, color: Colors.white),
                   ),
                   Expanded(
                     child: Text(
-                      total > 1
-                          ? '${index + 1} of $total'
-                          : (current.isVideo ? 'Video' : 'Photo'),
+                      busy
+                          ? 'Applying…'
+                          : total > 1
+                              ? '${index + 1} of $total'
+                              : (current.isVideo ? 'Video' : 'Photo'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
                     ),
                   ),
-                  if (!current.isVideo) ...[
+                  if (current.isVideo)
+                    IconButton(
+                      tooltip: 'Trim',
+                      onPressed: busy ? null : _trimCurrent,
+                      icon: const Icon(Icons.content_cut, color: Colors.white),
+                    ),
+                  if (!current.isVideo)
                     IconButton(
                       tooltip: 'Crop',
-                      onPressed: _cropCurrent,
+                      onPressed: busy ? null : _cropCurrent,
                       icon: const Icon(Icons.crop_rotate, color: Colors.white),
                     ),
-                    IconButton(
-                      tooltip: 'Pen',
-                      onPressed: _drawCurrent,
-                      icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                  IconButton(
+                    tooltip: 'Text',
+                    onPressed: busy ? null : _textCurrent,
+                    icon: const Text(
+                      'Aa',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
                     ),
-                  ],
+                  ),
+                  IconButton(
+                    tooltip: 'Pen',
+                    onPressed: busy ? null : _drawCurrent,
+                    icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                  ),
                   if (total > 1)
                     IconButton(
                       tooltip: 'Remove this one',
-                      onPressed: _removeCurrent,
+                      onPressed: busy ? null : _removeCurrent,
                       icon: const Icon(Icons.delete_outline, color: Colors.white),
-                    )
-                  else if (current.isVideo)
-                    const SizedBox(width: 48),
+                    ),
                 ],
               ),
             ),
@@ -487,7 +589,7 @@ class _MediaCaptionScreenState extends State<MediaCaptionScreen> {
                       ),
                       const SizedBox(width: 10),
                       IconButton.filled(
-                        onPressed: _send,
+                        onPressed: busy ? null : _send,
                         style: IconButton.styleFrom(backgroundColor: AppColors.accent),
                         icon: const Icon(Icons.send_rounded, color: Colors.white),
                       ),
