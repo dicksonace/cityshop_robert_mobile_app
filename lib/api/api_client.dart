@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -78,6 +79,29 @@ class ApiClient {
     } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsTokenKey);
+    await prefs.remove(ApiConfig.userCacheKey);
+  }
+
+  /// Persist the last successful user profile so cold start offline still
+  /// shows as logged in (token alone is not enough — UI keys off `user`).
+  Future<void> saveUserCache(Map<String, dynamic> userJson) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(ApiConfig.userCacheKey, jsonEncode(userJson));
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> getUserCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(ApiConfig.userCacheKey);
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<String?> getToken() async {

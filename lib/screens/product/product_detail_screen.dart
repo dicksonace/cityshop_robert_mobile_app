@@ -14,6 +14,7 @@ import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/video_playback.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 
@@ -1236,11 +1237,7 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
       await _ensureVideo();
       return;
     }
-    if (c.value.isPlaying) {
-      await c.pause();
-    } else {
-      await c.play();
-    }
+    await toggleVideoPlayback(c);
     if (mounted) setState(() {});
   }
 
@@ -1538,7 +1535,7 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
       );
     }
 
-    final playing = _videoController!.value.isPlaying;
+    final playing = _videoController!.value.isPlaying && !videoAtEnd(_videoController!.value);
     return Stack(
       fit: StackFit.expand,
       children: [

@@ -557,6 +557,12 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
     return 'Buyer';
   }
 
+  bool get _isSeller => _roleLabel == 'Seller';
+
+  String get _footerHint => _isSeller
+      ? 'Customers can pay you by scanning this QR.'
+      : 'They can add you by scanning this QR.';
+
   Future<void> _load({double? amount, String? reason}) async {
     setState(() {
       _loading = true;
@@ -577,6 +583,12 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
           _name = store.user?.name;
           _avatar = store.user?.avatar;
           _role = store.user?.role;
+        }
+        if ((_role ?? '').toLowerCase() == 'seller') {
+          final storeName = store.user?.sellerStoreName?.trim();
+          if (storeName != null && storeName.isNotEmpty) {
+            _name = storeName;
+          }
         }
         _amount = (data['amount'] as num?)?.toDouble();
         _reason = (data['reason'] as String?)?.trim();
@@ -673,9 +685,13 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
 
   String get _shareInviteText {
     if (_amount != null) {
-      return 'Scan my QR to send me ${_money.format(_amount)}.';
+      return _isSeller
+          ? 'Scan my QR to pay ${_money.format(_amount)} at my store.'
+          : 'Scan my QR to send me ${_money.format(_amount)}.';
     }
-    return 'Scan my CityShop QR to add me, pay, or chat.';
+    return _isSeller
+        ? 'Scan my CityShop QR to pay me or start a chat.'
+        : 'Scan my CityShop QR to add me, pay, or chat.';
   }
 
   /// Paints the namecard to a PNG. The frame has to settle first or the
@@ -1080,10 +1096,10 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'They can add you by scanning this QR.',
+                    Text(
+                      _footerHint,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                         height: 1.35,
@@ -1133,11 +1149,13 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                                   maxLength: 80,
                                   textInputAction: TextInputAction.done,
                                   onSubmitted: (_) => _setAmount(),
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     labelText: 'Reason for request',
-                                    hintText: 'e.g. Lunch money, market stall fee',
+                                    hintText: _isSeller
+                                        ? 'e.g. Order #1234, delivery fee'
+                                        : 'e.g. Lunch money, market stall fee',
                                     filled: true,
-                                    fillColor: Color(0xFFF8FAFC),
+                                    fillColor: const Color(0xFFF8FAFC),
                                     counterText: '',
                                   ),
                                 ),

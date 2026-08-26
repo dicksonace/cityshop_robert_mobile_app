@@ -2048,6 +2048,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 : m.isProduct || m.isTransfer || m.isFile
                                     ? Colors.white
                                     : (m.mine ? ChatColors.outgoing : ChatColors.incoming);
+                            final compactMediaBubble = (m.isPhoto || m.isVideo) && !m.isDeleted;
                             return Column(
                               children: [
                                 if (showDay && m.createdAt != null)
@@ -2095,7 +2096,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                           if (!m.mine)
                                             ChatBubbleTail(mine: false, color: bubbleColor),
                                           Flexible(
-                                            child: Container(
+                                            fit: compactMediaBubble ? FlexFit.loose : FlexFit.tight,
+                                            child: Builder(
+                                              builder: (context) {
+                                                final bubble = Container(
                                       padding: m.isProduct || m.isTransfer || m.isFile
                                           ? EdgeInsets.zero
                                           : m.isMedia
@@ -2157,14 +2161,17 @@ class _ChatScreenState extends State<ChatScreen> {
                                             if (m.body.trim().isNotEmpty)
                                               Padding(
                                                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                                                child: Align(
-                                                  alignment: Alignment.centerLeft,
-                                                  child: ChatLinkText(
-                                                    text: m.body.trim(),
-                                                    mine: m.mine,
-                                                    style: TextStyle(
-                                                      color: ChatColors.bubbleText,
-                                                      height: 1.35,
+                                                child: ConstrainedBox(
+                                                  constraints: const BoxConstraints(maxWidth: 240),
+                                                  child: Align(
+                                                    alignment: Alignment.centerLeft,
+                                                    child: ChatLinkText(
+                                                      text: m.body.trim(),
+                                                      mine: m.mine,
+                                                      style: TextStyle(
+                                                        color: ChatColors.bubbleText,
+                                                        height: 1.35,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
@@ -2179,14 +2186,17 @@ class _ChatScreenState extends State<ChatScreen> {
                                             if (m.body.trim().isNotEmpty)
                                               Padding(
                                                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                                                child: Align(
-                                                  alignment: Alignment.centerLeft,
-                                                  child: ChatLinkText(
-                                                    text: m.body.trim(),
-                                                    mine: m.mine,
-                                                    style: TextStyle(
-                                                      color: ChatColors.bubbleText,
-                                                      height: 1.35,
+                                                child: ConstrainedBox(
+                                                  constraints: const BoxConstraints(maxWidth: 240),
+                                                  child: Align(
+                                                    alignment: Alignment.centerLeft,
+                                                    child: ChatLinkText(
+                                                      text: m.body.trim(),
+                                                      mine: m.mine,
+                                                      style: TextStyle(
+                                                        color: ChatColors.bubbleText,
+                                                        height: 1.35,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
@@ -2252,7 +2262,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                               ),
                                               child: Align(
                                                 alignment: Alignment.centerRight,
-                                                widthFactor: 1,
+                                                widthFactor: compactMediaBubble ? null : 1,
                                                 child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
@@ -2276,7 +2286,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                           ],
                                         ],
                                       ),
-                                    ),
+                                    );
+                                                return compactMediaBubble
+                                                    ? IntrinsicWidth(child: bubble)
+                                                    : bubble;
+                                              },
+                                            ),
                                           ),
                                           if (m.mine)
                                             ChatBubbleTail(mine: true, color: bubbleColor),
@@ -3531,7 +3546,7 @@ class _ChatPhoto extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 260, minWidth: 180),
+          constraints: const BoxConstraints(maxHeight: 260, minWidth: 180, maxWidth: 240),
           child: CachedNetworkImage(
             imageUrl: resolved,
             fit: BoxFit.cover,

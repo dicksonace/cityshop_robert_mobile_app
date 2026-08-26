@@ -153,6 +153,16 @@ class _SellerShellScreenState extends State<SellerShellScreen> with AutoRefreshT
               title: Text(storeName.isEmpty ? 'Seller Hub' : storeName),
               actions: [
                 IconButton(
+                  tooltip: 'Scan QR to pay',
+                  onPressed: () => context.push('/qr/scan'),
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Receive payment',
+                  onPressed: () => context.push('/qr/receive'),
+                  icon: const Icon(Icons.qr_code_2_rounded),
+                ),
+                IconButton(
                   tooltip: 'Notifications',
                   onPressed: () => context.push('/notifications'),
                   icon: Badge(
@@ -327,6 +337,8 @@ class _OverviewTab extends StatelessWidget {
       ('Delivered', 'completed', pipeline['delivered'], Icons.check_circle_outline, const Color(0xFF059669)),
     ];
     final tools = [
+      (Icons.qr_code_2_rounded, 'Receive payment', () => context.push('/qr/receive')),
+      (Icons.qr_code_scanner_rounded, 'Scan to pay', () => context.push('/qr/scan')),
       (Icons.language, 'Web store', onOpenStoreWeb),
       (Icons.storefront_outlined, 'Store look', () => context.push('/seller/store')),
       (Icons.star_outline, 'Reviews', () => context.push('/seller/reviews')),

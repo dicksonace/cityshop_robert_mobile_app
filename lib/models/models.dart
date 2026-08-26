@@ -2242,6 +2242,52 @@ class StatusItem {
   }
 }
 
+class StatusViewerEntry {
+  const StatusViewerEntry({
+    required this.id,
+    required this.name,
+    this.avatar,
+    this.viewedAt,
+  });
+
+  final int id;
+  final String name;
+  final String? avatar;
+  final String? viewedAt;
+
+  factory StatusViewerEntry.fromJson(Map<String, dynamic> json) {
+    return StatusViewerEntry(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name'] as String? ?? 'User',
+      avatar: json['avatar'] as String?,
+      viewedAt: json['viewed_at'] as String?,
+    );
+  }
+}
+
+class StatusViewsPage {
+  const StatusViewsPage({
+    required this.viewCount,
+    required this.viewers,
+  });
+
+  final int viewCount;
+  final List<StatusViewerEntry> viewers;
+
+  factory StatusViewsPage.fromJson(Map<String, dynamic> json) {
+    final viewers = json['viewers'];
+    return StatusViewsPage(
+      viewCount: (json['view_count'] as num?)?.toInt() ?? 0,
+      viewers: viewers is List
+          ? viewers
+              .whereType<Map>()
+              .map((e) => StatusViewerEntry.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : const [],
+    );
+  }
+}
+
 class StatusBundle {
   const StatusBundle({
     required this.user,

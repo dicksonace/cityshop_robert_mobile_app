@@ -75,6 +75,15 @@ class AppStore extends ChangeNotifier {
     try {
       final token = await _api.getToken();
       if (token != null && token.isNotEmpty) {
+        // Restore cached profile immediately so offline reopen stays logged in
+        // (Login button keys off `user`, not the token alone).
+        final cached = await _api.getUserCache();
+        if (cached != null) {
+          try {
+            user = AppUser.fromJson(cached);
+            notifyListeners();
+          } catch (_) {}
+        }
         try {
           // Boot must stay snappy — one attempt each, then enter the shop.
           await refreshMe(maxAttempts: 1);
@@ -91,13 +100,13 @@ class AppStore extends ChangeNotifier {
           }
         } on ApiException catch (e) {
           // Only log out when the server rejects the session — never on
-          // network blips right after a phone reboot / power-on.
+          // network blips / offline (keep token + cached user).
           if (e.statusCode == 401 || e.statusCode == 403) {
             await _api.clearToken();
             user = null;
           }
         } catch (_) {
-          // Keep the saved token; shop can still load as guest UI + retry later.
+          // Keep the saved token + cached user for offline use.
         }
       }
       if (!isSeller) {
@@ -112,12 +121,17 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  Future<void> _setUserFromJson(Map<String, dynamic> userJson) async {
+    user = AppUser.fromJson(userJson);
+    await _api.saveUserCache(userJson);
+  }
+
   Future<void> refreshMe({int maxAttempts = 2}) async {
     final res = await _api.get('/auth/me', maxAttempts: maxAttempts);
     final data = res.data;
     final userJson = data is Map ? (data['user'] ?? data['data'] ?? data) : null;
     if (userJson is Map) {
-      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      await _setUserFromJson(Map<String, dynamic>.from(userJson));
     }
     notifyListeners();
   }
@@ -421,7 +435,7 @@ class AppStore extends ChangeNotifier {
     await _api.saveToken(token);
     final userJson = res.data['user'];
     if (userJson is Map) {
-      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      await _setUserFromJson(Map<String, dynamic>.from(userJson));
     } else {
       await refreshMe();
     }
@@ -1022,7 +1036,7 @@ class AppStore extends ChangeNotifier {
     await _api.saveToken(token);
     final userJson = res.data['user'];
     if (userJson is Map) {
-      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      await _setUserFromJson(Map<String, dynamic>.from(userJson));
     } else {
       await refreshMe();
     }
@@ -1071,7 +1085,7 @@ class AppStore extends ChangeNotifier {
     });
     final userJson = res.data is Map ? res.data['user'] : null;
     if (userJson is Map) {
-      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      await _setUserFromJson(Map<String, dynamic>.from(userJson));
     } else {
       await refreshMe();
     }
@@ -1092,7 +1106,7 @@ class AppStore extends ChangeNotifier {
     );
     final userJson = res.data is Map ? res.data['user'] : null;
     if (userJson is Map) {
-      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      await _setUserFromJson(Map<String, dynamic>.from(userJson));
     } else {
       await refreshMe();
     }
@@ -1103,7 +1117,7 @@ class AppStore extends ChangeNotifier {
     final res = await _api.delete('/profile/avatar');
     final userJson = res.data is Map ? res.data['user'] : null;
     if (userJson is Map) {
-      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      await _setUserFromJson(Map<String, dynamic>.from(userJson));
     } else {
       await refreshMe();
     }
@@ -1189,7 +1203,7 @@ class AppStore extends ChangeNotifier {
     });
     final userJson = res.data is Map ? res.data['user'] : null;
     if (userJson is Map) {
-      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      await _setUserFromJson(Map<String, dynamic>.from(userJson));
       notifyListeners();
     } else {
       await refreshMe();
@@ -1208,7 +1222,7 @@ class AppStore extends ChangeNotifier {
     });
     final userJson = res.data is Map ? res.data['user'] : null;
     if (userJson is Map) {
-      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      await _setUserFromJson(Map<String, dynamic>.from(userJson));
       notifyListeners();
     } else {
       await refreshMe();
@@ -1236,7 +1250,7 @@ class AppStore extends ChangeNotifier {
     });
     final userJson = res.data is Map ? res.data['user'] : null;
     if (userJson is Map) {
-      user = AppUser.fromJson(Map<String, dynamic>.from(userJson));
+      await _setUserFromJson(Map<String, dynamic>.from(userJson));
       notifyListeners();
     } else {
       await refreshMe();
@@ -2210,6 +2224,15 @@ class AppStore extends ChangeNotifier {
 
   Future<void> viewStatus(int statusId) async {
     await _api.post('/status/$statusId/view');
+  }
+
+  Future<StatusViewsPage> loadStatusViews(int statusId) async {
+    final res = await _api.get('/status/$statusId/views');
+    final data = res.data is Map ? res.data['data'] : null;
+    if (data is Map) {
+      return StatusViewsPage.fromJson(Map<String, dynamic>.from(data));
+    }
+    throw ApiException('Could not load status views.');
   }
 
   Future<void> deleteStatus(int statusId) async {

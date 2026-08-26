@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import '../api/api_config.dart';
 import '../services/media_cache.dart';
 import '../theme/app_theme.dart';
+import '../utils/video_playback.dart';
 
 /// Full-screen chat / media video player — tap play, scrub, close.
 /// Downloads once, then plays from local cache (no data on replay).
@@ -85,14 +86,7 @@ class _VideoViewerState extends State<VideoViewer> {
   Future<void> _togglePlay() async {
     final controller = _controller;
     if (!_ready || controller == null) return;
-    if (controller.value.isPlaying) {
-      await controller.pause();
-    } else {
-      if (controller.value.position >= controller.value.duration) {
-        await controller.seekTo(Duration.zero);
-      }
-      await controller.play();
-    }
+    await toggleVideoPlayback(controller);
     setState(() => _showControls = true);
   }
 
@@ -106,7 +100,7 @@ class _VideoViewerState extends State<VideoViewer> {
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
-    final playing = _ready && controller != null && controller.value.isPlaying;
+    final playing = _ready && controller != null && controller.value.isPlaying && !videoAtEnd(controller.value);
     final position = _ready && controller != null ? controller.value.position : Duration.zero;
     final duration = _ready && controller != null ? controller.value.duration : Duration.zero;
     final progress = duration.inMilliseconds == 0

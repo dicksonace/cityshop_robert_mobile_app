@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
@@ -924,6 +925,9 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
   bool busy = false;
   bool paused = false;
   double videoProgress = 0;
+  int viewCount = 0;
+  List<StatusViewerEntry> viewers = const [];
+  bool loadingViews = false;
 
   @override
   void initState() {
@@ -939,6 +943,7 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _markCurrent();
       _restartAutoAdvance();
+      if (widget.isMine) _refreshViews();
     });
   }
 
@@ -1005,6 +1010,120 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
     });
     _markCurrent();
     _restartAutoAdvance();
+    if (widget.isMine) _refreshViews();
+  }
+
+  Future<void> _refreshViews() async {
+    final item = current;
+    if (!widget.isMine || item == null) return;
+    setState(() {
+      loadingViews = true;
+      viewCount = item.viewCount ?? viewCount;
+    });
+    try {
+      final page = await context.read<AppStore>().loadStatusViews(item.id);
+      if (!mounted || current?.id != item.id) return;
+      setState(() {
+        viewCount = page.viewCount;
+        viewers = page.viewers;
+        loadingViews = false;
+      });
+    } catch (_) {
+      if (!mounted || current?.id != item.id) return;
+      setState(() => loadingViews = false);
+    }
+  }
+
+  Future<void> _openViewersSheet() async {
+    final item = current;
+    if (item == null) return;
+    if (viewers.isEmpty && !loadingViews) {
+      await _refreshViews();
+    }
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE5E7EB),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  viewCount == 1 ? '1 view' : '$viewCount views',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 14),
+                if (loadingViews)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
+                  )
+                else if (viewers.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Text(
+                      'No views yet.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                  )
+                else
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.sizeOf(ctx).height * 0.45,
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: viewers.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final viewer = viewers[i];
+                        final avatar = ApiConfig.resolveMediaUrl(viewer.avatar);
+                        final viewedAt = viewer.viewedAt;
+                        final when = viewedAt == null
+                            ? ''
+                            : DateFormat('d MMM, h:mm a').format(DateTime.parse(viewedAt).toLocal());
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundImage: avatar.isNotEmpty ? CachedNetworkImageProvider(avatar) : null,
+                            child: avatar.isEmpty
+                                ? Text(viewer.name.isNotEmpty ? viewer.name[0].toUpperCase() : '?')
+                                : null,
+                          ),
+                          title: Text(viewer.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                          subtitle: when.isNotEmpty
+                              ? Text(when, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12))
+                              : null,
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _delete() async {
@@ -1188,6 +1307,49 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
                     ),
                   ),
                 ),
+                if (widget.isMine)
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Material(
+                          color: Colors.black45,
+                          borderRadius: BorderRadius.circular(999),
+                          child: InkWell(
+                            onTap: loadingViews ? null : _openViewersSheet,
+                            borderRadius: BorderRadius.circular(999),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.remove_red_eye_outlined, color: Colors.white, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    viewCount == 1 ? '1 view' : '$viewCount views',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  if (loadingViews) ...[
+                                    const SizedBox(width: 10),
+                                    const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
     );

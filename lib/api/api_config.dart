@@ -66,5 +66,7 @@ class ApiConfig {
   }
 
   static const tokenKey = 'cityshop_auth_token';
+  /// Last known `/auth/me` user payload — restores logged-in UI when offline.
+  static const userCacheKey = 'cityshop_auth_user_cache';
   static const deviceName = 'cityshop_mobile';
 }

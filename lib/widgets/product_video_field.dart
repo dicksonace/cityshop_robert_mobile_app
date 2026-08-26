@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../api/api_config.dart';
 import '../theme/app_theme.dart';
+import '../utils/video_playback.dart';
 import 'common_widgets.dart';
 import 'product_video_limits.dart';
 
@@ -144,11 +145,7 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
       await _load();
       return;
     }
-    if (controller.value.isPlaying) {
-      await controller.pause();
-    } else {
-      await controller.play();
-    }
+    await toggleVideoPlayback(controller);
     if (mounted) setState(() {});
   }
 
@@ -295,7 +292,7 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
 
     final controller = _controller;
     final ready = _ready && controller != null;
-    final playing = ready && controller.value.isPlaying;
+    final playing = ready && controller.value.isPlaying && !videoAtEnd(controller.value);
     final position = ready ? controller.value.position : Duration.zero;
     final duration = ready && controller.value.duration > Duration.zero
         ? controller.value.duration

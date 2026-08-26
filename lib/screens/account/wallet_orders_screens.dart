@@ -720,6 +720,30 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
               style: TextStyle(color: Color(0xFFB45309), fontSize: 12),
             ),
           ],
+          if (store.isSeller) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _WalletQrAction(
+                    icon: Icons.qr_code_2_rounded,
+                    label: 'My QR',
+                    subtitle: 'Receive payments',
+                    onTap: () => context.push('/qr/receive'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _WalletQrAction(
+                    icon: Icons.qr_code_scanner_rounded,
+                    label: 'Scan',
+                    subtitle: 'Pay someone',
+                    onTap: () => context.push('/qr/scan'),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (!(store.user?.canStoreWalletFunds ?? false)) ...[
             const SizedBox(height: 10),
             Material(
@@ -990,6 +1014,66 @@ class _BalanceCell extends StatelessWidget {
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
       ],
+    );
+  }
+}
+
+/// Compact QR pay / receive shortcuts on the seller wallet tab.
+class _WalletQrAction extends StatelessWidget {
+  const _WalletQrAction({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.ringOrange,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: AppColors.accent, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
