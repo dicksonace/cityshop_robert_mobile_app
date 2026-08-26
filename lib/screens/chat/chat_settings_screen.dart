@@ -9,6 +9,7 @@ import '../../api/api_config.dart';
 import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/image_viewer.dart';
 
 const _reportReasons = <({String value, String label})>[
   (value: 'scam', label: 'Scam or fraud'),
@@ -85,6 +86,12 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _viewAvatar() async {
+    final url = ApiConfig.resolveMediaUrl(_avatar);
+    if (url.isEmpty || !mounted) return;
+    await showImageViewer(context, urls: [url]);
   }
 
   Future<void> _pickGroupPhoto() async {
@@ -263,7 +270,13 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             child: Row(
               children: [
                 GestureDetector(
-                  onTap: widget.isGroup && !_avatarBusy ? _pickGroupPhoto : null,
+                  onTap: () {
+                    if (avatarUrl.isNotEmpty) {
+                      _viewAvatar();
+                    } else if (widget.isGroup && !_avatarBusy) {
+                      _pickGroupPhoto();
+                    }
+                  },
                   child: Stack(
                     children: [
                       CircleAvatar(
@@ -281,23 +294,26 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                         Positioned(
                           right: 0,
                           bottom: 0,
-                          child: Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: AppColors.accent,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
+                          child: GestureDetector(
+                            onTap: _avatarBusy ? null : _pickGroupPhoto,
+                            child: Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: AppColors.accent,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: _avatarBusy
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(4),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.camera_alt, size: 12, color: Colors.white),
                             ),
-                            child: _avatarBusy
-                                ? const Padding(
-                                    padding: EdgeInsets.all(4),
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.camera_alt, size: 12, color: Colors.white),
                           ),
                         ),
                     ],
@@ -317,7 +333,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                         Text(
                           _loading
                               ? 'Loading members…'
-                              : '${_members.isEmpty ? '…' : _members.length} members · Tap photo to change',
+                              : '${_members.isEmpty ? '…' : _members.length} members · Tap photo to view',
                           style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                         ),
                       ],

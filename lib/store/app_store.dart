@@ -7,6 +7,7 @@ import '../api/api_client.dart';
 import '../api/api_config.dart';
 import '../api/chat_realtime.dart';
 import '../models/models.dart';
+import '../services/chat_thread_cache.dart';
 import '../services/recent_views.dart';
 import '../widgets/product_image_limits.dart';
 
@@ -1694,15 +1695,34 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> loadConversations() async {
-    final res = await _api.get('/messages');
-    final data = res.data is Map ? (res.data['data'] ?? res.data['conversations']) : null;
-    if (data is List) {
-      conversations = data
-          .whereType<Map>()
-          .map((e) => ConversationModel.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+    final userId = user?.id;
+    try {
+      final res = await _api.get('/messages');
+      final data = res.data is Map ? (res.data['data'] ?? res.data['conversations']) : null;
+      if (data is List) {
+        final raw = data
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        if (userId != null) {
+          await ChatThreadCache.saveInbox(userId: userId, conversations: raw);
+        }
+        conversations = raw
+            .map((e) => ConversationModel.fromJson(e))
+            .toList();
+      }
+      notifyListeners();
+    } catch (_) {
+      if (userId != null) {
+        final cached = await ChatThreadCache.loadInbox(userId: userId);
+        if (cached != null && cached.isNotEmpty) {
+          conversations = cached;
+          notifyListeners();
+          return;
+        }
+      }
+      rethrow;
     }
-    notifyListeners();
   }
 
   Future<void> refreshNotificationCounts({int maxAttempts = 2}) async {
@@ -1986,6 +2006,16 @@ class AppStore extends ChangeNotifier {
                 ))
             .toList()
         : <ChatMessage>[];
+    if (myId > 0) {
+      await ChatThreadCache.saveThread(
+        userId: myId,
+        conversationId: id,
+        conversation: Map<String, dynamic>.from(convJson as Map),
+        messages: msgs is List
+            ? msgs.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+            : const [],
+      );
+    }
     return (
       conversation: conversation,
       messages: messages,
@@ -2457,6 +2487,13 @@ class AppStore extends ChangeNotifier {
   Future<CheckoutPreview> loadCheckoutPreview() async {
     final res = await _api.get('/checkout');
     return CheckoutPreview.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<Map<String, dynamic>> applyCheckoutCoupons(Map<String, String> sellerCoupons) async {
+    final res = await _api.post('/checkout/apply-coupons', data: {
+      'seller_coupons': sellerCoupons,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
   }
 
   Future<Map<String, dynamic>> placeCheckout({

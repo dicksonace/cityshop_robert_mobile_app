@@ -32,6 +32,59 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final Map<int, String> sellerChannels = {};
   final Map<int, int?> sellerMethodIds = {};
   final Map<int, String> sellerCoupons = {};
+  Map<String, dynamic>? couponPreview;
+  bool applyingCoupons = false;
+
+  double _displayGrandTotal(CheckoutPreview p) =>
+      (couponPreview?['grand_total'] as num?)?.toDouble() ?? p.grandTotal;
+
+  double _displayDiscount() =>
+      (couponPreview?['discount_total'] as num?)?.toDouble() ?? 0;
+
+  Map<String, dynamic>? _sellerCouponPreview(int sellerId) {
+    final groups = couponPreview?['seller_groups'];
+    if (groups is! List) return null;
+    for (final g in groups) {
+      if (g is Map && (g['seller_id'] as num?)?.toInt() == sellerId) {
+        return Map<String, dynamic>.from(g);
+      }
+    }
+    return null;
+  }
+
+  String? _couponError(int sellerId) {
+    final errors = couponPreview?['errors'];
+    if (errors is! Map) return null;
+    return errors['$sellerId']?.toString();
+  }
+
+  Future<void> _applyCoupons() async {
+    final payload = <String, String>{
+      for (final entry in sellerCoupons.entries)
+        if (entry.value.trim().isNotEmpty) '${entry.key}': entry.value.trim().toUpperCase(),
+    };
+    if (payload.isEmpty) return;
+
+    setState(() => applyingCoupons = true);
+    try {
+      final result = await context.read<AppStore>().applyCheckoutCoupons(payload);
+      if (!mounted) return;
+      setState(() {
+        couponPreview = result;
+        applyingCoupons = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => applyingCoupons = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => applyingCoupons = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -419,7 +472,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               children: [
                 Expanded(child: _form(p!)),
                 _PayBar(
-                  total: p.grandTotal,
+                  total: _displayGrandTotal(p!),
                   placing: placing,
                   onPressed: placing ? null : _place,
                 ),
@@ -430,10 +483,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   Widget _form(CheckoutPreview p) {
     final selected = p.addresses.where((a) => a.id == addressId).firstOrNull;
-    final walletShort = p.walletAvailable < p.grandTotal;
+    final orderTotal = _displayGrandTotal(p);
+    final walletShort = p.walletAvailable < orderTotal;
     final walletCanPay = !walletShort;
     final noCashStores = _storesWithoutCash(p);
     final cashAllowed = noCashStores.isEmpty;
+    final discount = _displayDiscount();
+    final displayShipping =
+        (couponPreview?['shipping_total'] as num?)?.toDouble() ?? p.shippingTotal;
 
     Widget walletRow() => _PayRow(
           icon: Icons.account_balance_wallet_rounded,
@@ -536,11 +593,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             sellerName: '${group['seller_name'] ?? 'Seller'}',
             showSellerName: p.sellerGroups.length > 1,
             value: sellerCoupons[(group['seller_id'] as num?)?.toInt() ?? 0] ?? '',
+            applying: applyingCoupons,
+            error: _couponError((group['seller_id'] as num?)?.toInt() ?? 0),
+            successMessage: _sellerCouponPreview((group['seller_id'] as num?)?.toInt() ?? 0)?['coupon_message']?.toString(),
             onChanged: (code) {
               final id = (group['seller_id'] as num?)?.toInt();
               if (id == null) return;
-              setState(() => sellerCoupons[id] = code);
+              setState(() {
+                sellerCoupons[id] = code;
+                couponPreview = null;
+              });
             },
+            onApply: _applyCoupons,
           ),
         const SizedBox(height: 14),
         _CardShell(
@@ -548,9 +612,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           child: Column(
             children: [
               _Row('Subtotal', _money.format(p.subtotal)),
-              _Row('Shipping', _money.format(p.shippingTotal)),
+              _Row('Shipping', _money.format(displayShipping)),
+              if (discount > 0) _Row('Coupon discount', '-${_money.format(discount)}'),
               const _RowDivider(),
-              _Row('Total', _money.format(p.grandTotal), bold: true),
+              _Row('Total', _money.format(orderTotal), bold: true),
             ],
           ),
         ),
@@ -891,13 +956,21 @@ class _SellerCouponField extends StatefulWidget {
     required this.sellerName,
     required this.value,
     required this.onChanged,
+    required this.onApply,
     this.showSellerName = false,
+    this.applying = false,
+    this.error,
+    this.successMessage,
   });
 
   final String sellerName;
   final String value;
   final ValueChanged<String> onChanged;
+  final VoidCallback onApply;
   final bool showSellerName;
+  final bool applying;
+  final String? error;
+  final String? successMessage;
 
   @override
   State<_SellerCouponField> createState() => _SellerCouponFieldState();
@@ -919,6 +992,14 @@ class _SellerCouponFieldState extends State<_SellerCouponField> {
   }
 
   @override
+  void didUpdateWidget(covariant _SellerCouponField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value && _controller.text != widget.value) {
+      _controller.text = widget.value;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 14),
@@ -934,32 +1015,72 @@ class _SellerCouponFieldState extends State<_SellerCouponField> {
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
             const SizedBox(height: 8),
-            TextField(
-              controller: _controller,
-              textCapitalization: TextCapitalization.characters,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-              ),
-              decoration: const InputDecoration(
-                hintText: 'SAVE10',
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                border: OutlineInputBorder(),
-              ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\-_]')),
-                LengthLimitingTextInputFormatter(30),
-                TextInputFormatter.withFunction((oldValue, newValue) {
-                  final upper = newValue.text.toUpperCase();
-                  return newValue.copyWith(
-                    text: upper,
-                    selection: TextSelection.collapsed(offset: upper.length),
-                  );
-                }),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    textCapitalization: TextCapitalization.characters,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'SAVE10',
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      border: OutlineInputBorder(),
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9\-_]')),
+                      LengthLimitingTextInputFormatter(30),
+                      TextInputFormatter.withFunction((oldValue, newValue) {
+                        final upper = newValue.text.toUpperCase();
+                        return newValue.copyWith(
+                          text: upper,
+                          selection: TextSelection.collapsed(offset: upper.length),
+                        );
+                      }),
+                    ],
+                    onChanged: widget.onChanged,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 44,
+                  child: OutlinedButton(
+                    onPressed: widget.applying || widget.value.trim().isEmpty
+                        ? null
+                        : widget.onApply,
+                    child: Text(widget.applying ? 'Applying…' : 'Apply'),
+                  ),
+                ),
               ],
-              onChanged: widget.onChanged,
             ),
+            if (widget.error != null && widget.error!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  widget.error!,
+                  style: const TextStyle(
+                    color: AppColors.danger,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              )
+            else if (widget.successMessage != null && widget.successMessage!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  widget.successMessage!,
+                  style: const TextStyle(
+                    color: Color(0xFF047857),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
           ],
         ),
       ),

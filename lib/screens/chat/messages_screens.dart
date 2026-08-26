@@ -18,6 +18,7 @@ import '../../api/api_config.dart';
 import '../../api/chat_realtime.dart';
 import '../../models/models.dart';
 import '../../services/chat_call_service.dart';
+import '../../services/chat_thread_cache.dart';
 import '../../services/media_cache.dart';
 import '../../services/money_sound.dart';
 import '../../services/video_thumbnail_cache.dart';
@@ -86,11 +87,11 @@ class _MessagesTabState extends State<MessagesTab> with AutoRefreshTab {
       error = null;
     } on ApiException catch (e) {
       // Background polls must not wipe the inbox when the network blips.
-      if (!background || store.conversations.isEmpty) {
+      if (store.conversations.isEmpty) {
         error = e.message;
       }
     } catch (e) {
-      if (!background || store.conversations.isEmpty) {
+      if (store.conversations.isEmpty) {
         error = e.toString();
       }
     } finally {
@@ -402,6 +403,8 @@ class _ChatScreenState extends State<ChatScreen> {
   List<ChatMessage> messages = [];
   AttachProduct? pendingProduct;
   bool loading = true;
+  /// True when the last thread fetch failed due to network — chat stays open.
+  bool offline = false;
   bool sending = false;
   bool sendingProduct = false;
   bool uploadingMedia = false;
@@ -416,6 +419,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _recorder = AudioRecorder();
   ConversationRealtime? _realtime;
   ChatCallService? _call;
+  bool _bootstrapped = false;
 
   @override
   void initState() {
@@ -424,6 +428,18 @@ class _ChatScreenState extends State<ChatScreen> {
     _controller.addListener(_onComposerChanged);
     _load();
   }
+
+  ConversationModel? _seedConversation(AppStore store) {
+    for (final c in store.conversations) {
+      if (c.id == widget.conversationId) return c;
+    }
+    return null;
+  }
+
+  ConversationModel _stubConversation() => ConversationModel(
+        id: widget.conversationId,
+        otherName: 'Chat',
+      );
 
   void _onComposerChanged() {
     if (mounted) setState(() {});
@@ -456,14 +472,47 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _load() async {
+    final store = context.read<AppStore>();
+    final seed = _seedConversation(store);
+    final myId = store.user?.id ?? 0;
+
+    // Always open the chat shell immediately — never block on the network.
+    if (mounted && (loading || conversation == null)) {
+      setState(() {
+        conversation ??= seed ?? _stubConversation();
+        loading = false;
+      });
+    }
+
+    // Show saved messages right away when offline or the network is slow.
+    if (myId > 0) {
+      final cached = await ChatThreadCache.loadThread(
+        userId: myId,
+        conversationId: widget.conversationId,
+      );
+      if (cached != null && mounted) {
+        setState(() {
+          conversation = cached.conversation;
+          messages = cached.messages;
+          loading = false;
+          offline = true;
+        });
+        _jumpToEnd();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          unawaited(_finishOpen(store, const []));
+        });
+      }
+    }
+
     try {
-      final store = context.read<AppStore>();
       final result = await store.loadConversation(widget.conversationId);
       if (!mounted) return;
       setState(() {
         conversation = result.conversation;
         messages = result.messages;
         loading = false;
+        offline = false;
       });
       _jumpToEnd();
 
@@ -472,14 +521,43 @@ class _ChatScreenState extends State<ChatScreen> {
         if (!mounted) return;
         unawaited(_finishOpen(store, result.pendingCallSignals));
       });
-    } catch (e) {
+    } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      setState(() {
+        loading = false;
+        conversation ??= seed ?? _stubConversation();
+        offline = e.isNetwork || messages.isNotEmpty;
+      });
+      if (!e.isNetwork) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_finishOpen(store, const []));
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        conversation ??= seed ?? _stubConversation();
+        offline = true;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_finishOpen(store, const []));
+      });
     }
   }
 
   Future<void> _finishOpen(AppStore store, List<ChatMessage> pendingCallSignals) async {
+    if (_bootstrapped && _call != null) {
+      _call!.peerName = conversation?.otherName ?? 'Chat';
+      // Already wired — just keep polling so we recover when the network returns.
+      _startPoll();
+      unawaited(_pollNew());
+      return;
+    }
+    _bootstrapped = true;
     final myId = store.user?.id ?? 0;
     _call ??= ChatCallService(
       store: store,
@@ -581,6 +659,9 @@ class _ChatScreenState extends State<ChatScreen> {
           );
       if (!mounted) return;
       _updatedAfter = DateTime.now().toUtc();
+      if (offline) {
+        setState(() => offline = false);
+      }
       final readSet = polled.readMessageIds.toSet();
       final existing = {for (final m in messages) m.id: m};
       var next = [...messages];
@@ -1889,6 +1970,27 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Column(
               children: [
+                if (offline)
+                  Material(
+                    color: const Color(0xFF374151),
+                    child: InkWell(
+                      onTap: () => unawaited(_load()),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        child: Text(
+                          thread.isEmpty
+                              ? 'No connection · tap to retry'
+                              : 'Offline · showing saved messages · tap to retry',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (conversation?.productName != null)
                   _ProductContextCard(conversation: conversation!),
                 Expanded(
