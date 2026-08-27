@@ -234,7 +234,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                   const Text('Recent activity', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 10),
                   if (buyTransfers.isEmpty && sellTransfers.isEmpty)
-                    const Text('No China / RMB transactions yet.', style: TextStyle(color: AppColors.muted)),
+                    const Text('No China / RMB transactions yet.', style: TextStyle(color: AppColors.textMuted)),
                   ...buyTransfers.map((item) {
                     final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
                     final funding = item['funding_source']?.toString() ?? 'external';
@@ -329,9 +329,9 @@ class _ActionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: TextStyle(fontWeight: FontWeight.w800, color: selected ? Colors.teal.shade800 : AppColors.text)),
+              Text(title, style: TextStyle(fontWeight: FontWeight.w800, color: selected ? Colors.teal.shade800 : AppColors.textPrimary)),
               const SizedBox(height: 4),
-              Text(subtitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
+              Text(subtitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
               if (badge != null) ...[
                 const SizedBox(height: 6),
                 Text(

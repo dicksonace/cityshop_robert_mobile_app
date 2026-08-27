@@ -1641,7 +1641,7 @@ class AppStore extends ChangeNotifier {
     required String direction,
     required double amount,
   }) async {
-    final res = await _api.post('/wallet/convert/quote', {
+    final res = await _api.post('/wallet/convert/quote', data: {
       'direction': direction,
       'amount': amount,
     });
@@ -1655,7 +1655,7 @@ class AppStore extends ChangeNotifier {
     required double amount,
     required String paymentPin,
   }) async {
-    final res = await _api.post('/wallet/convert', {
+    final res = await _api.post('/wallet/convert', data: {
       'direction': direction,
       'amount': amount,
       'payment_pin': paymentPin,

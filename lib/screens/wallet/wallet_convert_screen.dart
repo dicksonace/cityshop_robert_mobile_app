@@ -311,7 +311,7 @@ class _DirChip extends StatelessWidget {
             label,
             style: TextStyle(
               fontWeight: FontWeight.w800,
-              color: selected ? AppColors.primary : AppColors.text,
+              color: selected ? AppColors.primary : AppColors.textPrimary,
             ),
           ),
         ),
