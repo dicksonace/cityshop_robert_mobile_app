@@ -353,11 +353,19 @@ class _StatusMediaComposerScreenState extends State<StatusMediaComposerScreen> {
     final item = _items[i];
     if (!item.isVideo) return;
 
-    final controller = VideoPlayerController.file(File(item.path))
-      ..setLooping(true);
+    final file = File(item.path);
+    if (!await file.exists()) {
+      if (mounted && index == i) setState(() => videoReady = false);
+      return;
+    }
+
+    final controller = VideoPlayerController.file(
+      file,
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+    )..setLooping(true);
     _video = controller;
     try {
-      await controller.initialize();
+      await controller.initialize().timeout(const Duration(seconds: 30));
       if (!mounted || index != i) {
         await controller.dispose();
         if (_video == controller) _video = null;
@@ -366,9 +374,9 @@ class _StatusMediaComposerScreenState extends State<StatusMediaComposerScreen> {
       setState(() => videoReady = true);
       await controller.play();
     } catch (_) {
-      if (mounted && index == i) {
-        setState(() => videoReady = false);
-      }
+      await controller.dispose();
+      if (_video == controller) _video = null;
+      if (mounted && index == i) setState(() => videoReady = false);
     }
   }
 

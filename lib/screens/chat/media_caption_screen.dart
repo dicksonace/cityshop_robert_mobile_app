@@ -76,8 +76,11 @@ class _MediaCaptionScreenState extends State<MediaCaptionScreen> {
   VideoPlayerController? _video;
   bool viewOnce = false;
   bool videoReady = false;
+  bool videoLoading = false;
+  String? videoError;
   bool busy = false;
   int index = 0;
+  int _loadToken = 0;
 
   @override
   void initState() {
@@ -107,27 +110,63 @@ class _MediaCaptionScreenState extends State<MediaCaptionScreen> {
   }
 
   Future<void> _loadVideoFor(int i) async {
+    final token = ++_loadToken;
     await _video?.dispose();
+    if (token != _loadToken) return;
     _video = null;
     videoReady = false;
+    videoError = null;
+    videoLoading = false;
     if (!mounted) return;
     setState(() {});
 
     if (i < 0 || i >= _items.length || !_items[i].isVideo) return;
 
-    final controller = VideoPlayerController.file(File(_items[i].path))..setLooping(true);
+    final path = _items[i].path;
+    final file = File(path);
+    if (!await file.exists()) {
+      if (!mounted || token != _loadToken || index != i) return;
+      setState(() => videoError = 'Video file missing. Pick it again.');
+      return;
+    }
+
+    if (mounted && token == _loadToken) {
+      setState(() => videoLoading = true);
+    }
+
+    final controller = VideoPlayerController.file(
+      file,
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+    )..setLooping(true);
+
+    if (token != _loadToken) {
+      await controller.dispose();
+      return;
+    }
     _video = controller;
+
     try {
-      await controller.initialize();
-      if (!mounted || index != i) {
+      await controller.initialize().timeout(const Duration(seconds: 30));
+      if (!mounted || token != _loadToken || index != i) {
         await controller.dispose();
         if (_video == controller) _video = null;
         return;
       }
-      setState(() => videoReady = true);
+      setState(() {
+        videoReady = true;
+        videoLoading = false;
+        videoError = null;
+      });
       await controller.play();
     } catch (_) {
-      if (mounted && index == i) setState(() => videoReady = false);
+      await controller.dispose();
+      if (_video == controller) _video = null;
+      if (!mounted || token != _loadToken || index != i) return;
+      setState(() {
+        videoReady = false;
+        videoLoading = false;
+        videoError = 'Could not load this video. Try Trim, or pick another clip.';
+      });
     }
   }
 
@@ -352,250 +391,284 @@ class _MediaCaptionScreenState extends State<MediaCaptionScreen> {
 
     final total = _items.length;
     final current = _items[index];
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Column(
+      resizeToAvoidBottomInset: false,
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(4, 0, 8, 0),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: busy ? null : () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, color: Colors.white),
-                  ),
-                  Expanded(
-                    child: Text(
-                      busy
-                          ? 'Applying…'
-                          : total > 1
-                              ? '${index + 1} of $total'
-                              : (current.isVideo ? 'Video' : 'Photo'),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  if (current.isVideo)
-                    IconButton(
-                      tooltip: 'Trim',
-                      onPressed: busy ? null : _trimCurrent,
-                      icon: const Icon(Icons.content_cut, color: Colors.white),
-                    ),
-                  if (!current.isVideo)
-                    IconButton(
-                      tooltip: 'Crop',
-                      onPressed: busy ? null : _cropCurrent,
-                      icon: const Icon(Icons.crop_rotate, color: Colors.white),
-                    ),
-                  IconButton(
-                    tooltip: 'Text',
-                    onPressed: busy ? null : _textCurrent,
-                    icon: const Text(
-                      'Aa',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Pen',
-                    onPressed: busy ? null : _drawCurrent,
-                    icon: const Icon(Icons.edit_outlined, color: Colors.white),
-                  ),
-                  if (total > 1)
-                    IconButton(
-                      tooltip: 'Remove this one',
-                      onPressed: busy ? null : _removeCurrent,
-                      icon: const Icon(Icons.delete_outline, color: Colors.white),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          if (total > 1)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: Row(
-                children: [
-                  for (var i = 0; i < total; i++)
-                    Expanded(
-                      child: Container(
-                        height: 3,
-                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                        decoration: BoxDecoration(
-                          color: i == index ? Colors.white : Colors.white24,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: PageView.builder(
-              controller: _pageController,
-              itemCount: total,
-              onPageChanged: _onPageChanged,
-              itemBuilder: (context, i) {
-                final item = _items[i];
-                if (item.isVideo) {
-                  if (i != index) return const ColoredBox(color: Colors.black);
+          PageView.builder(
+            controller: _pageController,
+            itemCount: total,
+            onPageChanged: _onPageChanged,
+            itemBuilder: (context, i) {
+              final item = _items[i];
+              if (item.isVideo) {
+                if (i != index) return const ColoredBox(color: Colors.black);
+                if (videoReady && _video != null) {
                   return Center(
-                    child: videoReady && _video != null
-                        ? AspectRatio(
-                            aspectRatio: _video!.value.aspectRatio == 0 ? 9 / 16 : _video!.value.aspectRatio,
-                            child: VideoPlayer(_video!),
-                          )
-                        : const Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.videocam_rounded, color: Colors.white70, size: 72),
-                              SizedBox(height: 12),
-                              Text('Loading video…', style: TextStyle(color: Colors.white70)),
-                            ],
-                          ),
+                    child: AspectRatio(
+                      aspectRatio: _video!.value.aspectRatio == 0 ? 9 / 16 : _video!.value.aspectRatio,
+                      child: VideoPlayer(_video!),
+                    ),
                   );
                 }
-                return ClipRect(
-                  child: Image.file(
-                    File(item.path),
-                    key: ValueKey(item.path),
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                    alignment: Alignment.center,
-                    gaplessPlayback: false,
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          videoError == null ? Icons.videocam_rounded : Icons.error_outline,
+                          color: Colors.white70,
+                          size: 72,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          videoError ?? (videoLoading ? 'Loading video…' : 'Preparing video…'),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.white70, height: 1.35),
+                        ),
+                        if (videoError != null) ...[
+                          const SizedBox(height: 14),
+                          OutlinedButton(
+                            onPressed: busy ? null : () => _loadVideoFor(index),
+                            style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 );
-              },
-            ),
+              }
+              return ClipRect(
+                child: Image.file(
+                  File(item.path),
+                  key: ValueKey(item.path),
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  alignment: Alignment.center,
+                  gaplessPlayback: false,
+                ),
+              );
+            },
           ),
-          if (total > 1)
-            SizedBox(
-              height: 64,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: total,
-                separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (context, i) {
-                  final item = _items[i];
-                  final selected = i == index;
-                  return GestureDetector(
-                    onTap: () {
-                      _pageController.animateToPage(
-                        i,
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOut,
-                      );
-                    },
-                    child: Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: selected ? AppColors.accent : Colors.white38,
-                          width: selected ? 2.5 : 1,
-                        ),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: item.isVideo
-                          ? const ColoredBox(
-                              color: Color(0xFF111827),
-                              child: Icon(Icons.play_circle_outline, color: Colors.white70),
-                            )
-                          : Image.file(File(item.path), fit: BoxFit.cover),
-                    ),
-                  );
-                },
-              ),
-            ),
           SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (total > 1)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8, left: 4),
-                      child: Text(
-                        'Caption for this ${current.isVideo ? 'video' : 'photo'} (optional)',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  Row(
+            bottom: false,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+                  child: Row(
                     children: [
-                      Tooltip(
-                        message: viewOnce ? 'View once on (all)' : 'View once (all)',
-                        child: InkWell(
-                          onTap: () => setState(() => viewOnce = !viewOnce),
-                          borderRadius: BorderRadius.circular(999),
-                          child: Container(
-                            width: 42,
-                            height: 42,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: viewOnce ? AppColors.accent : Colors.white12,
-                              border: Border.all(
-                                color: viewOnce ? AppColors.accent : Colors.white54,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: const Text(
-                              '1',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ),
+                      IconButton(
+                        onPressed: busy ? null : () => Navigator.pop(context),
+                        icon: const Icon(Icons.close, color: Colors.white),
                       ),
-                      const SizedBox(width: 10),
                       Expanded(
-                        child: TextField(
-                          controller: _caption,
-                          style: const TextStyle(color: Colors.white),
-                          cursorColor: AppColors.accent,
-                          textInputAction: TextInputAction.send,
-                          maxLines: 4,
-                          minLines: 1,
-                          maxLength: 500,
-                          onChanged: (value) => _items[index].caption = value,
-                          onSubmitted: (_) => _send(),
-                          decoration: InputDecoration(
-                            counterText: '',
-                            hintText: 'Add a caption…',
-                            hintStyle: const TextStyle(color: Colors.white54),
-                            filled: true,
-                            fillColor: Colors.white12,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
+                        child: Text(
+                          busy
+                              ? 'Applying…'
+                              : total > 1
+                                  ? '${index + 1} of $total'
+                                  : (current.isVideo ? 'Video' : 'Photo'),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      IconButton.filled(
-                        onPressed: busy ? null : _send,
-                        style: IconButton.styleFrom(backgroundColor: AppColors.accent),
-                        icon: const Icon(Icons.send_rounded, color: Colors.white),
+                      if (current.isVideo)
+                        IconButton(
+                          tooltip: 'Trim',
+                          onPressed: busy ? null : _trimCurrent,
+                          icon: const Icon(Icons.content_cut, color: Colors.white),
+                        ),
+                      if (!current.isVideo)
+                        IconButton(
+                          tooltip: 'Crop',
+                          onPressed: busy ? null : _cropCurrent,
+                          icon: const Icon(Icons.crop_rotate, color: Colors.white),
+                        ),
+                      IconButton(
+                        tooltip: 'Text',
+                        onPressed: busy ? null : _textCurrent,
+                        icon: const Text(
+                          'Aa',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                        ),
                       ),
+                      IconButton(
+                        tooltip: 'Pen',
+                        onPressed: busy ? null : _drawCurrent,
+                        icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                      ),
+                      if (total > 1)
+                        IconButton(
+                          tooltip: 'Remove this one',
+                          onPressed: busy ? null : _removeCurrent,
+                          icon: const Icon(Icons.delete_outline, color: Colors.white),
+                        ),
                     ],
                   ),
-                ],
+                ),
+                if (total > 1)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < total; i++)
+                          Expanded(
+                            child: Container(
+                              height: 3,
+                              margin: const EdgeInsets.symmetric(horizontal: 2),
+                              decoration: BoxDecoration(
+                                color: i == index ? Colors.white : Colors.white24,
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: ColoredBox(
+              color: Colors.black.withValues(alpha: 0.55),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(12, 8, 12, 12 + (bottomInset > 0 ? bottomInset : MediaQuery.paddingOf(context).bottom)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (total > 1)
+                      SizedBox(
+                        height: 64,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: total,
+                          separatorBuilder: (_, _) => const SizedBox(width: 8),
+                          itemBuilder: (context, i) {
+                            final item = _items[i];
+                            final selected = i == index;
+                            return GestureDetector(
+                              onTap: () {
+                                _pageController.animateToPage(
+                                  i,
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOut,
+                                );
+                              },
+                              child: Container(
+                                width: 52,
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: selected ? AppColors.accent : Colors.white38,
+                                    width: selected ? 2.5 : 1,
+                                  ),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: item.isVideo
+                                    ? const ColoredBox(
+                                        color: Color(0xFF111827),
+                                        child: Icon(Icons.play_circle_outline, color: Colors.white70),
+                                      )
+                                    : Image.file(File(item.path), fit: BoxFit.cover),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    if (total > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8, left: 4),
+                        child: Text(
+                          'Caption for this ${current.isVideo ? 'video' : 'photo'} (optional)',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Tooltip(
+                          message: viewOnce ? 'View once on (all)' : 'View once (all)',
+                          child: InkWell(
+                            onTap: () => setState(() => viewOnce = !viewOnce),
+                            borderRadius: BorderRadius.circular(999),
+                            child: Container(
+                              width: 42,
+                              height: 42,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: viewOnce ? AppColors.accent : Colors.white12,
+                                border: Border.all(
+                                  color: viewOnce ? AppColors.accent : Colors.white54,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: const Text(
+                                '1',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: _caption,
+                            style: const TextStyle(color: Colors.white),
+                            cursorColor: AppColors.accent,
+                            textInputAction: TextInputAction.send,
+                            maxLines: 4,
+                            minLines: 1,
+                            maxLength: 500,
+                            onChanged: (value) => _items[index].caption = value,
+                            onSubmitted: (_) => _send(),
+                            decoration: InputDecoration(
+                              counterText: '',
+                              hintText: 'Add a caption…',
+                              hintStyle: const TextStyle(color: Colors.white54),
+                              filled: true,
+                              fillColor: Colors.white12,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(24),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        IconButton.filled(
+                          onPressed: busy ? null : _send,
+                          style: IconButton.styleFrom(backgroundColor: AppColors.accent),
+                          icon: const Icon(Icons.send_rounded, color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -420,6 +420,8 @@ class _ChatScreenState extends State<ChatScreen> {
   ConversationRealtime? _realtime;
   ChatCallService? _call;
   bool _bootstrapped = false;
+  final Map<String, Future<ChatMessage> Function()> _pendingUploads = {};
+  int _localSeq = 0;
 
   @override
   void initState() {
@@ -510,7 +512,11 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() {
         conversation = result.conversation;
-        messages = result.messages;
+        final pendingLocals = messages.where((m) => m.isLocalPending).toList();
+        messages = [
+          ...result.messages,
+          ...pendingLocals,
+        ];
         loading = false;
         offline = false;
       });
@@ -1294,81 +1300,158 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => showAttachPanel = !showAttachPanel);
   }
 
-  Future<void> _appendMedia(Future<ChatMessage> Function() send) async {
-    if (sending || uploadingMedia) return;
-    setState(() {
-      uploadingMedia = true;
-      showAttachPanel = false;
-    });
-    try {
-      final msg = await send();
-      if (!mounted) return;
-      setState(() => messages = [...messages, msg]);
+  Future<void> _queueOutgoingMedia({
+    required String type,
+    required String path,
+    required String filename,
+    required Future<ChatMessage> Function() send,
+    String? caption,
+    int? durationSeconds,
+    bool viewOnce = false,
+  }) async {
+    if (sending) return;
+    setState(() => showAttachPanel = false);
+
+    final clientId = 'local-${DateTime.now().microsecondsSinceEpoch}-${++_localSeq}';
+    final localId = -_localSeq;
+    final pending = ChatMessage(
+      id: localId,
+      body: caption ?? '',
+      mine: true,
+      type: type,
+      createdAt: DateTime.now().toUtc().toIso8601String(),
+      durationSeconds: durationSeconds,
+      fileName: filename,
+      viewOnce: viewOnce,
+      clientId: clientId,
+      localPath: path.isEmpty ? null : path,
+      sendStatus: ChatSendStatus.sending,
+      imageUrl: type == 'image' && path.isNotEmpty ? path : null,
+      videoUrl: type == 'video' && path.isNotEmpty ? path : null,
+      voiceUrl: type == 'voice' && path.isNotEmpty ? path : null,
+      fileUrl: type == 'file' && path.isNotEmpty ? path : null,
+    );
+
+    _pendingUploads[clientId] = send;
+    if (mounted) {
+      setState(() {
+        messages = [...messages, pending];
+        uploadingMedia = false;
+      });
       _jumpToEnd();
+    }
+
+    unawaited(_uploadPending(clientId));
+  }
+
+  Future<void> _uploadPending(String clientId) async {
+    final send = _pendingUploads[clientId];
+    if (send == null) return;
+
+    if (mounted) {
+      setState(() {
+        messages = [
+          for (final m in messages)
+            if (m.clientId == clientId)
+              m.copyWith(sendStatus: ChatSendStatus.sending, clearSendError: true)
+            else
+              m,
+        ];
+      });
+    }
+
+    try {
+      final msg = await _sendWithNetworkWait(send);
+      _pendingUploads.remove(clientId);
+      if (!mounted) return;
+      setState(() {
+        messages = [
+          for (final m in messages)
+            if (m.clientId == clientId) msg else m,
+        ];
+      });
     } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-      }
-    } catch (e) {
-      if (mounted) {
-        final detail = e.toString().replaceFirst(RegExp(r'^[^:]+:\s*'), '').trim();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              detail.isEmpty || detail.length > 120
-                  ? 'Could not send that. Try again.'
-                  : detail,
-            ),
+      if (!mounted) return;
+      setState(() {
+        messages = [
+          for (final m in messages)
+            if (m.clientId == clientId)
+              m.copyWith(sendStatus: ChatSendStatus.failed, sendError: e.message)
+            else
+              m,
+        ];
+      });
+      // Soft tip — bubble stays so they can tap Retry.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.isNetwork
+                ? 'Waiting for a better connection. Tap the message to retry.'
+                : e.message,
           ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => uploadingMedia = false);
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        messages = [
+          for (final m in messages)
+            if (m.clientId == clientId)
+              m.copyWith(
+                sendStatus: ChatSendStatus.failed,
+                sendError: 'Could not send. Tap to retry.',
+              )
+            else
+              m,
+        ];
+      });
     }
   }
 
-  Future<void> _appendManyMedia(List<Future<ChatMessage> Function()> sends) async {
-    if (sends.isEmpty || sending || uploadingMedia) return;
-    setState(() {
-      uploadingMedia = true;
-      showAttachPanel = false;
-    });
-    final sent = <ChatMessage>[];
-    try {
-      for (final send in sends) {
-        sent.add(await send());
+  Future<ChatMessage> _sendWithNetworkWait(Future<ChatMessage> Function() send) async {
+    const maxAttempts = 8;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await send();
+      } on ApiException catch (e) {
+        if (!e.isNetwork || attempt == maxAttempts) rethrow;
+        // Keep waiting — bubble stays in chat while network recovers.
+        final waitSecs = (attempt * 2).clamp(2, 16);
+        await Future<void>.delayed(Duration(seconds: waitSecs));
       }
-      if (!mounted) return;
-      setState(() => messages = [...messages, ...sent]);
-      _jumpToEnd();
-    } on ApiException catch (e) {
-      if (mounted) {
-        if (sent.isNotEmpty) {
-          setState(() => messages = [...messages, ...sent]);
-          _jumpToEnd();
-        }
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-      }
-    } catch (e) {
-      if (mounted) {
-        if (sent.isNotEmpty) {
-          setState(() => messages = [...messages, ...sent]);
-          _jumpToEnd();
-        }
-        final detail = e.toString().replaceFirst(RegExp(r'^[^:]+:\s*'), '').trim();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              detail.isEmpty || detail.length > 120
-                  ? 'Could not send all media. Try again.'
-                  : detail,
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => uploadingMedia = false);
     }
+    throw ApiException('Could not send. Try again.', isNetwork: true);
+  }
+
+  Future<void> _appendManyMedia(List<({
+    String type,
+    String path,
+    String filename,
+    String? caption,
+    int? durationSeconds,
+    bool viewOnce,
+    Future<ChatMessage> Function() send,
+  })> items) async {
+    if (items.isEmpty || sending) return;
+    setState(() => showAttachPanel = false);
+    for (final item in items) {
+      await _queueOutgoingMedia(
+        type: item.type,
+        path: item.path,
+        filename: item.filename,
+        caption: item.caption,
+        durationSeconds: item.durationSeconds,
+        viewOnce: item.viewOnce,
+        send: item.send,
+      );
+    }
+  }
+
+  Future<void> _retryFailedSend(ChatMessage message) async {
+    final clientId = message.clientId;
+    if (clientId == null || !message.isFailedSend) return;
+    if (!_pendingUploads.containsKey(clientId)) return;
+    await _uploadPending(clientId);
   }
 
   Future<void> _openViewOnce(ChatMessage message) async {
@@ -1442,17 +1525,25 @@ class _ChatScreenState extends State<ChatScreen> {
     var clearComposer = false;
     await _appendManyMedia([
       for (final draft in drafts)
-        () async {
-          final msg = await context.read<AppStore>().sendImageMessage(
-                widget.conversationId,
-                draft.path,
-                caption: draft.caption.isEmpty ? null : draft.caption,
-                filename: draft.filename,
-                viewOnce: draft.viewOnce,
-              );
-          if (draft.caption.isNotEmpty) clearComposer = true;
-          return msg;
-        },
+        (
+          type: 'image',
+          path: draft.path,
+          filename: draft.filename,
+          caption: draft.caption.isEmpty ? null : draft.caption,
+          durationSeconds: null,
+          viewOnce: draft.viewOnce,
+          send: () async {
+            final msg = await context.read<AppStore>().sendImageMessage(
+                  widget.conversationId,
+                  draft.path,
+                  caption: draft.caption.isEmpty ? null : draft.caption,
+                  filename: draft.filename,
+                  viewOnce: draft.viewOnce,
+                );
+            if (draft.caption.isNotEmpty) clearComposer = true;
+            return msg;
+          },
+        ),
     ]);
     if (clearComposer && mounted) _controller.clear();
   }
@@ -1484,17 +1575,25 @@ class _ChatScreenState extends State<ChatScreen> {
     var clearComposer = false;
     await _appendManyMedia([
       for (final draft in drafts)
-        () async {
-          final msg = await context.read<AppStore>().sendVideoMessage(
-                widget.conversationId,
-                draft.path,
-                caption: draft.caption.isEmpty ? null : draft.caption,
-                filename: draft.filename,
-                viewOnce: draft.viewOnce,
-              );
-          if (draft.caption.isNotEmpty) clearComposer = true;
-          return msg;
-        },
+        (
+          type: 'video',
+          path: draft.path,
+          filename: draft.filename,
+          caption: draft.caption.isEmpty ? null : draft.caption,
+          durationSeconds: null,
+          viewOnce: draft.viewOnce,
+          send: () async {
+            final msg = await context.read<AppStore>().sendVideoMessage(
+                  widget.conversationId,
+                  draft.path,
+                  caption: draft.caption.isEmpty ? null : draft.caption,
+                  filename: draft.filename,
+                  viewOnce: draft.viewOnce,
+                );
+            if (draft.caption.isNotEmpty) clearComposer = true;
+            return msg;
+          },
+        ),
     ]);
     if (clearComposer && mounted) _controller.clear();
   }
@@ -1519,16 +1618,24 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     final caption = _controller.text.trim();
-    await _appendMedia(() async {
-      final msg = await context.read<AppStore>().sendFileMessage(
-            widget.conversationId,
-            picked!.path,
-            caption: caption.isEmpty ? null : caption,
-            filename: picked.name.isNotEmpty ? picked.name : 'file',
-          );
-      if (caption.isNotEmpty && mounted) _controller.clear();
-      return msg;
-    });
+    final path = picked.path;
+    final name = picked.name.isNotEmpty ? picked.name : 'file';
+    await _queueOutgoingMedia(
+      type: 'file',
+      path: path,
+      filename: name,
+      caption: caption.isEmpty ? null : caption,
+      send: () async {
+        final msg = await context.read<AppStore>().sendFileMessage(
+              widget.conversationId,
+              path,
+              caption: caption.isEmpty ? null : caption,
+              filename: name,
+            );
+        if (caption.isNotEmpty && mounted) _controller.clear();
+        return msg;
+      },
+    );
   }
 
   Future<void> _startVoice() async {
@@ -1640,8 +1747,12 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    await _appendMedia(
-      () => context.read<AppStore>().sendVoiceMessage(
+    await _queueOutgoingMedia(
+      type: 'voice',
+      path: uploadPath,
+      filename: 'voice.m4a',
+      durationSeconds: seconds,
+      send: () => context.read<AppStore>().sendVoiceMessage(
             widget.conversationId,
             uploadPath,
             filename: 'voice.m4a',
@@ -2086,7 +2197,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                       maxWidth: MediaQuery.of(context).size.width * 0.78,
                                     ),
                                     child: GestureDetector(
-                                      onLongPress: m.isDeleted ? null : () => _openMessageActions(m),
+                                      onTap: m.isFailedSend ? () => unawaited(_retryFailedSend(m)) : null,
+                                      onLongPress: m.isDeleted || m.isLocalPending
+                                          ? null
+                                          : () => _openMessageActions(m),
                                       child: Padding(
                                       padding: const EdgeInsets.only(bottom: 6),
                                       child: Row(
@@ -2154,9 +2268,17 @@ class _ChatScreenState extends State<ChatScreen> {
                                               onOpen: () => unawaited(_openViewOnce(m)),
                                             )
                                           else if (m.isPhoto) ...[
-                                            _ChatPhoto(
-                                              url: m.imageUrl!,
-                                              caption: m.body.trim(),
+                                            _OutgoingMediaWrap(
+                                              sending: m.isSending,
+                                              failed: m.isFailedSend,
+                                              onRetry: m.isFailedSend
+                                                  ? () => unawaited(_retryFailedSend(m))
+                                                  : null,
+                                              child: _ChatPhoto(
+                                                url: (m.imageUrl ?? m.localPath)!,
+                                                caption: m.body.trim(),
+                                                localPath: m.localPath,
+                                              ),
                                             ),
                                             if (m.body.trim().isNotEmpty)
                                               Padding(
@@ -2177,11 +2299,19 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 ),
                                               ),
                                           ] else if (m.isVideo) ...[
-                                            _ChatVideo(
-                                              url: m.videoUrl!,
-                                              mine: m.mine,
-                                              durationSeconds: m.durationSeconds,
-                                              fileSize: m.fileSize,
+                                            _OutgoingMediaWrap(
+                                              sending: m.isSending,
+                                              failed: m.isFailedSend,
+                                              onRetry: m.isFailedSend
+                                                  ? () => unawaited(_retryFailedSend(m))
+                                                  : null,
+                                              child: _ChatVideo(
+                                                url: (m.videoUrl ?? m.localPath)!,
+                                                mine: m.mine,
+                                                durationSeconds: m.durationSeconds,
+                                                fileSize: m.fileSize,
+                                                localPath: m.localPath,
+                                              ),
                                             ),
                                             if (m.body.trim().isNotEmpty)
                                               Padding(
@@ -2202,10 +2332,18 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 ),
                                               ),
                                           ] else if (m.type == 'voice' && !m.isDeleted)
-                                            _ChatVoice(
-                                              url: m.voiceUrl ?? '',
-                                              durationSeconds: m.durationSeconds,
-                                              mine: m.mine,
+                                            _OutgoingMediaWrap(
+                                              sending: m.isSending,
+                                              failed: m.isFailedSend,
+                                              onRetry: m.isFailedSend
+                                                  ? () => unawaited(_retryFailedSend(m))
+                                                  : null,
+                                              child: _ChatVoice(
+                                                url: m.voiceUrl ?? m.localPath ?? '',
+                                                durationSeconds: m.durationSeconds,
+                                                mine: m.mine,
+                                                localPath: m.localPath,
+                                              ),
                                             )
                                           else
                                             _messageBody(m, mine: m.mine),
@@ -2277,7 +2415,19 @@ class _ChatScreenState extends State<ChatScreen> {
                                                   ),
                                                   if (m.mine && !m.isDeleted) ...[
                                                     const SizedBox(width: 4),
-                                                    _MessageTick(read: m.isRead),
+                                                    if (m.isSending)
+                                                      SizedBox(
+                                                        width: 12,
+                                                        height: 12,
+                                                        child: CircularProgressIndicator(
+                                                          strokeWidth: 1.6,
+                                                          color: ChatColors.time,
+                                                        ),
+                                                      )
+                                                    else if (m.isFailedSend)
+                                                      Icon(Icons.error_outline, size: 14, color: AppColors.danger)
+                                                    else
+                                                      _MessageTick(read: m.isRead),
                                                   ],
                                                 ],
                                               ),
@@ -3531,46 +3681,131 @@ class _ChatViewOnce extends StatelessWidget {
   }
 }
 
-class _ChatPhoto extends StatelessWidget {
-  const _ChatPhoto({required this.url, required this.caption});
+class _OutgoingMediaWrap extends StatelessWidget {
+  const _OutgoingMediaWrap({
+    required this.child,
+    required this.sending,
+    required this.failed,
+    this.onRetry,
+  });
 
-  final String url;
-  final String caption;
+  final Widget child;
+  final bool sending;
+  final bool failed;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
-    final resolved = ApiConfig.resolveMediaUrl(url);
+    if (!sending && !failed) return child;
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Opacity(opacity: sending || failed ? 0.72 : 1, child: child),
+        if (sending)
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.45),
+              shape: BoxShape.circle,
+            ),
+            padding: const EdgeInsets.all(10),
+            child: const CircularProgressIndicator(
+              strokeWidth: 2.4,
+              color: Colors.white,
+            ),
+          ),
+        if (failed)
+          Material(
+            color: Colors.black.withValues(alpha: 0.55),
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onRetry,
+              child: const SizedBox(
+                width: 48,
+                height: 48,
+                child: Icon(Icons.refresh_rounded, color: Colors.white, size: 26),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ChatPhoto extends StatelessWidget {
+  const _ChatPhoto({
+    required this.url,
+    required this.caption,
+    this.localPath,
+  });
+
+  final String url;
+  final String caption;
+  final String? localPath;
+
+  bool get _isLocal {
+    final path = (localPath ?? url).trim();
+    return path.isNotEmpty && !path.startsWith('http') && File(path).existsSync();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final path = (localPath ?? url).trim();
+    final resolved = _isLocal ? path : ApiConfig.resolveMediaUrl(url);
 
     return GestureDetector(
-      onTap: () => showImageViewer(context, urls: [resolved]),
+      onTap: () {
+        if (_isLocal) {
+          // Local pending — no full viewer needed while uploading.
+          return;
+        }
+        showImageViewer(context, urls: [resolved]);
+      },
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 260, minWidth: 180, maxWidth: 240),
-          child: CachedNetworkImage(
-            imageUrl: resolved,
-            fit: BoxFit.cover,
-            placeholder: (_, __) => Container(
-              width: 180,
-              height: 180,
-              color: AppColors.background,
-              child: const Center(
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+          child: _isLocal
+              ? Image.file(
+                  File(path),
+                  fit: BoxFit.cover,
+                  width: 240,
+                  height: 240,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 180,
+                    height: 120,
+                    color: AppColors.background,
+                    child: const Center(
+                      child: Icon(Icons.broken_image_outlined, color: AppColors.textMuted),
+                    ),
+                  ),
+                )
+              : CachedNetworkImage(
+                  imageUrl: resolved,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                    width: 180,
+                    height: 180,
+                    color: AppColors.background,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+                  errorWidget: (_, __, ___) => Container(
+                    width: 180,
+                    height: 120,
+                    color: AppColors.background,
+                    child: const Center(
+                      child: Icon(Icons.broken_image_outlined, color: AppColors.textMuted),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            errorWidget: (_, __, ___) => Container(
-              width: 180,
-              height: 120,
-              color: AppColors.background,
-              child: const Center(
-                child: Icon(Icons.broken_image_outlined, color: AppColors.textMuted),
-              ),
-            ),
-          ),
         ),
       ),
     );
@@ -3759,12 +3994,14 @@ class _ChatVideo extends StatefulWidget {
     required this.mine,
     this.durationSeconds,
     this.fileSize,
+    this.localPath,
   });
 
   final String url;
   final bool mine;
   final int? durationSeconds;
   final int? fileSize;
+  final String? localPath;
 
   @override
   State<_ChatVideo> createState() => _ChatVideoState();
@@ -3773,6 +4010,17 @@ class _ChatVideo extends StatefulWidget {
 class _ChatVideoState extends State<_ChatVideo> {
   File? _thumb;
   bool _loading = true;
+
+  String get _source {
+    final local = (widget.localPath ?? '').trim();
+    if (local.isNotEmpty && File(local).existsSync()) return local;
+    return widget.url;
+  }
+
+  bool get _isLocal {
+    final path = _source;
+    return path.isNotEmpty && !path.startsWith('http');
+  }
 
   @override
   void initState() {
@@ -3783,7 +4031,7 @@ class _ChatVideoState extends State<_ChatVideo> {
   @override
   void didUpdateWidget(covariant _ChatVideo oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) {
+    if (oldWidget.url != widget.url || oldWidget.localPath != widget.localPath) {
       _thumb = null;
       _loading = true;
       _loadThumb();
@@ -3791,7 +4039,12 @@ class _ChatVideoState extends State<_ChatVideo> {
   }
 
   Future<void> _loadThumb() async {
-    final file = await VideoThumbnailCache.thumbnailFor(widget.url);
+    File? file;
+    if (_isLocal) {
+      file = await VideoThumbnailCache.thumbnailFor(_source);
+    } else {
+      file = await VideoThumbnailCache.thumbnailFor(widget.url);
+    }
     if (!mounted) return;
     setState(() {
       _thumb = file;
@@ -3800,6 +4053,7 @@ class _ChatVideoState extends State<_ChatVideo> {
   }
 
   Future<void> _open(BuildContext context) async {
+    if (_isLocal) return;
     await showVideoViewer(context, url: widget.url);
   }
 
@@ -3926,11 +4180,13 @@ class _ChatVoice extends StatefulWidget {
     required this.url,
     required this.durationSeconds,
     required this.mine,
+    this.localPath,
   });
 
   final String url;
   final int? durationSeconds;
   final bool mine;
+  final String? localPath;
 
   @override
   State<_ChatVoice> createState() => _ChatVoiceState();
@@ -4003,7 +4259,12 @@ class _ChatVoiceState extends State<_ChatVoice> {
   }
 
   Future<void> _toggle() async {
-    if (widget.url.trim().isEmpty) return;
+    final local = (widget.localPath ?? '').trim();
+    final remote = widget.url.trim();
+    final source = local.isNotEmpty && File(local).existsSync()
+        ? local
+        : remote;
+    if (source.isEmpty) return;
     if (_playing) {
       await _player.pause();
       if (mounted) setState(() => _playing = false);
@@ -4013,8 +4274,12 @@ class _ChatVoiceState extends State<_ChatVoice> {
     setState(() => _loading = true);
     try {
       if (_position.inMilliseconds == 0) {
-        final file = await MediaCache.fileFor(widget.url);
-        await _player.play(DeviceFileSource(file.path));
+        if (source.startsWith('http')) {
+          final file = await MediaCache.fileFor(source);
+          await _player.play(DeviceFileSource(file.path));
+        } else {
+          await _player.play(DeviceFileSource(source));
+        }
       } else {
         await _player.resume();
       }
@@ -4063,7 +4328,8 @@ class _ChatVoiceState extends State<_ChatVoice> {
     final progress = total.inMilliseconds <= 0
         ? 0.0
         : (_position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
-    final missing = widget.url.trim().isEmpty;
+    final missing = widget.url.trim().isEmpty &&
+        ((widget.localPath ?? '').trim().isEmpty);
 
     return SizedBox(
       width: 228,

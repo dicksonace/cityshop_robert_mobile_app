@@ -1685,6 +1685,8 @@ class ChatReaction {
   }
 }
 
+enum ChatSendStatus { sent, sending, failed }
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -1723,6 +1725,10 @@ class ChatMessage {
     this.reactions = const [],
     this.viewOnce = false,
     this.viewOnceOpened = false,
+    this.clientId,
+    this.localPath,
+    this.sendStatus = ChatSendStatus.sent,
+    this.sendError,
   });
 
   final int id;
@@ -1762,6 +1768,21 @@ class ChatMessage {
   final bool viewOnce;
   final bool viewOnceOpened;
 
+  /// Local optimistic-send id (not from the server).
+  final String? clientId;
+
+  /// Local file path while a photo/video/voice/file is still uploading.
+  final String? localPath;
+
+  final ChatSendStatus sendStatus;
+  final String? sendError;
+
+  bool get isLocalPending => clientId != null && sendStatus != ChatSendStatus.sent;
+
+  bool get isSending => sendStatus == ChatSendStatus.sending;
+
+  bool get isFailedSend => sendStatus == ChatSendStatus.failed;
+
   bool get isEdited => (editedAt ?? '').isNotEmpty;
 
   static const editWindow = Duration(minutes: 2);
@@ -1781,9 +1802,17 @@ class ChatMessage {
 
   bool get isSignalling => signallingTypes.contains(type);
 
-  bool get isPhoto => type == 'image' && (imageUrl ?? '').isNotEmpty && !isDeleted && !viewOnce;
+  bool get isPhoto =>
+      type == 'image' &&
+      !isDeleted &&
+      !viewOnce &&
+      ((imageUrl ?? '').isNotEmpty || (localPath ?? '').isNotEmpty);
 
-  bool get isVideo => type == 'video' && (videoUrl ?? '').isNotEmpty && !isDeleted && !viewOnce;
+  bool get isVideo =>
+      type == 'video' &&
+      !isDeleted &&
+      !viewOnce &&
+      ((videoUrl ?? '').isNotEmpty || (localPath ?? '').isNotEmpty);
 
   bool get isViewOncePhoto => type == 'image' && viewOnce && !isDeleted;
 
@@ -1791,13 +1820,19 @@ class ChatMessage {
 
   bool get isViewOnceMedia => isViewOncePhoto || isViewOnceVideo;
 
-  bool get isVoice => type == 'voice' && (voiceUrl ?? '').isNotEmpty && !isDeleted;
+  bool get isVoice =>
+      type == 'voice' &&
+      !isDeleted &&
+      ((voiceUrl ?? '').isNotEmpty || (localPath ?? '').isNotEmpty);
 
   bool get isProduct => type == 'product' && !isDeleted;
 
   bool get isTransfer => type == 'transfer' && !isDeleted;
 
-  bool get isFile => type == 'file' && (fileUrl ?? '').isNotEmpty && !isDeleted;
+  bool get isFile =>
+      type == 'file' &&
+      !isDeleted &&
+      ((fileUrl ?? '').isNotEmpty || (localPath ?? '').isNotEmpty);
 
   bool get isMedia => isPhoto || isVideo || isVoice;
 
@@ -1961,11 +1996,17 @@ class ChatMessage {
     bool? canEdit,
     String? imageUrl,
     String? videoUrl,
+    String? voiceUrl,
     String? readAt,
     String? editedAt,
     List<ChatReaction>? reactions,
     bool? viewOnce,
     bool? viewOnceOpened,
+    String? clientId,
+    String? localPath,
+    ChatSendStatus? sendStatus,
+    String? sendError,
+    bool clearSendError = false,
   }) {
     return ChatMessage(
       id: id,
@@ -1976,7 +2017,7 @@ class ChatMessage {
       createdAt: createdAt,
       imageUrl: imageUrl ?? this.imageUrl,
       videoUrl: videoUrl ?? this.videoUrl,
-      voiceUrl: voiceUrl,
+      voiceUrl: voiceUrl ?? this.voiceUrl,
       durationSeconds: durationSeconds,
       metadata: metadata,
       callLog: callLog,
@@ -2004,6 +2045,10 @@ class ChatMessage {
       reactions: reactions ?? this.reactions,
       viewOnce: viewOnce ?? this.viewOnce,
       viewOnceOpened: viewOnceOpened ?? this.viewOnceOpened,
+      clientId: clientId ?? this.clientId,
+      localPath: localPath ?? this.localPath,
+      sendStatus: sendStatus ?? this.sendStatus,
+      sendError: clearSendError ? null : (sendError ?? this.sendError),
     );
   }
 }

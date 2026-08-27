@@ -272,6 +272,7 @@ class ApiClient {
     List<String>? fileFields,
     Map<String, String>? filenames,
     Map<String, String>? contentTypes,
+    int maxAttempts = 4,
   }) {
     return _withRetry(
       () async {
@@ -298,12 +299,12 @@ class ApiClient {
           path,
           data: FormData.fromMap(map),
           options: Options(
-            sendTimeout: const Duration(seconds: 120),
-            receiveTimeout: const Duration(seconds: 120),
+            sendTimeout: const Duration(seconds: 180),
+            receiveTimeout: const Duration(seconds: 180),
           ),
         );
       },
-      maxAttempts: 2,
+      maxAttempts: maxAttempts,
     );
   }
 
@@ -320,7 +321,7 @@ class ApiClient {
         last = e;
         final canRetry = _isTransient(e) && attempt < attempts;
         if (!canRetry) throw _mapError(e);
-        await Future<void>.delayed(Duration(milliseconds: 250 * attempt));
+        await Future<void>.delayed(Duration(milliseconds: 400 * attempt * attempt));
       }
     }
     throw _mapError(last!);
