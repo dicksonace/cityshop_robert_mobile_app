@@ -9,7 +9,8 @@ import '../../widgets/common_widgets.dart';
 
 final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
-/// Buyer entry for China / RMB: convert, transfer Alipay, sell RMB.
+/// Buyer China / RMB: pay GHS at the live rate for Alipay, or sell RMB for MoMo.
+/// Buyers do not hold an RMB wallet balance.
 class ChinaRmbHubScreen extends StatefulWidget {
   const ChinaRmbHubScreen({super.key});
 
@@ -25,8 +26,8 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   List<Map<String, dynamic>> buyTransfers = [];
   List<Map<String, dynamic>> sellTransfers = [];
 
-  /// convert | buy | sell
-  String selectedType = 'convert';
+  /// buy | sell
+  String selectedType = 'buy';
 
   @override
   void initState() {
@@ -77,10 +78,6 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   bool get sellOpen => sellConfig['enabled'] == true;
 
   void _openSelected() {
-    if (selectedType == 'convert') {
-      context.push('/wallet/convert');
-      return;
-    }
     if (selectedType == 'buy') {
       if (!buyOpen) {
         _showPausedOnce('Transfers are paused right now');
@@ -110,7 +107,6 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wallet = context.watch<AppStore>().wallet;
     final buyGhsPerRmb = (buyRate?['ghs_per_rmb'] as num?)?.toDouble();
     final buyRmbPerGhs = (buyRate?['rmb_per_ghs'] as num?)?.toDouble() ??
         (buyGhsPerRmb != null && buyGhsPerRmb > 0 ? 1 / buyGhsPerRmb : null);
@@ -147,47 +143,28 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('GHS wallet', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
-                                  Text(
-                                    _ghs.format(wallet?.availableBalance ?? 0),
-                                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('RMB wallet', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
-                                  Text(
-                                    '¥${(wallet?.rmbBalance ?? 0).toStringAsFixed(2)}',
-                                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                        const Text(
+                          'Live rates',
+                          style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
                         Text(
                           buyRmbPerGhs != null
-                              ? 'Buy / convert · 1 GHS = ¥${buyRmbPerGhs.toStringAsFixed(3)}'
-                              : 'GHS → RMB rate: not published',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                              ? 'Transfer · 1 GHS = ¥${buyRmbPerGhs.toStringAsFixed(3)}'
+                              : 'Transfer rate: not published',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
                         Text(
                           sellGhsPerRmb != null
-                              ? 'Sell / convert · 1 RMB = GH₵${sellGhsPerRmb.toStringAsFixed(4)}'
-                              : 'RMB → GHS rate: not published',
+                              ? 'Sell · 1 RMB = GH₵${sellGhsPerRmb.toStringAsFixed(4)}'
+                              : 'Sell rate: not published',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Pay GHS and we send RMB to Alipay at this rate. No RMB balance is held in your wallet.',
+                          style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.35),
                         ),
                       ],
                     ),
@@ -196,15 +173,8 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                   const Text('What do you want to do?', style: TextStyle(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 10),
                   _ActionCard(
-                    title: 'Convert GHS ↔ RMB',
-                    subtitle: 'Instant wallet exchange',
-                    selected: selectedType == 'convert',
-                    onTap: () => setState(() => selectedType = 'convert'),
-                  ),
-                  const SizedBox(height: 8),
-                  _ActionCard(
                     title: 'Transfer RMB to Alipay',
-                    subtitle: 'Send from RMB balance (or pay GHS externally)',
+                    subtitle: 'Pay GHS · recipient gets RMB at today’s rate',
                     selected: selectedType == 'buy',
                     badge: buyOpen ? 'Live' : 'Paused',
                     badgeLive: buyOpen,
@@ -221,11 +191,9 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                   ),
                   const SizedBox(height: 14),
                   PrimaryButton(
-                    label: selectedType == 'convert'
-                        ? 'Continue · Convert'
-                        : selectedType == 'buy'
-                            ? (buyOpen ? 'Continue · Transfer' : 'Transfers paused')
-                            : (sellOpen ? 'Continue · Sell RMB' : 'Sell paused'),
+                    label: selectedType == 'buy'
+                        ? (buyOpen ? 'Continue · Transfer' : 'Transfers paused')
+                        : (sellOpen ? 'Continue · Sell RMB' : 'Sell paused'),
                     onPressed: (selectedType == 'buy' && !buyOpen) || (selectedType == 'sell' && !sellOpen)
                         ? null
                         : _openSelected,
@@ -237,7 +205,6 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                     const Text('No China / RMB transactions yet.', style: TextStyle(color: AppColors.textMuted)),
                   ...buyTransfers.map((item) {
                     final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
-                    final funding = item['funding_source']?.toString() ?? 'external';
                     final rmb = (quote['rmb_amount'] as num?)?.toDouble() ?? 0;
                     final total = (quote['total_payable_ghs'] as num?)?.toDouble() ?? 0;
                     return Padding(
@@ -248,27 +215,19 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                           borderRadius: BorderRadius.circular(14),
                           side: const BorderSide(color: AppColors.border),
                         ),
-                        tileColor: Colors.white,
-                        title: Text(
-                          'Alipay · ${item['reference']}${funding == 'rmb_wallet' ? ' · Wallet' : ''}',
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                        subtitle: Text(
-                          funding == 'rmb_wallet'
-                              ? '¥${rmb.toStringAsFixed(2)} from wallet'
-                              : '${_ghs.format(total)} → ¥${rmb.toStringAsFixed(2)}',
-                        ),
-                        trailing: Text(
-                          item['status_label']?.toString() ?? '',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
-                        ),
+                        title: Text('Alipay · ${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text('${_ghs.format(total)} → ¥${rmb.toStringAsFixed(2)}'),
+                        trailing: Text('${item['status_label'] ?? item['status']}', style: const TextStyle(fontSize: 12)),
                       ),
                     );
                   }),
                   ...sellTransfers.map((item) {
                     final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
                     final rmb = (quote['rmb_amount'] as num?)?.toDouble() ?? 0;
-                    final ghs = (quote['ghs_payout'] as num?)?.toDouble() ?? 0;
+                    final payoutCurrency = quote['payout_currency']?.toString() ?? 'ghs';
+                    final payout = payoutCurrency == 'ghs'
+                        ? _ghs.format((quote['ghs_payout'] as num?)?.toDouble() ?? 0)
+                        : '\$${((quote['usd_payout'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}';
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
@@ -277,13 +236,9 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                           borderRadius: BorderRadius.circular(14),
                           side: const BorderSide(color: AppColors.border),
                         ),
-                        tileColor: Colors.white,
-                        title: Text('Sell · ${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                        subtitle: Text('¥${rmb.toStringAsFixed(2)} → ${_ghs.format(ghs)}'),
-                        trailing: Text(
-                          item['status_label']?.toString() ?? '',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.teal),
-                        ),
+                        title: Text('Sell · ${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        subtitle: Text('¥${rmb.toStringAsFixed(2)} → $payout'),
+                        trailing: Text('${item['status_label'] ?? item['status']}', style: const TextStyle(fontSize: 12)),
                       ),
                     );
                   }),
@@ -301,7 +256,7 @@ class _ActionCard extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.badge,
-    this.badgeLive = true,
+    this.badgeLive = false,
   });
 
   final String title;
@@ -329,7 +284,13 @@ class _ActionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: TextStyle(fontWeight: FontWeight.w800, color: selected ? Colors.teal.shade800 : AppColors.textPrimary)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: selected ? Colors.teal.shade800 : AppColors.textPrimary,
+                ),
+              ),
               const SizedBox(height: 4),
               Text(subtitle, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
               if (badge != null) ...[

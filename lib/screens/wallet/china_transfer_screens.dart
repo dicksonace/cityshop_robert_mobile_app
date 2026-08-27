@@ -437,7 +437,7 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
   bool loading = true;
   bool submitting = false;
   String? error;
-  String fundingSource = 'rmb_wallet';
+  String fundingSource = 'external';
   final amount = TextEditingController();
   final rmbAmount = TextEditingController();
   int? methodId;
@@ -466,12 +466,10 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
       if (!mounted) return;
       final cfg = Map<String, dynamic>.from(data['config'] as Map? ?? {});
       final methods = (cfg['payment_methods'] as List? ?? []).whereType<Map>().toList();
-      final rmbBal = store.wallet?.rmbBalance ?? 0;
-      final walletOk = cfg['wallet_funding_enabled'] == true || cfg['enabled'] == true;
       setState(() {
         config = cfg;
         methodId = methods.isEmpty ? null : (methods.first['id'] as num?)?.toInt();
-        fundingSource = walletOk && rmbBal >= 1 ? 'rmb_wallet' : 'external';
+        fundingSource = 'external';
         loading = false;
       });
     } catch (e) {
@@ -517,9 +515,7 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
     final pin = await promptPaymentPin(
       context,
       title: 'Confirm Alipay transfer',
-      subtitle: fundingSource == 'rmb_wallet'
-          ? 'Hold ¥${(double.tryParse(rmbAmount.text) ?? 0).toStringAsFixed(2)} from your RMB wallet'
-          : 'Authorize this transfer with your payment PIN',
+      subtitle: 'Authorize this transfer with your payment PIN',
     );
     if (pin == null || !mounted) return;
 
@@ -529,10 +525,9 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
     });
     try {
       final created = await store.submitChinaTransfer(
-            fundingSource: fundingSource,
-            ghsAmount: fundingSource == 'external' ? amount.text : null,
-            rmbAmount: fundingSource == 'rmb_wallet' ? rmbAmount.text : null,
-            paymentMethodId: fundingSource == 'external' ? methodId : null,
+            fundingSource: 'external',
+            ghsAmount: amount.text,
+            paymentMethodId: methodId,
             paymentPin: pin,
             fields: values,
             files: files,
@@ -551,13 +546,11 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AppStore>();
-    final wallet = store.wallet;
     final kycOk = store.user?.canStoreWalletFunds ?? false;
     final hasPin = store.user?.hasPaymentPin ?? false;
     final rate = config['rate'] is Map ? Map<String, dynamic>.from(config['rate'] as Map) : null;
     final ghsPerRmb = (rate?['ghs_per_rmb'] as num?)?.toDouble() ?? 0;
     final send = double.tryParse(amount.text) ?? 0;
-    final rmbSend = double.tryParse(rmbAmount.text) ?? 0;
     final feeMode = rate?['fee_mode'] as String? ?? 'flat';
     final feeValue = (rate?['fee_value'] as num?)?.toDouble() ?? 0;
     final rmb = ghsPerRmb > 0 ? send / ghsPerRmb : 0.0;
@@ -603,95 +596,48 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                Text(
-                  'RMB wallet: ¥${(wallet?.rmbBalance ?? 0).toStringAsFixed(2)} · GHS: ${_ghs.format(wallet?.availableBalance ?? 0)}',
-                  style: const TextStyle(color: Colors.black54),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ChoiceChip(
-                        label: const Text('RMB wallet'),
-                        selected: fundingSource == 'rmb_wallet',
-                        onSelected: (_) => setState(() => fundingSource = 'rmb_wallet'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ChoiceChip(
-                        label: const Text('Pay GHS externally'),
-                        selected: fundingSource == 'external',
-                        onSelected: methods.isEmpty
-                            ? null
-                            : (_) => setState(() => fundingSource = 'external'),
-                      ),
-                    ),
-                  ],
+                const Text(
+                  'Pay GHS — recipient gets RMB at today’s rate. No RMB is held in your wallet.',
+                  style: TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 16),
-                if (fundingSource == 'rmb_wallet') ...[
-                  const Text('RMB to send', style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: rmbAmount,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Min ¥1.00'),
-                  ),
-                  const SizedBox(height: 8),
-                  Text('Held immediately from your RMB wallet: ¥${rmbSend.toStringAsFixed(2)}'),
-                  TextButton(
-                    onPressed: () => context.push('/wallet/convert'),
-                    child: const Text('Convert GHS → RMB first'),
-                  ),
-                ] else ...[
-                  const Text('Amount to send (GHS)', style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: amount,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(border: OutlineInputBorder()),
-                  ),
-                  const SizedBox(height: 10),
-                  Text('Exchange rate: 1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}'),
-                  Text('RMB value: ¥${rmb.toStringAsFixed(2)}'),
-                  Text('Transfer fee: ${_ghs.format(fee)}'),
-                  Text('Total payment: ${_ghs.format(send + fee)}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                ],
+                const Text('Amount to send (GHS)', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: amount,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 10),
+                Text('Exchange rate: 1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}'),
+                Text('RMB value: ¥${rmb.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                Text('Transfer fee: ${_ghs.format(fee)}'),
+                Text('Total payment: ${_ghs.format(send + fee)}', style: const TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 20),
                 const Text('Alipay recipient', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                 ...recipientFields.map(_field),
-                if (fundingSource == 'external') ...[
-                  const SizedBox(height: 20),
-                  const Text('Pay GHS to CityShop', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                  ...methods.map((method) {
-                    final id = (method['id'] as num).toInt();
-                    return RadioListTile<int>(
-                      value: id,
-                      groupValue: methodId,
-                      onChanged: (v) => setState(() => methodId = v),
-                      title: Text('${method['name']}'),
-                      subtitle: Text(
-                        [method['account_name'], method['account_number']]
-                            .where((e) => (e as String?)?.isNotEmpty == true)
-                            .join(' · '),
-                      ),
-                    );
-                  }),
-                  ...paymentFields.map(_field),
-                ],
+                const SizedBox(height: 20),
+                const Text('Pay GHS to CityShop', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                ...methods.map((method) {
+                  final id = (method['id'] as num).toInt();
+                  return RadioListTile<int>(
+                    value: id,
+                    groupValue: methodId,
+                    onChanged: (v) => setState(() => methodId = v),
+                    title: Text('${method['name']}'),
+                    subtitle: Text(
+                      [method['account_name'], method['account_number']]
+                          .where((e) => (e as String?)?.isNotEmpty == true)
+                          .join(' · '),
+                    ),
+                  );
+                }),
+                ...paymentFields.map(_field),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: submitting ? null : _submit,
-                  child: Text(
-                    submitting
-                        ? 'Submitting…'
-                        : fundingSource == 'rmb_wallet'
-                            ? 'Hold RMB & submit'
-                            : 'Submit transfer',
-                  ),
+                  child: Text(submitting ? 'Submitting…' : 'Submit transfer'),
                 ),
               ],
             ),

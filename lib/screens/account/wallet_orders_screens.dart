@@ -684,19 +684,6 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'RMB: ¥${(wallet?.rmbBalance ?? 0).toStringAsFixed(2)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -708,20 +695,6 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                             manualEnabled: enabled,
                           )
                       : null,
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: () => context.push('/wallet/convert'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: Colors.white.withValues(alpha: 0.22),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-                    ),
-                    child: const Text('Convert GHS ↔ RMB', style: TextStyle(fontWeight: FontWeight.w800)),
-                  ),
                 ),
               ],
             ),
@@ -840,7 +813,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 Wrap(
                   spacing: 6,
                   children: [
-                    for (final c in const ['all', 'GHS', 'RMB'])
+                    for (final c in const ['all', 'GHS'])
                       ChoiceChip(
                         label: Text(c == 'all' ? 'All' : c),
                         selected: currencyFilter == c,
