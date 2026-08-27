@@ -9,6 +9,11 @@ import '../../widgets/common_widgets.dart';
 
 final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
+String _formatBuyRate(double n) {
+  if (n <= 0) return '—';
+  return n.toStringAsFixed(4).replaceFirst(RegExp(r'\.?0+$'), '');
+}
+
 /// China / RMB entry: Buy RMB (pay GHS → Alipay) or Sell RMB. No convert / no hold.
 class ChinaRmbHubScreen extends StatefulWidget {
   const ChinaRmbHubScreen({super.key});
@@ -123,7 +128,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                         const SizedBox(height: 8),
                         Text(
                           buyRmbPerGhs != null
-                              ? '1 GHS = ¥${buyRmbPerGhs.toStringAsFixed(2)}'
+                              ? '1 GHS → ¥${_formatBuyRate(buyRmbPerGhs)} RMB'
                               : 'Rate not published',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18),
                         ),

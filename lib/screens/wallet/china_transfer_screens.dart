@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,6 +13,35 @@ import '../../widgets/common_widgets.dart';
 import '../../widgets/payment_pin_sheet.dart';
 
 final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
+
+String _formatBuyRate(double n) {
+  if (n <= 0) return '—';
+  final s = n.toStringAsFixed(4);
+  return s.replaceFirst(RegExp(r'\.?0+$'), '');
+}
+
+String _formatFileSize(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(2)} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+}
+
+String _optionalRecipientLabel(Map<String, dynamic> field) {
+  final name = (field['name'] as String? ?? '').toLowerCase();
+  if (name.contains('alipay') || name.contains('account')) return 'Alipay Account';
+  if (name.contains('name')) return 'Recipient Name';
+  if (name.contains('note')) return 'Notes';
+  final label = (field['label'] as String? ?? 'Field').trim();
+  return label.replaceAll(RegExp(r'\s*\*$'), '');
+}
+
+String _optionalRecipientHint(Map<String, dynamic> field) {
+  final name = (field['name'] as String? ?? '').toLowerCase();
+  if (name.contains('alipay') || name.contains('account')) return "Recipient's Alipay ID";
+  if (name.contains('name')) return 'Name of recipient';
+  if (name.contains('note')) return 'Any additional information';
+  return (field['placeholder'] as String?) ?? '';
+}
 
 /// Buy RMB calculator: Today's Rate, You send / They receive, arrival, Continue.
 class BuyRmbCalculatorCard extends StatefulWidget {
@@ -128,19 +159,35 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            "Today's Rate",
-            textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF6B7280)),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '1 GHS = ${widget.rmbPerGhs.toStringAsFixed(2)} CNY',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF4F46E5),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            decoration: BoxDecoration(
+              color: const Color(0xFF5B21B6),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF7C3AED), width: 1.5),
+            ),
+            child: Column(
+              children: [
+                const Text(
+                  'GHS to RMB',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '1 GHS → ${_formatBuyRate(widget.rmbPerGhs)} RMB',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 22,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 22),
@@ -249,7 +296,11 @@ class _AmountFieldState extends State<_AmountField> {
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: widget.onChanged,
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                // Avoid ListView centering the focused field (looks like the page is
+                // split in half with a blank region under Continue).
+                scrollPadding: const EdgeInsets.only(bottom: 24),
                 decoration: const InputDecoration(
+                  isDense: true,
                   border: InputBorder.none,
                   hintText: '0.00',
                   hintStyle: TextStyle(color: Color(0xFFD1D5DB), fontWeight: FontWeight.w700),
@@ -333,90 +384,85 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(title: const Text('Buy RMB')),
       body: loading
           ? const FullPageLoader(label: 'Loading rates…')
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                children: [
-                  if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
-                  Text(
-                    'Send GHS, receive CNY in China via Alipay.',
-                    style: TextStyle(color: Colors.grey.shade700, height: 1.35),
-                  ),
-                  if ((config['instructions'] as String?)?.isNotEmpty == true) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF7ED),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(
-                        '${config['instructions']}',
-                        style: const TextStyle(color: Color(0xFF9A3412)),
-                      ),
+          : GestureDetector(
+              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+              behavior: HitTestBehavior.opaque,
+              child: RefreshIndicator(
+                onRefresh: _load,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+                  children: [
+                    if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
+                    Text(
+                      'Send GHS, receive CNY in China via Alipay.',
+                      style: TextStyle(color: Colors.grey.shade700, height: 1.35),
                     ),
+                    const SizedBox(height: 16),
+                    if (rate != null)
+                      BuyRmbCalculatorCard(
+                        ghsPerRmb: ghsPerRmb,
+                        rmbPerGhs: rmbPerGhs,
+                        feeMode: feeMode,
+                        feeValue: feeValue,
+                        enabled: enabled,
+                        initialGhs: minGhs != null && minGhs > 0 ? minGhs.toStringAsFixed(0) : null,
+                        onContinue: (amount) {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                          context.push('/wallet/china-transfer/create', extra: amount);
+                        },
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: const Color(0xFFD1D5DB), style: BorderStyle.solid),
+                        ),
+                        child: const Column(
+                          children: [
+                            Text(
+                              'Rate not published yet',
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'China transfers will open here once admin publishes a rate.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.black54),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 24),
+                    const Text('Your transfers', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    if (transfers.isEmpty)
+                      const Text('No China transfers yet.', style: TextStyle(color: Colors.black54)),
+                    ...transfers.map((item) {
+                      final quote =
+                          item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                        subtitle: Text(
+                          '${_ghs.format((quote['total_payable_ghs'] as num?)?.toDouble() ?? 0)} → ¥${((quote['rmb_amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
+                        ),
+                        trailing: Text(
+                          '${item['status_label']}',
+                          style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
+                        ),
+                        onTap: () => context.push('/wallet/china-transfer/${item['id']}'),
+                      );
+                    }),
                   ],
-                  const SizedBox(height: 16),
-                  if (rate != null)
-                    BuyRmbCalculatorCard(
-                      ghsPerRmb: ghsPerRmb,
-                      rmbPerGhs: rmbPerGhs,
-                      feeMode: feeMode,
-                      feeValue: feeValue,
-                      enabled: enabled,
-                      initialGhs: minGhs != null && minGhs > 0 ? minGhs.toStringAsFixed(0) : null,
-                      onContinue: (amount) =>
-                          context.push('/wallet/china-transfer/create', extra: amount),
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: const Color(0xFFD1D5DB), style: BorderStyle.solid),
-                      ),
-                      child: const Column(
-                        children: [
-                          Text(
-                            'Rate not published yet',
-                            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'China transfers will open here once admin publishes a rate.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.black54),
-                          ),
-                        ],
-                      ),
-                    ),
-                  const SizedBox(height: 28),
-                  const Text('Your transfers', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-                  if (transfers.isEmpty)
-                    const Text('No China transfers yet.', style: TextStyle(color: Colors.black54)),
-                  ...transfers.map((item) {
-                    final quote =
-                        item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text(
-                        '${_ghs.format((quote['total_payable_ghs'] as num?)?.toDouble() ?? 0)} → ¥${((quote['rmb_amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
-                      ),
-                      trailing: Text(
-                        '${item['status_label']}',
-                        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
-                      ),
-                      onTap: () => context.push('/wallet/china-transfer/${item['id']}'),
-                    );
-                  }),
-                ],
+                ),
               ),
             ),
     );
@@ -437,10 +483,7 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
   bool loading = true;
   bool submitting = false;
   String? error;
-  String fundingSource = 'external';
   final amount = TextEditingController();
-  final rmbAmount = TextEditingController();
-  int? methodId;
   final values = <int, String>{};
   final files = <int, XFile>{};
 
@@ -454,7 +497,6 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
   @override
   void dispose() {
     amount.dispose();
-    rmbAmount.dispose();
     super.dispose();
   }
 
@@ -465,11 +507,8 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
       final data = await store.loadChinaTransfers();
       if (!mounted) return;
       final cfg = Map<String, dynamic>.from(data['config'] as Map? ?? {});
-      final methods = (cfg['payment_methods'] as List? ?? []).whereType<Map>().toList();
       setState(() {
         config = cfg;
-        methodId = methods.isEmpty ? null : (methods.first['id'] as num?)?.toInt();
-        fundingSource = 'external';
         loading = false;
       });
     } catch (e) {
@@ -486,19 +525,9 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
       .map((e) => Map<String, dynamic>.from(e))
       .toList();
 
-  List<Map<String, dynamic>> get methods => (config['payment_methods'] as List? ?? [])
-      .whereType<Map>()
-      .map((e) => Map<String, dynamic>.from(e))
-      .toList();
-
   List<Map<String, dynamic>> get recipientFields => fields.where((f) {
         final g = (f['group'] as String? ?? '').toLowerCase();
         return !['payment', 'payment_proof', 'proof'].contains(g);
-      }).toList();
-
-  List<Map<String, dynamic>> get paymentFields => fields.where((f) {
-        final g = (f['group'] as String? ?? '').toLowerCase();
-        return ['payment', 'payment_proof', 'proof'].contains(g);
       }).toList();
 
   bool _isQrField(Map<String, dynamic> field) {
@@ -508,8 +537,14 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
   }
 
   List<Map<String, dynamic>> get qrFields => recipientFields.where(_isQrField).toList();
-  List<Map<String, dynamic>> get textRecipientFields =>
-      recipientFields.where((f) => !_isQrField(f)).toList();
+  List<Map<String, dynamic>> get textRecipientFields => recipientFields
+      .where((f) => !_isQrField(f))
+      .where((f) {
+        final name = (f['name'] as String? ?? '').toLowerCase();
+        // Hide phone / address — rmb-wallet only shows account, name, notes.
+        return !name.contains('phone') && name != 'recipient_address';
+      })
+      .toList();
 
   Future<void> _submit() async {
     final store = context.read<AppStore>();
@@ -535,9 +570,9 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
     });
     try {
       final created = await store.submitChinaTransfer(
-            fundingSource: 'external',
+            fundingSource: 'ghs_wallet',
             ghsAmount: amount.text,
-            paymentMethodId: methodId,
+            paymentMethodId: null,
             paymentPin: pin,
             fields: values,
             files: files,
@@ -560,19 +595,28 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
     final hasPin = store.user?.hasPaymentPin ?? false;
     final rate = config['rate'] is Map ? Map<String, dynamic>.from(config['rate'] as Map) : null;
     final ghsPerRmb = (rate?['ghs_per_rmb'] as num?)?.toDouble() ?? 0;
+    final rmbPerGhs = (rate?['rmb_per_ghs'] as num?)?.toDouble() ??
+        (ghsPerRmb > 0 ? 1 / ghsPerRmb : 0);
     final send = double.tryParse(amount.text) ?? 0;
     final feeMode = rate?['fee_mode'] as String? ?? 'flat';
     final feeValue = (rate?['fee_value'] as num?)?.toDouble() ?? 0;
+    // Same as rmb-wallet: They receive = You send × (1 GHS → RMB).
     final rmb = ghsPerRmb > 0 ? send / ghsPerRmb : 0.0;
     final fee = feeMode == 'percent' ? send * feeValue / 100 : feeValue;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Submit Transfer Request')),
+      resizeToAvoidBottomInset: true,
       body: loading
           ? const FullPageLoader(label: 'Loading form…')
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-              children: [
+          : GestureDetector(
+              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+              behavior: HitTestBehavior.opaque,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                children: [
                 if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
                 if (!kycOk) ...[
                   Container(
@@ -631,6 +675,12 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
                         ],
                       ),
                       const SizedBox(height: 6),
+                      if (rmbPerGhs > 0)
+                        Text(
+                          'Rate 1 GHS → ${_formatBuyRate(rmbPerGhs)} RMB',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4338CA)),
+                        ),
+                      if (rmbPerGhs > 0) const SizedBox(height: 4),
                       Text(
                         'Fee ${_ghs.format(fee)} · Total ${_ghs.format(send + fee)}',
                         style: const TextStyle(fontSize: 12, color: Color(0xFF4338CA)),
@@ -643,88 +693,80 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
                   final id = (field['id'] as num).toInt();
                   final picked = files[id];
                   final required = field['required'] == true;
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 14),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF9FAFB),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFD1D5DB), style: BorderStyle.solid),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Upload Alipay QR Code${required ? ' *' : ''}',
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          (field['help_text'] as String?)?.isNotEmpty == true
-                              ? '${field['help_text']}'
-                              : "Upload recipient's Alipay QR code",
-                          style: const TextStyle(color: Colors.black54),
-                        ),
-                        const SizedBox(height: 12),
-                        OutlinedButton(
-                          onPressed: () async {
-                            final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-                            if (file != null) setState(() => files[id] = file);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            backgroundColor: const Color(0xFFDC2626),
-                            side: BorderSide.none,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          child: Text(
-                            picked == null ? 'Choose Image' : 'Change image',
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                        if (picked != null) ...[
-                          const SizedBox(height: 8),
-                          Text(picked.name, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                        ],
-                      ],
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: _AlipayQrUploadCard(
+                      required: required,
+                      helpText: (field['help_text'] as String?)?.isNotEmpty == true
+                          ? '${field['help_text']}'
+                          : 'Upload a clear Alipay receive QR',
+                      file: picked,
+                      onPick: () async {
+                        final file = await ImagePicker().pickImage(
+                          source: ImageSource.gallery,
+                          imageQuality: 85,
+                        );
+                        if (file != null) setState(() => files[id] = file);
+                      },
+                      onClear: picked == null
+                          ? null
+                          : () => setState(() => files.remove(id)),
                     ),
                   );
                 }),
                 ...textRecipientFields.map((field) {
                   final id = (field['id'] as num).toInt();
-                  final required = field['required'] == true;
-                  final label = '${field['label']}${required ? ' *' : ' (Optional)'}';
+                  final type = field['type'] as String? ?? 'text';
+                  // rmb-wallet: only QR is required — account / name / notes are optional.
+                  final label = '${_optionalRecipientLabel(field)} (Optional)';
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: TextField(
                       onChanged: (v) => values[id] = v,
                       decoration: InputDecoration(
                         labelText: label,
-                        hintText: field['placeholder'] as String?,
+                        hintText: _optionalRecipientHint(field),
                         border: const OutlineInputBorder(),
-                        helperText: field['help_text'] as String?,
                       ),
-                      maxLines: (field['type'] as String?) == 'textarea' ? 3 : 1,
+                      maxLines: type == 'textarea' ? 3 : 1,
                     ),
                   );
                 }),
-                const SizedBox(height: 8),
-                const Text('Pay GHS to CityShop', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                ...methods.map((method) {
-                  final id = (method['id'] as num).toInt();
-                  return RadioListTile<int>(
-                    value: id,
-                    groupValue: methodId,
-                    onChanged: (v) => setState(() => methodId = v),
-                    title: Text('${method['name']}'),
-                    subtitle: Text(
-                      [method['account_name'], method['account_number']]
-                          .where((e) => (e as String?)?.isNotEmpty == true)
-                          .join(' · '),
-                    ),
-                  );
-                }),
-                ...paymentFields.map(_field),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECFDF5),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Pay from wallet balance',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Available: ${_ghs.format(store.wallet?.availableBalance ?? 0)}',
+                        style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF065F46)),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Total debit: ${_ghs.format(send + fee)}',
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF047857)),
+                      ),
+                      if ((store.wallet?.availableBalance ?? 0) + 0.0001 < send + fee) ...[
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () => context.push('/wallet/manual-deposit'),
+                          child: const Text('Top up wallet'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
                   onPressed: submitting ? null : _submit,
@@ -740,48 +782,7 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
                 ),
               ],
             ),
-    );
-  }
-
-  Widget _field(Map<String, dynamic> field) {
-    final id = (field['id'] as num).toInt();
-    final type = field['type'] as String? ?? 'text';
-    final label = '${field['label']}${field['required'] == true ? ' *' : ''}';
-    if (['image', 'document', 'files'].contains(type)) {
-      final picked = files[id];
-      return Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-            if ((field['help_text'] as String?)?.isNotEmpty == true)
-              Text('${field['help_text']}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
-            TextButton(
-              onPressed: () async {
-                final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-                if (file != null) setState(() => files[id] = file);
-              },
-              child: Text(picked == null ? 'Choose file' : picked.name),
-            ),
-          ],
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: TextField(
-        minLines: type == 'textarea' ? 3 : 1,
-        maxLines: type == 'textarea' ? 5 : 1,
-        keyboardType: type == 'number' ? TextInputType.number : TextInputType.text,
-        onChanged: (v) => values[id] = v,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: field['placeholder'] as String?,
-          helperText: field['help_text'] as String?,
-          border: const OutlineInputBorder(),
-        ),
-      ),
+          ),
     );
   }
 }
@@ -904,6 +905,184 @@ class _ChinaTransferShowScreenState extends State<ChinaTransferShowScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Payment-proof style upload: green check + size + Change / X + preview.
+class _AlipayQrUploadCard extends StatelessWidget {
+  const _AlipayQrUploadCard({
+    required this.required,
+    required this.helpText,
+    required this.file,
+    required this.onPick,
+    this.onClear,
+  });
+
+  final bool required;
+  final String helpText;
+  final XFile? file;
+  final VoidCallback onPick;
+  final VoidCallback? onClear;
+
+  Future<void> _openPreview(BuildContext context) async {
+    if (file == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: InteractiveViewer(
+          child: Image.file(File(file!.path), fit: BoxFit.contain),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final picked = file != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text.rich(
+          TextSpan(
+            children: [
+              const TextSpan(
+                text: 'Upload Alipay QR Code',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.black),
+              ),
+              if (required)
+                const TextSpan(
+                  text: ' *',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFFDC2626)),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(helpText, style: const TextStyle(color: Colors.black54, fontSize: 13)),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: picked ? const Color(0xFFECFDF5) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: picked ? const Color(0xFF6EE7B7) : const Color(0xFFD1D5DB),
+              width: picked ? 1.6 : 1.2,
+            ),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: picked
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 28),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                file!.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                              ),
+                              FutureBuilder<int>(
+                                future: file!.length(),
+                                builder: (context, snap) {
+                                  final size = snap.data;
+                                  return Text(
+                                    size == null ? '…' : _formatFileSize(size),
+                                    style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: onPick,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          label: const Text('Change', style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                        if (onClear != null) ...[
+                          const SizedBox(width: 6),
+                          Material(
+                            color: const Color(0xFFDC2626),
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: onClear,
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(Icons.close, color: Colors.white, size: 16),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () => _openPreview(context),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(file!.path),
+                          height: 180,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Click image to view full size',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                )
+              : InkWell(
+                  onTap: onPick,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 22),
+                    child: Column(
+                      children: [
+                        Icon(Icons.qr_code_2_rounded, size: 40, color: Colors.grey.shade500),
+                        const SizedBox(height: 10),
+                        const Text(
+                          "Upload recipient's Alipay QR code",
+                          style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF4B5563)),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: onPick,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFDC2626),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                          ),
+                          child: const Text('Choose Image', style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }

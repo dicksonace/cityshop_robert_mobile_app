@@ -1676,7 +1676,7 @@ class AppStore extends ChangeNotifier {
   Future<Map<String, dynamic>> submitChinaTransfer({
     String? ghsAmount,
     String? rmbAmount,
-    String fundingSource = 'external',
+    String fundingSource = 'ghs_wallet',
     int? paymentMethodId,
     required String paymentPin,
     required Map<int, String> fields,
@@ -1690,7 +1690,9 @@ class AppStore extends ChangeNotifier {
       payload['rmb_amount'] = rmbAmount ?? '';
     } else {
       payload['ghs_amount'] = ghsAmount ?? '';
-      payload['payment_method_id'] = paymentMethodId;
+      if (fundingSource == 'external' && paymentMethodId != null) {
+        payload['payment_method_id'] = paymentMethodId;
+      }
     }
     fields.forEach((id, value) {
       payload['fields[$id]'] = value;
