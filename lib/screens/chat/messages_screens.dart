@@ -410,6 +410,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool uploadingMedia = false;
   bool showAttachPanel = false;
   bool recordingVoice = false;
+  bool voicePaused = false;
   int recordSeconds = 0;
   ChatMessage? replyingTo;
   ChatMessage? editingMessage;
@@ -1665,12 +1666,13 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() {
         recordingVoice = true;
+        voicePaused = false;
         recordSeconds = 0;
         showAttachPanel = false;
       });
       _recordTick?.cancel();
       _recordTick = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted) return;
+        if (!mounted || voicePaused) return;
         setState(() => recordSeconds += 1);
         if (recordSeconds >= 120) _stopVoice(send: true);
       });
@@ -1683,12 +1685,34 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _toggleVoicePause() async {
+    if (!recordingVoice) return;
+    try {
+      if (voicePaused) {
+        await _recorder.resume();
+        if (!mounted) return;
+        setState(() => voicePaused = false);
+      } else {
+        await _recorder.pause();
+        if (!mounted) return;
+        setState(() => voicePaused = true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not pause recording. ${e.toString().split('\n').first}')),
+        );
+      }
+    }
+  }
+
   Future<void> _stopVoice({required bool send}) async {
     if (!recordingVoice) return;
     _recordTick?.cancel();
     final seconds = recordSeconds;
     String? path;
     try {
+      // stop() ends a paused or active recording and returns the file path.
       path = await _recorder.stop();
     } catch (_) {
       path = null;
@@ -1696,10 +1720,12 @@ class _ChatScreenState extends State<ChatScreen> {
     if (mounted) {
       setState(() {
         recordingVoice = false;
+        voicePaused = false;
         recordSeconds = 0;
       });
     } else {
       recordingVoice = false;
+      voicePaused = false;
       recordSeconds = 0;
     }
 
@@ -2538,72 +2564,85 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         if (recordingVoice)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 10, 12, 4),
-                            child: Row(
+                            padding: const EdgeInsets.fromLTRB(10, 10, 12, 8),
+                            child: Column(
                               children: [
-                                IconButton(
-                                  tooltip: 'Stop & send',
-                                  onPressed: () => _stopVoice(send: true),
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: AppColors.danger,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.all(12),
-                                  ),
-                                  icon: const Icon(Icons.stop_rounded),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFEF2F2),
-                                      borderRadius: BorderRadius.circular(24),
-                                      border: Border.all(color: const Color(0xFFFECACA)),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 8,
-                                          height: 8,
-                                          decoration: const BoxDecoration(
-                                            color: AppColors.danger,
-                                            shape: BoxShape.circle,
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        _formatRecord(recordSeconds),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
+                                          color: voicePaused
+                                              ? const Color(0xFF6B7280)
+                                              : const Color(0xFFB91C1C),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          voicePaused ? 'Paused' : 'Recording…',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: voicePaused
+                                                ? const Color(0xFF6B7280)
+                                                : const Color(0xFFB91C1C),
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            'Recording ${_formatRecord(recordSeconds)}',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              color: Color(0xFFB91C1C),
-                                            ),
-                                          ),
-                                        ),
-                                        TextButton(
-                                          onPressed: () => _stopVoice(send: false),
-                                          style: TextButton.styleFrom(
-                                            foregroundColor: const Color(0xFFB91C1C),
-                                            padding: EdgeInsets.zero,
-                                            minimumSize: Size.zero,
-                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          ),
-                                          child: const Text('Cancel'),
-                                        ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                IconButton.filled(
-                                  tooltip: 'Send voice note',
-                                  onPressed: () => _stopVoice(send: true),
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: AppColors.danger,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.all(12),
-                                  ),
-                                  icon: const Icon(Icons.send_rounded, color: Colors.white),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'Delete',
+                                      onPressed: () => _stopVoice(send: false),
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: const Color(0xFFFEE2E2),
+                                        foregroundColor: AppColors.danger,
+                                        padding: const EdgeInsets.all(12),
+                                      ),
+                                      icon: const Icon(Icons.delete_outline_rounded),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: FilledButton.tonalIcon(
+                                        onPressed: _toggleVoicePause,
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: const Color(0xFFF3F4F6),
+                                          foregroundColor: const Color(0xFF111827),
+                                          padding: const EdgeInsets.symmetric(vertical: 14),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(28),
+                                          ),
+                                        ),
+                                        icon: Icon(
+                                          voicePaused
+                                              ? Icons.mic_rounded
+                                              : Icons.pause_rounded,
+                                        ),
+                                        label: Text(
+                                          voicePaused ? 'Resume' : 'Pause',
+                                          style: const TextStyle(fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    IconButton.filled(
+                                      tooltip: 'Send voice note',
+                                      onPressed: () => _stopVoice(send: true),
+                                      style: IconButton.styleFrom(
+                                        backgroundColor: AppColors.danger,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.all(12),
+                                      ),
+                                      icon: const Icon(Icons.send_rounded, color: Colors.white),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
