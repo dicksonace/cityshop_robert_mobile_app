@@ -78,6 +78,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
   bool loadingMore = false;
   String? transactionsError;
   bool buildingStatement = false;
+  String currencyFilter = 'all'; // all | GHS | RMB
 
   @override
   int? get tabIndex => widget.shellTabIndex;
@@ -127,7 +128,10 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
       });
     }
     try {
-      final page = await context.read<AppStore>().fetchWalletTransactions(page: nextPage);
+      final page = await context.read<AppStore>().fetchWalletTransactions(
+            page: nextPage,
+            currency: currencyFilter,
+          );
       if (!mounted) return;
       setState(() {
         transactions = reset ? page.items : [...transactions, ...page.items];
@@ -663,18 +667,37 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                   style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Pending: ${_money.format(wallet?.pendingBalance ?? 0)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Pending: ${_money.format(wallet?.pendingBalance ?? 0)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'RMB: ¥${(wallet?.rmbBalance ?? 0).toStringAsFixed(2)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 _WalletActionPair(
@@ -685,6 +708,20 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                             manualEnabled: enabled,
                           )
                       : null,
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => context.push('/wallet/convert'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.white.withValues(alpha: 0.22),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                    ),
+                    child: const Text('Convert GHS ↔ RMB', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
                 ),
               ],
             ),
@@ -799,6 +836,22 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                       ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    for (final c in const ['all', 'GHS', 'RMB'])
+                      ChoiceChip(
+                        label: Text(c == 'all' ? 'All' : c),
+                        selected: currencyFilter == c,
+                        onSelected: (_) {
+                          if (currencyFilter == c) return;
+                          setState(() => currencyFilter = c);
+                          _loadTransactions(reset: true);
+                        },
+                      ),
+                  ],
+                ),
                 if (transactionsError != null) ...[
                   const SizedBox(height: 10),
                   Text(transactionsError!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
@@ -908,7 +961,9 @@ class _WalletTransactionRow extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    '${credit ? '+' : ''}${_money.format(tx.amount)}',
+                    tx.isRmb
+                        ? '${credit ? '+' : ''}¥${tx.amount.abs().toStringAsFixed(2)}'
+                        : '${credit ? '+' : ''}${_money.format(tx.amount)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       color: credit ? const Color(0xFF16A34A) : AppColors.danger,

@@ -629,6 +629,7 @@ class WalletInfo {
     required this.pendingBalance,
     this.totalEarnings = 0,
     this.withdrawnAmount = 0,
+    this.rmbBalance = 0,
     this.paystackConfigured = false,
     this.manualTopUpEnabled = false,
     this.paystackFeePercent = 1.95,
@@ -639,17 +640,23 @@ class WalletInfo {
   final double pendingBalance;
   final double totalEarnings;
   final double withdrawnAmount;
+  final double rmbBalance;
   final bool paystackConfigured;
   final bool manualTopUpEnabled;
   final double paystackFeePercent;
   final double paystackFeeFlat;
 
-  WalletInfo copyWith({double? availableBalance, double? pendingBalance}) {
+  WalletInfo copyWith({
+    double? availableBalance,
+    double? pendingBalance,
+    double? rmbBalance,
+  }) {
     return WalletInfo(
       availableBalance: availableBalance ?? this.availableBalance,
       pendingBalance: pendingBalance ?? this.pendingBalance,
       totalEarnings: totalEarnings,
       withdrawnAmount: withdrawnAmount,
+      rmbBalance: rmbBalance ?? this.rmbBalance,
       paystackConfigured: paystackConfigured,
       manualTopUpEnabled: manualTopUpEnabled,
       paystackFeePercent: paystackFeePercent,
@@ -663,6 +670,7 @@ class WalletInfo {
       pendingBalance: (json['pending_balance'] as num?)?.toDouble() ?? 0,
       totalEarnings: (json['total_earnings'] as num?)?.toDouble() ?? 0,
       withdrawnAmount: (json['withdrawn_amount'] as num?)?.toDouble() ?? 0,
+      rmbBalance: (json['rmb_balance'] as num?)?.toDouble() ?? 0,
       paystackConfigured: json['paystack_configured'] as bool? ?? false,
       manualTopUpEnabled: json['manual_top_up_enabled'] as bool? ?? false,
       paystackFeePercent: json['paystack_fee'] is Map
@@ -682,6 +690,7 @@ class WalletTransactionItem {
     required this.typeLabel,
     required this.amount,
     required this.description,
+    this.currency = 'GHS',
     this.reference,
     this.createdAt,
     this.balanceBefore,
@@ -696,6 +705,7 @@ class WalletTransactionItem {
   final String typeLabel;
   final double amount;
   final String description;
+  final String currency;
   final String? reference;
   final String? createdAt;
   final double? balanceBefore;
@@ -705,6 +715,7 @@ class WalletTransactionItem {
   final String? counterpartyMobile;
 
   bool get isCredit => amount > 0;
+  bool get isRmb => currency.toUpperCase() == 'RMB';
 
   factory WalletTransactionItem.fromJson(Map<String, dynamic> json) {
     final type = json['type'] as String? ?? '';
@@ -719,6 +730,7 @@ class WalletTransactionItem {
       typeLabel: json['type_label'] as String? ?? type.replaceAll('_', ' '),
       amount: (json['amount'] as num?)?.toDouble() ?? 0,
       description: json['description'] as String? ?? '',
+      currency: (json['currency'] as String? ?? 'GHS').toUpperCase(),
       reference: json['reference'] as String?,
       createdAt: json['created_at'] as String?,
       balanceBefore: (json['balance_before'] as num?)?.toDouble(),

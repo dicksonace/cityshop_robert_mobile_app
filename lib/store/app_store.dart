@@ -1521,11 +1521,19 @@ class AppStore extends ChangeNotifier {
 
   /// One page of the wallet ledger. Paging stays with the screen so the list
   /// can grow without holding every page in the store.
-  Future<WalletTransactionPage> fetchWalletTransactions({int page = 1, int perPage = 20}) async {
-    final res = await _api.get('/wallet/transactions', query: {
+  Future<WalletTransactionPage> fetchWalletTransactions({
+    int page = 1,
+    int perPage = 20,
+    String currency = 'all',
+  }) async {
+    final query = <String, dynamic>{
       'page': page,
       'per_page': perPage,
-    });
+    };
+    if (currency == 'GHS' || currency == 'RMB') {
+      query['currency'] = currency;
+    }
+    final res = await _api.get('/wallet/transactions', query: query);
     return WalletTransactionPage.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
@@ -1629,6 +1637,35 @@ class AppStore extends ChangeNotifier {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> convertQuote({
+    required String direction,
+    required double amount,
+  }) async {
+    final res = await _api.post('/wallet/convert/quote', {
+      'direction': direction,
+      'amount': amount,
+    });
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
+  Future<Map<String, dynamic>> convertWallet({
+    required String direction,
+    required double amount,
+    required String paymentPin,
+  }) async {
+    final res = await _api.post('/wallet/convert', {
+      'direction': direction,
+      'amount': amount,
+      'payment_pin': paymentPin,
+    });
+    await loadWallet();
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
   Future<Map<String, dynamic>> fetchChinaTransfer(int id) async {
     final res = await _api.get('/wallet/china-transfer/$id');
     final body = Map<String, dynamic>.from(res.data as Map);
@@ -1637,15 +1674,24 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> submitChinaTransfer({
-    required String ghsAmount,
-    required int paymentMethodId,
+    String? ghsAmount,
+    String? rmbAmount,
+    String fundingSource = 'external',
+    int? paymentMethodId,
+    required String paymentPin,
     required Map<int, String> fields,
     required Map<int, dynamic> files,
   }) async {
     final payload = <String, dynamic>{
-      'ghs_amount': ghsAmount,
-      'payment_method_id': paymentMethodId,
+      'funding_source': fundingSource,
+      'payment_pin': paymentPin,
     };
+    if (fundingSource == 'rmb_wallet') {
+      payload['rmb_amount'] = rmbAmount ?? '';
+    } else {
+      payload['ghs_amount'] = ghsAmount ?? '';
+      payload['payment_method_id'] = paymentMethodId;
+    }
     fields.forEach((id, value) {
       payload['fields[$id]'] = value;
     });
@@ -1653,6 +1699,7 @@ class AppStore extends ChangeNotifier {
       payload['files[$id]'] = '${file.path}';
     });
     final res = await _api.postForm('/wallet/china-transfer', payload);
+    await loadWallet();
     final body = Map<String, dynamic>.from(res.data as Map);
     final data = body['data'];
     return data is Map ? Map<String, dynamic>.from(data) : body;

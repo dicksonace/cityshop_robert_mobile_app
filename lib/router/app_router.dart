@@ -13,6 +13,7 @@ import '../screens/account/withdraw_screen.dart';
 import '../screens/wallet/china_rmb_hub_screen.dart';
 import '../screens/wallet/china_transfer_screens.dart';
 import '../screens/wallet/sell_rmb_screens.dart';
+import '../screens/wallet/wallet_convert_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
@@ -177,6 +178,7 @@ GoRouter createRouter(AppStore store) {
       ),
       GoRoute(path: '/wallet/withdraw', builder: (_, __) => const WithdrawScreen()),
       GoRoute(path: '/wallet/china-rmb', builder: (_, __) => const ChinaRmbHubScreen()),
+      GoRoute(path: '/wallet/convert', builder: (_, __) => const WalletConvertScreen()),
       GoRoute(path: '/wallet/china-transfer', builder: (_, __) => const ChinaTransferHubScreen()),
       GoRoute(
         path: '/wallet/china-transfer/create',
