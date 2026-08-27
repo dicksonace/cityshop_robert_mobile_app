@@ -501,6 +501,16 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
         return ['payment', 'payment_proof', 'proof'].contains(g);
       }).toList();
 
+  bool _isQrField(Map<String, dynamic> field) {
+    final type = field['type'] as String? ?? 'text';
+    final blob = '${field['name'] ?? ''} ${field['label'] ?? ''}'.toLowerCase();
+    return ['image', 'document', 'files'].contains(type) || blob.contains('qr');
+  }
+
+  List<Map<String, dynamic>> get qrFields => recipientFields.where(_isQrField).toList();
+  List<Map<String, dynamic>> get textRecipientFields =>
+      recipientFields.where((f) => !_isQrField(f)).toList();
+
   Future<void> _submit() async {
     final store = context.read<AppStore>();
     if (!(store.user?.canStoreWalletFunds ?? false)) {
@@ -557,7 +567,7 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
     final fee = feeMode == 'percent' ? send * feeValue / 100 : feeValue;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Send via Alipay')),
+      appBar: AppBar(title: const Text('Submit Transfer Request')),
       body: loading
           ? const FullPageLoader(label: 'Loading form…')
           : ListView(
@@ -596,28 +606,109 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                const Text(
-                  'Pay GHS — recipient gets RMB at today’s rate. No RMB is held in your wallet.',
-                  style: TextStyle(color: Colors.black54),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFC7D2FE)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('You send', style: TextStyle(fontWeight: FontWeight.w700)),
+                          Text(_ghs.format(send), style: const TextStyle(fontWeight: FontWeight.w900)),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('They receive', style: TextStyle(fontWeight: FontWeight.w700)),
+                          Text('¥${rmb.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Fee ${_ghs.format(fee)} · Total ${_ghs.format(send + fee)}',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF4338CA)),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
-                const Text('Amount to send (GHS)', style: TextStyle(fontWeight: FontWeight.w700)),
+                ...qrFields.map((field) {
+                  final id = (field['id'] as num).toInt();
+                  final picked = files[id];
+                  final required = field['required'] == true;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFD1D5DB), style: BorderStyle.solid),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Upload Alipay QR Code${required ? ' *' : ''}',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          (field['help_text'] as String?)?.isNotEmpty == true
+                              ? '${field['help_text']}'
+                              : "Upload recipient's Alipay QR code",
+                          style: const TextStyle(color: Colors.black54),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton(
+                          onPressed: () async {
+                            final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+                            if (file != null) setState(() => files[id] = file);
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: const Color(0xFFDC2626),
+                            side: BorderSide.none,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Text(
+                            picked == null ? 'Choose Image' : 'Change image',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        if (picked != null) ...[
+                          const SizedBox(height: 8),
+                          Text(picked.name, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                        ],
+                      ],
+                    ),
+                  );
+                }),
+                ...textRecipientFields.map((field) {
+                  final id = (field['id'] as num).toInt();
+                  final required = field['required'] == true;
+                  final label = '${field['label']}${required ? ' *' : ' (Optional)'}';
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TextField(
+                      onChanged: (v) => values[id] = v,
+                      decoration: InputDecoration(
+                        labelText: label,
+                        hintText: field['placeholder'] as String?,
+                        border: const OutlineInputBorder(),
+                        helperText: field['help_text'] as String?,
+                      ),
+                      maxLines: (field['type'] as String?) == 'textarea' ? 3 : 1,
+                    ),
+                  );
+                }),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: amount,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(border: OutlineInputBorder()),
-                ),
-                const SizedBox(height: 10),
-                Text('Exchange rate: 1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}'),
-                Text('RMB value: ¥${rmb.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                Text('Transfer fee: ${_ghs.format(fee)}'),
-                Text('Total payment: ${_ghs.format(send + fee)}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 20),
-                const Text('Alipay recipient', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                ...recipientFields.map(_field),
-                const SizedBox(height: 20),
                 const Text('Pay GHS to CityShop', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                 ...methods.map((method) {
                   final id = (method['id'] as num).toInt();
@@ -635,9 +726,17 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
                 }),
                 ...paymentFields.map(_field),
                 const SizedBox(height: 16),
-                FilledButton(
+                FilledButton.icon(
                   onPressed: submitting ? null : _submit,
-                  child: Text(submitting ? 'Submitting…' : 'Submit transfer'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  icon: const Icon(Icons.send_rounded),
+                  label: Text(
+                    submitting ? 'Submitting…' : 'Submit Transfer Request',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
                 ),
               ],
             ),
