@@ -11,6 +11,7 @@ import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/momo_widgets.dart';
 import 'china_transfer_screens.dart';
 
 final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
@@ -297,7 +298,12 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
   bool loading = true;
   bool submitting = false;
   String? error;
+  int step = 0;
   final amount = TextEditingController();
+  final alipayName = TextEditingController();
+  final payoutName = TextEditingController();
+  final payoutMobile = TextEditingController();
+  String? momoNetwork;
   int? methodId;
   final values = <int, String>{};
   final files = <int, XFile>{};
@@ -305,13 +311,16 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
   @override
   void initState() {
     super.initState();
-    amount.text = widget.initialRmb ?? '10000';
+    amount.text = widget.initialRmb ?? '100';
     _load();
   }
 
   @override
   void dispose() {
     amount.dispose();
+    alipayName.dispose();
+    payoutName.dispose();
+    payoutMobile.dispose();
     super.dispose();
   }
 
@@ -321,9 +330,17 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
       if (!mounted) return;
       final cfg = Map<String, dynamic>.from(data['config'] as Map? ?? {});
       final methods = (cfg['receive_methods'] as List? ?? []).whereType<Map>().toList();
+      final userName = context.read<AppStore>().user?.name ?? '';
+      final userMobile = context.read<AppStore>().user?.mobile ?? '';
       setState(() {
         config = cfg;
         methodId = methods.isEmpty ? null : (methods.first['id'] as num?)?.toInt();
+        if (payoutName.text.trim().isEmpty && userName.isNotEmpty) {
+          payoutName.text = userName;
+        }
+        if (payoutMobile.text.trim().isEmpty && userMobile.isNotEmpty) {
+          payoutMobile.text = userMobile;
+        }
         loading = false;
       });
     } catch (e) {
@@ -345,7 +362,89 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
       .map((e) => Map<String, dynamic>.from(e))
       .toList();
 
+  int? _fieldId(String name) {
+    for (final field in fields) {
+      if (field['name'] == name) return (field['id'] as num?)?.toInt();
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? get selectedMethod {
+    for (final m in methods) {
+      if ((m['id'] as num?)?.toInt() == methodId) return m;
+    }
+    return methods.isEmpty ? null : methods.first;
+  }
+
+  Map<String, dynamic>? get rate =>
+      config['rate'] is Map ? Map<String, dynamic>.from(config['rate'] as Map) : null;
+
+  double get ghsPerRmb {
+    final usdPerRmb = (rate?['usd_per_rmb'] as num?)?.toDouble() ?? 0;
+    final ghsPerUsd = (rate?['ghs_per_usd'] as num?)?.toDouble() ?? 0;
+    return (rate?['ghs_per_rmb'] as num?)?.toDouble() ?? (usdPerRmb * ghsPerUsd);
+  }
+
+  double get minRmb => (rate?['min_rmb'] as num?)?.toDouble() ?? 20;
+
+  double get ghsPayout {
+    final rmb = double.tryParse(amount.text) ?? 0;
+    final feeMode = rate?['fee_mode'] as String? ?? 'flat';
+    final feeValue = (rate?['fee_value'] as num?)?.toDouble() ?? 0;
+    final usdPerRmb = (rate?['usd_per_rmb'] as num?)?.toDouble() ?? 0;
+    final usdGross = usdPerRmb > 0 ? rmb * usdPerRmb : 0.0;
+    final fee = feeMode == 'percent' ? usdGross * feeValue / 100 : feeValue;
+    final ghsGross = rmb * ghsPerRmb;
+    final feeGhs = usdGross > 0 ? ghsGross * (fee / usdGross) : 0.0;
+    return ghsGross - feeGhs;
+  }
+
+  void _prepareFieldValues() {
+    values.clear();
+    void setField(String name, String value) {
+      final id = _fieldId(name);
+      if (id != null && value.trim().isNotEmpty) values[id] = value.trim();
+    }
+
+    final sender = alipayName.text.trim();
+    setField('rmb_sender_name', sender.isNotEmpty ? sender : (payoutName.text.trim().isNotEmpty ? payoutName.text.trim() : '—'));
+    setField('alipay_or_wechat_account', '—');
+    setField('payment_reference', '—');
+    setField('payout_name', payoutName.text.trim());
+    setField('payout_mobile', payoutMobile.text.trim());
+    setField('payout_account_number', payoutMobile.text.trim());
+    setField('payout_bank_name', momoNetworkLabel(momoNetwork));
+  }
+
+  String? _validateStep(int targetStep) {
+    if (targetStep >= 1 && (methodId == null || selectedMethod == null)) {
+      return 'Alipay receive method is not configured yet.';
+    }
+    if (targetStep >= 2) {
+      final rmb = double.tryParse(amount.text);
+      if (rmb == null || rmb < minRmb) {
+        return 'Enter at least ¥${minRmb.toStringAsFixed(0)} RMB.';
+      }
+      final screenshotId = _fieldId('payment_screenshot');
+      if (screenshotId == null || files[screenshotId] == null) {
+        return 'Upload your Alipay payment screenshot.';
+      }
+    }
+    if (targetStep >= 3) {
+      if (momoNetwork == null || momoNetwork!.isEmpty) return 'Select your Mobile Money network.';
+      if (payoutMobile.text.trim().length < 9) return 'Enter your MoMo number.';
+      if (payoutName.text.trim().length < 2) return 'Enter the name on your MoMo account.';
+    }
+    return null;
+  }
+
   Future<void> _submit() async {
+    final validation = _validateStep(3);
+    if (validation != null) {
+      setState(() => error = validation);
+      return;
+    }
+    _prepareFieldValues();
     setState(() {
       submitting = true;
       error = null;
@@ -369,170 +468,322 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
     }
   }
 
+  Widget _stepDots() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(3, (i) {
+        final active = i <= step;
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFFDC2626) : const Color(0xFFE5E7EB),
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            '${i + 1}',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: active ? Colors.white : const Color(0xFF9CA3AF),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _stepOne(Map<String, dynamic> method, String qrUrl) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3F4F6),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.account_balance_wallet_outlined, color: Color(0xFFDC2626)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Paid to', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                    Text(
+                      str(method['account_name'], method['name']),
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    ),
+                    Text(
+                      'Rate: 1 RMB = ${ghsPerRmb.toStringAsFixed(4)} GHS · Min ¥${minRmb.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (qrUrl.isNotEmpty)
+          Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: CachedNetworkImage(
+                imageUrl: qrUrl,
+                height: 240,
+                width: 240,
+                fit: BoxFit.contain,
+                placeholder: (_, _) => const SizedBox(
+                  height: 240,
+                  width: 240,
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+                errorWidget: (_, _, _) => const Icon(Icons.qr_code_2, size: 120),
+              ),
+            ),
+          )
+        else
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              'Alipay QR is not available yet. Ask admin to upload it in Sell RMB settings.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        if ((config['receive_instructions'] as String?)?.isNotEmpty == true) ...[
+          const SizedBox(height: 12),
+          Text('${config['receive_instructions']}', style: const TextStyle(color: Colors.black54, height: 1.35)),
+        ],
+      ],
+    );
+  }
+
+  Widget _stepTwo() {
+    final screenshotId = _fieldId('payment_screenshot');
+    final picked = screenshotId == null ? null : files[screenshotId];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: amount,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            labelText: 'RMB amount sent *',
+            prefixText: '¥ ',
+            border: const OutlineInputBorder(),
+            helperText: 'Minimum ¥${minRmb.toStringAsFixed(0)}',
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'You will receive: ${_ghs.format(ghsPayout)}',
+          style: const TextStyle(color: Color(0xFF047857), fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: alipayName,
+          decoration: const InputDecoration(
+            labelText: 'Your Alipay name (optional)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text('Payment screenshot *', style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () async {
+            if (screenshotId == null) return;
+            final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+            if (file != null) setState(() => files[screenshotId] = file);
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              border: Border.all(color: picked == null ? const Color(0xFFFCA5A5) : const Color(0xFF86EFAC), width: 2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.cloud_upload_outlined, size: 40, color: picked == null ? Colors.grey : const Color(0xFF047857)),
+                const SizedBox(height: 8),
+                Text(
+                  picked == null ? 'Tap to upload Alipay screenshot' : picked.name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _stepThree() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFECFDF5),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            'Where should we send your GHS? Admin will send ${_ghs.format(ghsPayout)} after verifying your Alipay payment.',
+            style: const TextStyle(height: 1.35),
+          ),
+        ),
+        const SizedBox(height: 16),
+        MomoNetworkPicker(
+          value: momoNetwork,
+          onChanged: (v) => setState(() => momoNetwork = v),
+          selectedOnly: true,
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: payoutMobile,
+          keyboardType: TextInputType.phone,
+          decoration: InputDecoration(
+            labelText: '${momoNumberFieldLabel(momoNetwork, payoutMobile.text)} *',
+            prefixIcon: const Icon(Icons.phone_outlined),
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: payoutName,
+          decoration: const InputDecoration(
+            labelText: 'Name on MoMo account *',
+            prefixIcon: Icon(Icons.person_outline),
+            helperText: 'Must match the name on your mobile money wallet.',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String str(dynamic value, [String fallback = '']) {
+    if (value == null) return fallback;
+    final text = '$value'.trim();
+    return text.isEmpty ? fallback : text;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rate = config['rate'] is Map ? Map<String, dynamic>.from(config['rate'] as Map) : null;
-    final usdPerRmb = (rate?['usd_per_rmb'] as num?)?.toDouble() ?? 0;
-    final ghsPerUsd = (rate?['ghs_per_usd'] as num?)?.toDouble() ?? 0;
-    final ghsPerRmb = (rate?['ghs_per_rmb'] as num?)?.toDouble() ?? (usdPerRmb * ghsPerUsd);
-    final rmb = double.tryParse(amount.text) ?? 0;
-    final feeMode = rate?['fee_mode'] as String? ?? 'flat';
-    final feeValue = (rate?['fee_value'] as num?)?.toDouble() ?? 0;
-    final usdGross = usdPerRmb > 0 ? rmb * usdPerRmb : 0.0;
-    final fee = feeMode == 'percent' ? usdGross * feeValue / 100 : feeValue;
-    final ghsGross = rmb * ghsPerRmb;
-    final feeGhs = usdGross > 0 ? ghsGross * (fee / usdGross) : 0.0;
-    final ghsPayout = ghsGross - feeGhs;
-    Map<String, dynamic>? selectedMethod;
-    for (final m in methods) {
-      if ((m['id'] as num?)?.toInt() == methodId) {
-        selectedMethod = m;
-        break;
-      }
-    }
-    selectedMethod ??= methods.isEmpty ? null : methods.first;
-    final qrUrl = (selectedMethod?['qr_url'] as String?)?.trim() ?? '';
+    final method = selectedMethod;
+    final qrUrl = (method?['qr_url'] as String?)?.trim() ?? '';
 
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.close),
           onPressed: () => _popToChinaRmbHub(context),
         ),
         automaticallyImplyLeading: false,
-        title: const Text('Sell RMB details'),
+        title: const Text('Sell RMB for GHS'),
       ),
       body: loading
-          ? const FullPageLoader(label: 'Loading form…')
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+          ? const FullPageLoader(label: 'Loading…')
+          : Column(
               children: [
-                if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
-                const Text('RMB amount', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                _stepDots(),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: amount,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(prefixText: '¥ ', border: OutlineInputBorder()),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    children: [
+                      if (error != null) ...[
+                        Text(error!, style: const TextStyle(color: Colors.red)),
+                        const SizedBox(height: 8),
+                      ],
+                      if (step == 0 && method != null) _stepOne(method, qrUrl),
+                      if (step == 1) _stepTwo(),
+                      if (step == 2) _stepThree(),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 10),
-                Text('Buying rate: 1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}'),
-                Text('You receive: ${_ghs.format(ghsPayout)}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                const Text(
-                  'Send RMB to our Alipay QR. After you upload proof, admin verifies and processes your GHS payout.',
-                  style: TextStyle(color: Colors.black54, height: 1.35),
-                ),
-                if ((config['receive_instructions'] as String?)?.isNotEmpty == true) ...[
-                  const SizedBox(height: 8),
-                  Text('${config['receive_instructions']}', style: const TextStyle(color: Colors.black54)),
-                ],
-                const SizedBox(height: 16),
-                const Text('Send RMB to CityShop', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                ...methods.map((method) {
-                  final id = (method['id'] as num).toInt();
-                  return RadioListTile<int>(
-                    value: id,
-                    groupValue: methodId,
-                    onChanged: (v) => setState(() => methodId = v),
-                    title: Text('${method['name']}'),
-                    subtitle: Text(
-                      [
-                        method['type'],
-                        method['account_name'],
-                        method['account_number'],
-                      ].where((e) => (e as String?)?.isNotEmpty == true).join(' · '),
-                    ),
-                  );
-                }),
-                if (qrUrl.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      children: [
-                        const Text('Pay Alipay', style: TextStyle(fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Scan the QR code to transfer RMB to our account.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12, color: Colors.black54),
-                        ),
-                        const SizedBox(height: 10),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            qrUrl,
-                            height: 220,
-                            width: 220,
-                            fit: BoxFit.contain,
-                            errorBuilder: (_, _, _) => const Icon(Icons.qr_code_2, size: 80),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  child: Row(
+                    children: [
+                      if (step > 0)
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: submitting ? null : () => setState(() => step -= 1),
+                            child: const Text('Back'),
                           ),
                         ),
-                      ],
+                      if (step > 0) const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: FilledButton(
+                          onPressed: submitting || (step == 0 && qrUrl.isEmpty)
+                              ? null
+                              : () async {
+                                  if (step < 2) {
+                                    final validation = _validateStep(step + 1);
+                                    if (validation != null) {
+                                      setState(() => error = validation);
+                                      return;
+                                    }
+                                    setState(() {
+                                      error = null;
+                                      step += 1;
+                                    });
+                                  } else {
+                                    await _submit();
+                                  }
+                                },
+                          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                          child: Text(
+                            submitting
+                                ? 'Submitting…'
+                                : step == 2
+                                    ? 'Submit'
+                                    : 'Continue',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (step == 1)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Next: enter your Mobile Money details to receive GHS',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
                   ),
-                ],
-                ...fields.where((f) => f['group'] == 'payment').map(_field),
-                const SizedBox(height: 16),
-                const Text('Your payout details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                ...fields.where((f) => f['group'] == 'payout' || f['group'] == 'recipient').map(_field),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: submitting ? null : _submit,
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF047857)),
-                  child: Text(submitting ? 'Submitting…' : 'Submit Sell RMB'),
-                ),
+                if (step == 2)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Admin will verify your payment and send GHS to this MoMo number',
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                  ),
               ],
             ),
-    );
-  }
-
-  Widget _field(Map<String, dynamic> field) {
-    final id = (field['id'] as num).toInt();
-    final type = field['type'] as String? ?? 'text';
-    final label = '${field['label']}${field['required'] == true ? ' *' : ''}';
-    if (['image', 'document', 'files'].contains(type)) {
-      final picked = files[id];
-      return Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-            if ((field['help_text'] as String?)?.isNotEmpty == true)
-              Text('${field['help_text']}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
-            TextButton(
-              onPressed: () async {
-                final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-                if (file != null) setState(() => files[id] = file);
-              },
-              child: Text(picked == null ? 'Choose file' : picked.name),
-            ),
-          ],
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: TextField(
-        minLines: type == 'textarea' ? 3 : 1,
-        maxLines: type == 'textarea' ? 5 : 1,
-        keyboardType: type == 'number' ? TextInputType.number : TextInputType.text,
-        onChanged: (v) => values[id] = v,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: field['placeholder'] as String?,
-          helperText: field['help_text'] as String?,
-          border: const OutlineInputBorder(),
-        ),
-      ),
     );
   }
 }
