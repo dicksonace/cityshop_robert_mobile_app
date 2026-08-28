@@ -12,6 +12,14 @@ import '../../widgets/common_widgets.dart';
 final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 final _usd = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
 
+void _popToChinaRmbHub(BuildContext context) {
+  if (context.canPop()) {
+    context.pop();
+  } else {
+    context.go('/wallet/china-rmb');
+  }
+}
+
 class SellRmbHubScreen extends StatefulWidget {
   const SellRmbHubScreen({super.key});
 
@@ -81,8 +89,22 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
     final ghsPayout = ghsGross - feeGhs;
     final enabled = config['enabled'] == true;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Sell RMB')),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _popToChinaRmbHub(context);
+      },
+      child: Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back',
+          onPressed: () => _popToChinaRmbHub(context),
+        ),
+        automaticallyImplyLeading: false,
+        title: const Text('Sell RMB'),
+      ),
       body: loading
           ? const FullPageLoader(label: 'Loading buying rate…')
           : RefreshIndicator(
@@ -145,13 +167,16 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed: enabled
-                          ? () => context.push(
+                          ? () async {
+                              await context.push(
                                 '/wallet/sell-rmb/create',
                                 extra: {
                                   'rmb': amount.text,
                                   'payout_currency': 'ghs',
                                 },
-                              )
+                              );
+                              if (mounted) _load();
+                            }
                           : null,
                       style: FilledButton.styleFrom(backgroundColor: const Color(0xFF047857)),
                       child: Text(enabled ? 'Continue' : 'Sell RMB paused'),
@@ -178,12 +203,16 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                         '${item['status_label']}',
                         style: const TextStyle(color: Color(0xFF047857), fontWeight: FontWeight.w700),
                       ),
-                      onTap: () => context.push('/wallet/sell-rmb/${item['id']}'),
+                      onTap: () async {
+                        await context.push('/wallet/sell-rmb/${item['id']}');
+                        if (mounted) _load();
+                      },
                     );
                   }),
                 ],
               ),
             ),
+      ),
     );
   }
 
@@ -313,7 +342,14 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
     final qrUrl = (selectedMethod?['qr_url'] as String?)?.trim() ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sell RMB details')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => _popToChinaRmbHub(context),
+        ),
+        automaticallyImplyLeading: false,
+        title: const Text('Sell RMB details'),
+      ),
       body: loading
           ? const FullPageLoader(label: 'Loading form…')
           : ListView(
@@ -484,7 +520,14 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
     final item = transfer;
     if (item == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Sell RMB')),
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.canPop() ? context.pop() : context.go('/wallet/china-rmb'),
+          ),
+          automaticallyImplyLeading: false,
+          title: const Text('Sell RMB'),
+        ),
         body: error != null ? Center(child: Text(error!)) : const FullPageLoader(label: 'Loading…'),
       );
     }
@@ -504,7 +547,14 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
             ((quote['ghs_per_usd'] as num?)?.toDouble() ?? 0));
 
     return Scaffold(
-      appBar: AppBar(title: Text('${item['reference']}')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/wallet/china-rmb'),
+        ),
+        automaticallyImplyLeading: false,
+        title: Text('${item['reference']}'),
+      ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(

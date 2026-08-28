@@ -31,6 +31,14 @@ String _formatTransferWhen(String? raw) {
   }
 }
 
+void _popToChinaRmbHub(BuildContext context) {
+  if (context.canPop()) {
+    context.pop();
+  } else {
+    context.go('/wallet/china-rmb');
+  }
+}
+
 bool _isBuyerQrField(Map<String, dynamic> field) {
   if ((field['file_url'] as String? ?? '').trim().isEmpty) return false;
   final type = (field['type'] as String? ?? '').toLowerCase();
@@ -622,7 +630,6 @@ _BuyRmbTransferStatusStyle _buyRmbTransferStatusStyle(Map<String, dynamic> item)
         icon: Icons.check_circle_rounded,
       );
     case 'processing':
-    case 'rmb_sent':
     case 'payment_verification':
     case 'payment_submitted':
       return _BuyRmbTransferStatusStyle(
@@ -631,6 +638,14 @@ _BuyRmbTransferStatusStyle _buyRmbTransferStatusStyle(Map<String, dynamic> item)
         background: const Color(0xFFEDE9FE),
         border: const Color(0xFFDDD6FE),
         icon: Icons.hourglass_top_rounded,
+      );
+    case 'rmb_sent':
+      return _BuyRmbTransferStatusStyle(
+        label: label,
+        color: const Color(0xFF047857),
+        background: const Color(0xFFD1FAE5),
+        border: const Color(0xFFA7F3D0),
+        icon: Icons.check_circle_rounded,
       );
     case 'pending_payment':
       return _BuyRmbTransferStatusStyle(
@@ -1006,10 +1021,22 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
     final transferHours =
         config['transfer_hours'] is Map ? Map<String, dynamic>.from(config['transfer_hours'] as Map) : null;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _popToChinaRmbHub(context);
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back',
+          onPressed: () => _popToChinaRmbHub(context),
+        ),
+        automaticallyImplyLeading: false,
         title: const Text('Buy RMB'),
         actions: [
           if (!loading)
@@ -1072,9 +1099,10 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
                         transferHours: transferHours,
                         instructions: config['instructions'] as String?,
                         initialGhs: minGhs != null && minGhs > 0 ? minGhs.toStringAsFixed(0) : null,
-                        onContinue: (amount) {
+                        onContinue: (amount) async {
                           FocusManager.instance.primaryFocus?.unfocus();
-                          context.push('/wallet/china-transfer/create', extra: amount);
+                          await context.push('/wallet/china-transfer/create', extra: amount);
+                          if (mounted) _load(silent: true);
                         },
                       )
                     else
@@ -1104,12 +1132,16 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
                     BuyRmbRecentTransfersSection(
                       transfers: transfers,
                       showAutoRefresh: true,
-                      onTransferTap: (item) => context.push('/wallet/china-transfer/${item['id']}'),
+                      onTransferTap: (item) async {
+                        await context.push('/wallet/china-transfer/${item['id']}');
+                        if (mounted) _load(silent: true);
+                      },
                     ),
                   ],
                 ),
               ),
             ),
+      ),
     );
   }
 }
@@ -1251,7 +1283,14 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
     final fee = feeMode == 'percent' ? send * feeValue / 100 : feeValue;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Submit Transfer Request')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => _popToChinaRmbHub(context),
+        ),
+        automaticallyImplyLeading: false,
+        title: const Text('Submit Transfer Request'),
+      ),
       resizeToAvoidBottomInset: true,
       body: loading
           ? const FullPageLoader(label: 'Loading form…')

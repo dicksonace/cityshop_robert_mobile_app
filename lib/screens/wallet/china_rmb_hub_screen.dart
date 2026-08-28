@@ -14,6 +14,14 @@ String _formatBuyRate(double n) {
   return n.toStringAsFixed(3);
 }
 
+void _popToWallet(BuildContext context) {
+  if (context.canPop()) {
+    context.pop();
+  } else {
+    context.go('/shop?tab=wallet');
+  }
+}
+
 /// China / RMB entry: Buy RMB (pay GHS → Alipay) or Sell RMB. No convert / no hold.
 class ChinaRmbHubScreen extends StatefulWidget {
   const ChinaRmbHubScreen({super.key});
@@ -124,9 +132,21 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
     final sellGhsPerRmb = (sellRate?['ghs_per_rmb'] as num?)?.toDouble() ??
         (sellUsdPerRmb != null && sellGhsPerUsd != null ? sellUsdPerRmb * sellGhsPerUsd : null);
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _popToWallet(context);
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back to wallet',
+          onPressed: () => _popToWallet(context),
+        ),
+        automaticallyImplyLeading: false,
         title: const Text('China / RMB'),
         actions: [
           if (!loading)
@@ -243,7 +263,10 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                           width: double.infinity,
                           child: FilledButton(
                             onPressed: buyOpen && buyRate != null
-                                ? () => context.push('/wallet/china-transfer')
+                                ? () async {
+                                    await context.push('/wallet/china-transfer');
+                                    if (mounted) _load(silent: true);
+                                  }
                                 : null,
                             style: FilledButton.styleFrom(
                               backgroundColor: Colors.white,
@@ -268,7 +291,12 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
                     child: InkWell(
-                      onTap: sellOpen ? () => context.push('/wallet/sell-rmb') : null,
+                      onTap: sellOpen
+                          ? () async {
+                              await context.push('/wallet/sell-rmb');
+                              if (mounted) _load(silent: true);
+                            }
+                          : null,
                       borderRadius: BorderRadius.circular(14),
                       child: Container(
                         width: double.infinity,
@@ -312,17 +340,19 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                           }),
                     ],
                     sellFlowFor: (item) => sellTransfers.any((s) => s['id'] == item['id']),
-                    onTransferTap: (item) {
+                    onTransferTap: (item) async {
                       if (sellTransfers.any((s) => s['id'] == item['id'])) {
-                        context.push('/wallet/sell-rmb/${item['id']}');
+                        await context.push('/wallet/sell-rmb/${item['id']}');
                       } else {
-                        context.push('/wallet/china-transfer/${item['id']}');
+                        await context.push('/wallet/china-transfer/${item['id']}');
                       }
+                      if (mounted) _load(silent: true);
                     },
                   ),
                 ],
               ),
             ),
+      ),
     );
   }
 }
