@@ -50,8 +50,7 @@ bool _transferIsTerminal(String? status) {
 
 String _formatBuyRate(double n) {
   if (n <= 0) return '—';
-  final s = n.toStringAsFixed(4);
-  return s.replaceFirst(RegExp(r'\.?0+$'), '');
+  return n.toStringAsFixed(3);
 }
 
 String _formatFileSize(int bytes) {
@@ -428,14 +427,6 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
               height: 1.35,
             ),
           ),
-          if ((widget.instructions ?? '').trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              widget.instructions!.trim(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280), height: 1.35),
-            ),
-          ],
           const SizedBox(height: 16),
           Row(
             children: [

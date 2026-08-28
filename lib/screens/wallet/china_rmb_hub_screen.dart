@@ -11,7 +11,7 @@ final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
 String _formatBuyRate(double n) {
   if (n <= 0) return '—';
-  return n.toStringAsFixed(4).replaceFirst(RegExp(r'\.?0+$'), '');
+  return n.toStringAsFixed(3);
 }
 
 /// China / RMB entry: Buy RMB (pay GHS → Alipay) or Sell RMB. No convert / no hold.
