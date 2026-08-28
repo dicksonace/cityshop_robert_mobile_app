@@ -38,6 +38,7 @@ import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 import '../../widgets/tab_refresh.dart';
 import '../../widgets/video_viewer.dart';
+import '../../widgets/voice_waveform.dart';
 import '../../widgets/wallet_receipt_sheet.dart';
 import 'chat_settings_screen.dart';
 import 'friend_chat_screens.dart';
@@ -412,6 +413,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool recordingVoice = false;
   bool voicePaused = false;
   int recordSeconds = 0;
+  List<double> recordWaveform = const [];
+  StreamSubscription<Amplitude>? _amplitudeSub;
   ChatMessage? replyingTo;
   ChatMessage? editingMessage;
   DateTime _updatedAfter = DateTime.now().toUtc();
@@ -452,6 +455,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _poll?.cancel();
     _recordTick?.cancel();
+    _amplitudeSub?.cancel();
     // Tear down WebRTC/audio on the UI thread before the screen goes away so
     // mic/camera tracks are released even if the isolate is about to die.
     final call = _call;
@@ -1309,6 +1313,7 @@ class _ChatScreenState extends State<ChatScreen> {
     String? caption,
     int? durationSeconds,
     bool viewOnce = false,
+    List<double>? voiceWaveform,
   }) async {
     if (sending) return;
     setState(() => showAttachPanel = false);
@@ -1332,6 +1337,10 @@ class _ChatScreenState extends State<ChatScreen> {
       voiceUrl: type == 'voice' && path.isNotEmpty ? path : null,
       fileUrl: type == 'file' && path.isNotEmpty ? path : null,
     );
+
+    if (type == 'voice' && voiceWaveform != null && voiceWaveform.isNotEmpty && path.isNotEmpty) {
+      VoiceWaveformCache.instance.put(path, voiceWaveform);
+    }
 
     _pendingUploads[clientId] = send;
     if (mounted) {
@@ -1365,6 +1374,15 @@ class _ChatScreenState extends State<ChatScreen> {
       final msg = await _sendWithNetworkWait(send);
       _pendingUploads.remove(clientId);
       if (!mounted) return;
+      final localPath = messages
+          .where((m) => m.clientId == clientId)
+          .map((m) => m.localPath)
+          .whereType<String>()
+          .firstOrNull;
+      final voiceUrl = msg.voiceUrl;
+      if (localPath != null && voiceUrl != null && voiceUrl.isNotEmpty) {
+        VoiceWaveformCache.instance.move(localPath, voiceUrl);
+      }
       setState(() {
         messages = [
           for (final m in messages)
@@ -1668,7 +1686,20 @@ class _ChatScreenState extends State<ChatScreen> {
         recordingVoice = true;
         voicePaused = false;
         recordSeconds = 0;
+        recordWaveform = const [];
         showAttachPanel = false;
+      });
+      _amplitudeSub?.cancel();
+      _amplitudeSub = _recorder
+          .onAmplitudeChanged(const Duration(milliseconds: 100))
+          .listen((amp) {
+        if (!mounted || voicePaused) return;
+        setState(() {
+          recordWaveform = VoiceWaveform.downsample(
+            [...recordWaveform, normalizeVoiceAmplitudeDb(amp.current)],
+            maxBars: 48,
+          );
+        });
       });
       _recordTick?.cancel();
       _recordTick = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -1709,7 +1740,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _stopVoice({required bool send}) async {
     if (!recordingVoice) return;
     _recordTick?.cancel();
+    _amplitudeSub?.cancel();
+    _amplitudeSub = null;
     final seconds = recordSeconds;
+    final waveform = List<double>.from(recordWaveform);
     String? path;
     try {
       // stop() ends a paused or active recording and returns the file path.
@@ -1722,11 +1756,13 @@ class _ChatScreenState extends State<ChatScreen> {
         recordingVoice = false;
         voicePaused = false;
         recordSeconds = 0;
+        recordWaveform = const [];
       });
     } else {
       recordingVoice = false;
       voicePaused = false;
       recordSeconds = 0;
+      recordWaveform = const [];
     }
 
     if (path != null && path.startsWith('file://')) {
@@ -1778,6 +1814,7 @@ class _ChatScreenState extends State<ChatScreen> {
       path: uploadPath,
       filename: 'voice.m4a',
       durationSeconds: seconds,
+      voiceWaveform: waveform,
       send: () => context.read<AppStore>().sendVoiceMessage(
             widget.conversationId,
             uploadPath,
@@ -2369,6 +2406,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 durationSeconds: m.durationSeconds,
                                                 mine: m.mine,
                                                 localPath: m.localPath,
+                                                waveform: _voiceWaveformForMessage(m),
                                               ),
                                             )
                                           else
@@ -2564,85 +2602,79 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         if (recordingVoice)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 10, 12, 8),
-                            child: Column(
+                            padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+                            child: Row(
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        _formatRecord(recordSeconds),
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 16,
-                                          color: voicePaused
-                                              ? const Color(0xFF6B7280)
-                                              : const Color(0xFFB91C1C),
+                                IconButton(
+                                  tooltip: 'Delete',
+                                  onPressed: () => _stopVoice(send: false),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFEE2E2),
+                                    foregroundColor: AppColors.danger,
+                                  ),
+                                  icon: const Icon(Icons.delete_outline_rounded),
+                                ),
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFEF2F2),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(color: const Color(0xFFFECACA)),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: voicePaused
+                                                ? const Color(0xFF9CA3AF)
+                                                : const Color(0xFFDC2626),
+                                            shape: BoxShape.circle,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          voicePaused ? 'Paused' : 'Recording…',
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: VoiceWaveformBars(
+                                            samples: recordWaveform.isEmpty
+                                                ? const [0.12]
+                                                : recordWaveform,
+                                            height: 24,
+                                            barCount: 40,
+                                            activeColor: const Color(0xFFDC2626),
+                                            inactiveColor: const Color(0xFFFECACA),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _formatRecord(recordSeconds),
                                           style: TextStyle(
-                                            fontWeight: FontWeight.w700,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 13,
                                             color: voicePaused
                                                 ? const Color(0xFF6B7280)
                                                 : const Color(0xFFB91C1C),
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
-                                Row(
-                                  children: [
-                                    IconButton(
-                                      tooltip: 'Delete',
-                                      onPressed: () => _stopVoice(send: false),
-                                      style: IconButton.styleFrom(
-                                        backgroundColor: const Color(0xFFFEE2E2),
-                                        foregroundColor: AppColors.danger,
-                                        padding: const EdgeInsets.all(12),
-                                      ),
-                                      icon: const Icon(Icons.delete_outline_rounded),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: FilledButton.tonalIcon(
-                                        onPressed: _toggleVoicePause,
-                                        style: FilledButton.styleFrom(
-                                          backgroundColor: const Color(0xFFF3F4F6),
-                                          foregroundColor: const Color(0xFF111827),
-                                          padding: const EdgeInsets.symmetric(vertical: 14),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(28),
-                                          ),
-                                        ),
-                                        icon: Icon(
-                                          voicePaused
-                                              ? Icons.mic_rounded
-                                              : Icons.pause_rounded,
-                                        ),
-                                        label: Text(
-                                          voicePaused ? 'Resume' : 'Pause',
-                                          style: const TextStyle(fontWeight: FontWeight.w800),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    IconButton.filled(
-                                      tooltip: 'Send voice note',
-                                      onPressed: () => _stopVoice(send: true),
-                                      style: IconButton.styleFrom(
-                                        backgroundColor: AppColors.danger,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.all(12),
-                                      ),
-                                      icon: const Icon(Icons.send_rounded, color: Colors.white),
-                                    ),
-                                  ],
+                                const SizedBox(width: 6),
+                                IconButton(
+                                  tooltip: voicePaused ? 'Resume' : 'Pause',
+                                  onPressed: _toggleVoicePause,
+                                  icon: Icon(voicePaused ? Icons.mic_rounded : Icons.pause_rounded),
+                                ),
+                                IconButton.filled(
+                                  tooltip: 'Send voice note',
+                                  onPressed: () => _stopVoice(send: true),
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: AppColors.danger,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  icon: const Icon(Icons.send_rounded, color: Colors.white),
                                 ),
                               ],
                             ),
@@ -2785,6 +2817,20 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  List<double> _voiceWaveformForMessage(ChatMessage message) {
+    final cache = VoiceWaveformCache.instance;
+    for (final key in [message.localPath, message.voiceUrl]) {
+      if (key == null || key.isEmpty) continue;
+      final cached = cache.get(key);
+      if (cached != null && cached.isNotEmpty) return cached;
+    }
+    return VoiceWaveform.fallback(
+      barCount: 36,
+      durationSeconds: message.durationSeconds ?? 0,
+      seed: message.voiceUrl ?? message.localPath ?? '${message.id}',
     );
   }
 
@@ -4220,12 +4266,14 @@ class _ChatVoice extends StatefulWidget {
     required this.durationSeconds,
     required this.mine,
     this.localPath,
+    this.waveform = const [],
   });
 
   final String url;
   final int? durationSeconds;
   final bool mine;
   final String? localPath;
+  final List<double> waveform;
 
   @override
   State<_ChatVoice> createState() => _ChatVoiceState();
@@ -4360,7 +4408,6 @@ class _ChatVoiceState extends State<_ChatVoice> {
   Widget build(BuildContext context) {
     final muted = ChatColors.time;
     final bar = ChatColors.header;
-    final track = const Color(0xFFC5C9C6);
     final total = _duration.inMilliseconds > 0
         ? _duration
         : Duration(seconds: widget.durationSeconds ?? 0);
@@ -4369,78 +4416,82 @@ class _ChatVoiceState extends State<_ChatVoice> {
         : (_position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
     final missing = widget.url.trim().isEmpty &&
         ((widget.localPath ?? '').trim().isEmpty);
+    final samples = widget.waveform.isNotEmpty
+        ? widget.waveform
+        : VoiceWaveform.fallback(
+            barCount: 36,
+            durationSeconds: widget.durationSeconds ?? 0,
+            seed: widget.url,
+          );
+    final timeLabel = (_playing || _position.inMilliseconds > 0)
+        ? _clock(_position)
+        : _clock(total);
 
-    return SizedBox(
-      width: 228,
-      child: Row(
-        children: [
-          Material(
-            color: ChatColors.send,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: missing || _loading ? null : _toggle,
-              child: SizedBox(
-                width: 40,
-                height: 40,
-                child: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.all(10),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Icon(
-                        _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Material(
+          color: ChatColors.send,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: missing || _loading ? null : _toggle,
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: _loading
+                  ? const Padding(
+                      padding: EdgeInsets.all(9),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
                         color: Colors.white,
-                        size: 26,
                       ),
+                    )
+                  : Icon(
+                      _playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 168,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              VoiceWaveformBars(
+                samples: samples,
+                progress: _playing || _position.inMilliseconds > 0 ? progress : null,
+                height: 26,
+                barCount: 34,
+                activeColor: bar,
+                inactiveColor: const Color(0xFFC5C9C6),
+                playedColor: bar.withValues(alpha: 0.35),
+                onSeek: missing ? null : _seek,
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 3,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                    overlayShape: SliderComponentShape.noOverlay,
-                    activeTrackColor: bar,
-                    inactiveTrackColor: track,
-                    thumbColor: bar,
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Text(
+                    missing ? 'Unavailable' : timeLabel,
+                    style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600),
                   ),
-                  child: Slider(
-                    value: progress,
-                    onChanged: missing ? null : _seek,
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: missing ? null : _cycleSpeed,
+                    child: Text(
+                      '${_speed == 1 ? '1' : _speed == 1.5 ? '1.5' : '2'}x',
+                      style: TextStyle(color: ChatColors.bubbleText, fontSize: 11, fontWeight: FontWeight.w800),
+                    ),
                   ),
-                ),
-                Row(
-                  children: [
-                    Text(
-                      missing
-                          ? 'Unavailable'
-                          : '${_clock(_position)} / ${_clock(total)}',
-                      style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: missing ? null : _cycleSpeed,
-                      child: Text(
-                        '${_speed == 1 ? '1' : _speed == 1.5 ? '1.5' : '2'}x',
-                        style: TextStyle(color: ChatColors.bubbleText, fontSize: 11, fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
