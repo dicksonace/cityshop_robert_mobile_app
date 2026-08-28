@@ -256,8 +256,8 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
     ghs = TextEditingController(text: start);
     final send = double.tryParse(start) ?? 0;
     cny = TextEditingController(
-      text: send > 0 && widget.ghsPerRmb > 0
-          ? (send / widget.ghsPerRmb).toStringAsFixed(2)
+      text: send > 0 && widget.rmbPerGhs > 0
+          ? (send * widget.rmbPerGhs).toStringAsFixed(2)
           : '',
     );
   }
@@ -280,8 +280,8 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
       );
     }
     final send = double.tryParse(cleaned) ?? 0;
-    if (send > 0 && widget.ghsPerRmb > 0) {
-      cny.text = (send / widget.ghsPerRmb).toStringAsFixed(2);
+    if (send > 0 && widget.rmbPerGhs > 0) {
+      cny.text = (send * widget.rmbPerGhs).toStringAsFixed(2);
     } else {
       cny.text = '';
     }
@@ -300,8 +300,8 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
       );
     }
     final receive = double.tryParse(cleaned) ?? 0;
-    if (receive > 0 && widget.ghsPerRmb > 0) {
-      ghs.text = (receive * widget.ghsPerRmb).toStringAsFixed(2);
+    if (receive > 0 && widget.rmbPerGhs > 0) {
+      ghs.text = (receive / widget.rmbPerGhs).toStringAsFixed(2);
     } else {
       ghs.text = '';
     }
@@ -311,7 +311,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
 
   double get send => double.tryParse(ghs.text) ?? 0;
   double get receive =>
-      widget.ghsPerRmb > 0 && send > 0 ? send / widget.ghsPerRmb : 0;
+      widget.rmbPerGhs > 0 && send > 0 ? send * widget.rmbPerGhs : 0;
   double get fee =>
       widget.feeMode == 'percent' ? send * widget.feeValue / 100 : widget.feeValue;
   bool get canContinue => widget.enabled && send > 0;
@@ -377,26 +377,37 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
                     letterSpacing: 0.2,
                   ),
                 ),
+                if (widget.rmbPerGhs > 0) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Current rate: ${_formatBuyRate(widget.rmbPerGhs)} RMB',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
           const SizedBox(height: 22),
-          const Text('They receive', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF4B5563))),
-          const SizedBox(height: 8),
-          _AmountField(
-            symbol: '¥',
-            code: 'CNY',
-            controller: cny,
-            onChanged: _fromCny,
-          ),
-          const SizedBox(height: 14),
-          const Text('You send', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF4B5563))),
+          const Text('Amount in GHS (GH₵)', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF4B5563))),
           const SizedBox(height: 8),
           _AmountField(
             symbol: '₵',
             code: 'GHS',
             controller: ghs,
             onChanged: _fromGhs,
+          ),
+          const SizedBox(height: 14),
+          const Text('RMB equivalent (¥)', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF4B5563))),
+          const SizedBox(height: 8),
+          _AmountField(
+            symbol: '¥',
+            code: 'CNY',
+            controller: cny,
+            onChanged: _fromCny,
           ),
           if (fee > 0 && send > 0) ...[
             const SizedBox(height: 12),
@@ -845,8 +856,8 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
     final send = double.tryParse(amount.text) ?? 0;
     final feeMode = rate?['fee_mode'] as String? ?? 'flat';
     final feeValue = (rate?['fee_value'] as num?)?.toDouble() ?? 0;
-    // Same as rmb-wallet: They receive = You send × (1 GHS → RMB).
-    final rmb = ghsPerRmb > 0 ? send / ghsPerRmb : 0.0;
+    // Same as rmb-wallet: RMB = GHS × (RMB per 1 GHS).
+    final rmb = rmbPerGhs > 0 ? send * rmbPerGhs : 0.0;
     final fee = feeMode == 'percent' ? send * feeValue / 100 : feeValue;
 
     return Scaffold(
