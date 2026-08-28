@@ -1,22 +1,45 @@
+import 'dart:async';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
+import 'china_transfer_screens.dart';
 
 final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 final _usd = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+final _transferStamp = DateFormat('d MMM yyyy, h:mm a');
 
 void _popToChinaRmbHub(BuildContext context) {
   if (context.canPop()) {
     context.pop();
   } else {
     context.go('/wallet/china-rmb');
+  }
+}
+
+bool _sellTransferIsTerminal(String? status) {
+  return [
+    'completed',
+    'cancelled',
+    'rejected',
+    'failed',
+  ].contains(status);
+}
+
+String _formatSellWhen(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return '—';
+  try {
+    return _transferStamp.format(DateTime.parse(raw).toLocal());
+  } catch (_) {
+    return raw;
   }
 }
 
@@ -33,6 +56,7 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
   Map<String, dynamic> config = {};
   List<Map<String, dynamic>> transfers = [];
   final amount = TextEditingController(text: '10000');
+  Timer? _pollTimer;
 
   @override
   void initState() {
@@ -42,15 +66,23 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     amount.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      loading = true;
-      error = null;
-    });
+  void _schedulePoll() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) => _load(silent: true));
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        loading = true;
+        error = null;
+      });
+    }
     try {
       final data = await context.read<AppStore>().loadSellRmb();
       if (!mounted) return;
@@ -61,11 +93,13 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
         loading = false;
+        error = null;
       });
+      _schedulePoll();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        error = e.toString();
+        if (!silent) error = e.toString();
         loading = false;
       });
     }
@@ -96,122 +130,140 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
         _popToChinaRmbHub(context);
       },
       child: Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Back',
-          onPressed: () => _popToChinaRmbHub(context),
-        ),
-        automaticallyImplyLeading: false,
-        title: const Text('Sell RMB'),
-      ),
-      body: loading
-          ? const FullPageLoader(label: 'Loading buying rate…')
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                children: [
-                  if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
-                  Container(
-                    padding: const EdgeInsets.all(20),
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Back',
+            onPressed: () => _popToChinaRmbHub(context),
+          ),
+          automaticallyImplyLeading: false,
+          title: const Text('Sell RMB'),
+          actions: [
+            if (!loading)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF047857), Color(0xFF065F46)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(20),
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(999),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
-                          'We buy your RMB',
-                          style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600),
+                        SizedBox(
+                          width: 10,
+                          height: 10,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Send RMB · receive GHS · admin processes payout',
-                          style: TextStyle(color: Colors.white60, fontSize: 12),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          rate == null
-                              ? 'Buying rate not published yet'
-                              : '1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}',
-                          style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900),
-                        ),
+                        SizedBox(width: 6),
+                        Text('Auto refresh', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
                       ],
                     ),
                   ),
-                  if ((config['instructions'] as String?)?.isNotEmpty == true) ...[
-                    const SizedBox(height: 12),
-                    Text('${config['instructions']}', style: const TextStyle(color: Color(0xFF065F46))),
-                  ],
-                  if (rate != null) ...[
-                    const SizedBox(height: 18),
-                    const Text('RMB amount to sell', style: TextStyle(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: amount,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (_) => setState(() {}),
-                      decoration: const InputDecoration(
-                        prefixText: '¥ ',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _row('You receive (GHS)', _ghs.format(ghsPayout), bold: true),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: enabled
-                          ? () async {
-                              await context.push(
-                                '/wallet/sell-rmb/create',
-                                extra: {
-                                  'rmb': amount.text,
-                                  'payout_currency': 'ghs',
-                                },
-                              );
-                              if (mounted) _load();
-                            }
-                          : null,
-                      style: FilledButton.styleFrom(backgroundColor: const Color(0xFF047857)),
-                      child: Text(enabled ? 'Continue' : 'Sell RMB paused'),
-                    ),
-                  ],
-                  const SizedBox(height: 28),
-                  const Text('Your Sell RMB requests', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-                  if (transfers.isEmpty)
-                    const Text('No Sell RMB requests yet.', style: TextStyle(color: Colors.black54)),
-                  ...transfers.map((item) {
-                    final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
-                    final currency = (quote['payout_currency'] as String?) ?? 'ghs';
-                    final payout = currency == 'ghs'
-                        ? _ghs.format((quote['ghs_payout'] as num?)?.toDouble() ?? 0)
-                        : _usd.format((quote['usd_payout'] as num?)?.toDouble() ?? 0);
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text(
-                        '¥${((quote['rmb_amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)} → $payout',
-                      ),
-                      trailing: Text(
-                        '${item['status_label']}',
-                        style: const TextStyle(color: Color(0xFF047857), fontWeight: FontWeight.w700),
-                      ),
-                      onTap: () async {
-                        await context.push('/wallet/sell-rmb/${item['id']}');
-                        if (mounted) _load();
-                      },
-                    );
-                  }),
-                ],
+                ),
               ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh',
+              onPressed: () => _load(),
             ),
+          ],
+        ),
+        body: loading
+            ? const FullPageLoader(label: 'Loading buying rate…')
+            : RefreshIndicator(
+                onRefresh: () => _load(),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                  children: [
+                    if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF047857), Color(0xFF065F46)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'We buy your RMB',
+                            style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Send RMB · receive GHS · admin processes payout',
+                            style: TextStyle(color: Colors.white60, fontSize: 12),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            rate == null
+                                ? 'Buying rate not published yet'
+                                : '1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}',
+                            style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if ((config['instructions'] as String?)?.isNotEmpty == true) ...[
+                      const SizedBox(height: 12),
+                      Text('${config['instructions']}', style: const TextStyle(color: Color(0xFF065F46))),
+                    ],
+                    if (rate != null) ...[
+                      const SizedBox(height: 18),
+                      const Text('RMB amount to sell', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: amount,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onChanged: (_) => setState(() {}),
+                        decoration: const InputDecoration(
+                          prefixText: '¥ ',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _row('You receive (GHS)', _ghs.format(ghsPayout), bold: true),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: enabled
+                            ? () async {
+                                await context.push(
+                                  '/wallet/sell-rmb/create',
+                                  extra: {
+                                    'rmb': amount.text,
+                                    'payout_currency': 'ghs',
+                                  },
+                                );
+                                if (mounted) _load(silent: true);
+                              }
+                            : null,
+                        style: FilledButton.styleFrom(backgroundColor: const Color(0xFF047857)),
+                        child: Text(enabled ? 'Continue' : 'Sell RMB paused'),
+                      ),
+                    ],
+                    const SizedBox(height: 28),
+                    BuyRmbRecentTransfersSection(
+                      title: 'Your Sell RMB requests',
+                      showAutoRefresh: true,
+                      transfers: transfers,
+                      sellFlowFor: (_) => true,
+                      onTransferTap: (item) async {
+                        await context.push('/wallet/sell-rmb/${item['id']}');
+                        if (mounted) _load(silent: true);
+                      },
+                    ),
+                  ],
+                ),
+              ),
       ),
     );
   }
@@ -369,7 +421,7 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
                 Text('You receive: ${_ghs.format(ghsPayout)}', style: const TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 const Text(
-                  'Send RMB to our Alipay QR (no RMB wallet). After you upload proof, admin processes your GHS payout.',
+                  'Send RMB to our Alipay QR. After you upload proof, admin verifies and processes your GHS payout.',
                   style: TextStyle(color: Colors.black54, height: 1.35),
                 ),
                 if ((config['receive_instructions'] as String?)?.isNotEmpty == true) ...[
@@ -420,7 +472,7 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
                             height: 220,
                             width: 220,
                             fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => const Icon(Icons.qr_code_2, size: 80),
+                            errorBuilder: (_, _, _) => const Icon(Icons.qr_code_2, size: 80),
                           ),
                         ),
                       ],
@@ -497,6 +549,7 @@ class SellRmbShowScreen extends StatefulWidget {
 class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
   Map<String, dynamic>? transfer;
   String? error;
+  Timer? _pollTimer;
 
   @override
   void initState() {
@@ -504,15 +557,65 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  void _schedulePoll() {
+    _pollTimer?.cancel();
+    final status = transfer?['status'] as String?;
+    if (_sellTransferIsTerminal(status)) return;
+    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) => _load(silent: true));
+  }
+
+  Future<void> _load({bool silent = false}) async {
     try {
       final data = await context.read<AppStore>().fetchSellRmb(widget.id);
       if (!mounted) return;
-      setState(() => transfer = data);
+      setState(() {
+        transfer = data;
+        error = null;
+      });
+      _schedulePoll();
     } catch (e) {
       if (!mounted) return;
-      setState(() => error = e.toString());
+      if (!silent) setState(() => error = e.toString());
     }
+  }
+
+  void _openImage(String url) {
+    final resolved = ApiConfig.resolveMediaUrl(url);
+    if (resolved.isEmpty) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              child: CachedNetworkImage(
+                imageUrl: resolved,
+                fit: BoxFit.contain,
+                errorWidget: (_, _, _) => const Center(
+                  child: Icon(Icons.broken_image_outlined, color: Colors.white, size: 48),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                onPressed: () => Navigator.pop(ctx),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -531,87 +634,217 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
         body: error != null ? Center(child: Text(error!)) : const FullPageLoader(label: 'Loading…'),
       );
     }
+
     final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : <String, dynamic>{};
-    final timeline = (item['timeline'] as List? ?? []).whereType<Map>().toList();
-    final fields = (item['fields'] as List? ?? []).whereType<Map>().toList();
+    final breakdown = quote['breakdown'] is Map ? Map<String, dynamic>.from(quote['breakdown'] as Map) : <String, dynamic>{};
+    final timeline = (item['timeline'] as List? ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    final fields = (item['fields'] as List? ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
     final proofs = (item['proofs'] as List? ?? [])
         .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
         .where((p) => p['type'] == 'payout_sent')
         .toList();
     final currency = (quote['payout_currency'] as String?) ?? 'ghs';
     final payout = currency == 'ghs'
         ? _ghs.format((quote['ghs_payout'] as num?)?.toDouble() ?? 0)
         : _usd.format((quote['usd_payout'] as num?)?.toDouble() ?? 0);
-    final ghsPerRmb = (quote['ghs_per_rmb'] as num?)?.toDouble() ??
-        (((quote['usd_per_rmb'] as num?)?.toDouble() ?? 0) *
-            ((quote['ghs_per_usd'] as num?)?.toDouble() ?? 0));
+    final reference = '${item['reference'] ?? ''}';
+    final status = '${item['status'] ?? ''}';
+    final statusLabel = '${item['status_label'] ?? status}';
+    final terminal = _sellTransferIsTerminal(status);
+    final completed = status == 'completed';
+    final rmbAmount = (quote['rmb_amount'] as num?)?.toDouble() ?? 0;
+    final statusStyle = buyRmbTransferStatusStyle(item);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.canPop() ? context.pop() : context.go('/wallet/china-rmb'),
         ),
         automaticallyImplyLeading: false,
-        title: Text('${item['reference']}'),
+        title: Text(reference),
+        actions: [
+          if (!terminal)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 6),
+                      Text('Auto refresh', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _load,
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
-            Text(
-              '${item['status_label']}',
-              style: const TextStyle(color: Color(0xFF047857), fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 12),
-            Text('RMB sold: ¥${((quote['rmb_amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}'),
-            Text('Buying rate: 1 RMB = GH₵${ghsPerRmb.toStringAsFixed(4)}'),
-            Text('Expected payout: $payout'),
-            if (item['payout_amount'] != null)
-              Text(
-                'Paid: ${currency == 'ghs' ? _ghs.format((item['payout_amount'] as num).toDouble()) : _usd.format((item['payout_amount'] as num).toDouble())}',
-                style: const TextStyle(fontWeight: FontWeight.w800),
+            if (!terminal)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(statusStyle.icon, color: statusStyle.color, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(fontWeight: FontWeight.w800, color: statusStyle.color),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '¥${rmbAmount.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF047857)),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Expected payout: $payout',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                  ),
+                  if (str(breakdown['rate']).isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text('${breakdown['rate']}', style: const TextStyle(color: AppColors.textSecondary)),
+                  ],
+                  if (completed) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Completed ${_formatSellWhen(item['completed_at'] as String?)}',
+                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Progress', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 10),
             ...timeline.map((step) {
               final current = step['current'] == true;
               final done = step['done'] == true;
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  current
-                      ? Icons.radio_button_checked
-                      : done
-                          ? Icons.check_circle
-                          : Icons.radio_button_unchecked,
+              final failed = step['failed'] == true;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
                   color: current
-                      ? const Color(0xFF047857)
+                      ? const Color(0xFFECFDF5)
                       : done
-                          ? Colors.green
-                          : Colors.grey,
+                          ? const Color(0xFFF0FDF4)
+                          : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: failed
+                        ? const Color(0xFFFECACA)
+                        : current
+                            ? const Color(0xFF6EE7B7)
+                            : const Color(0xFFE5E7EB),
+                  ),
                 ),
-                title: Text(
-                  '${step['label']}',
-                  style: TextStyle(fontWeight: current ? FontWeight.w800 : FontWeight.w500),
+                child: Row(
+                  children: [
+                    Icon(
+                      failed
+                          ? Icons.cancel_rounded
+                          : done
+                              ? Icons.check_circle_rounded
+                              : current
+                                  ? Icons.hourglass_top_rounded
+                                  : Icons.radio_button_unchecked,
+                      color: failed
+                          ? AppColors.danger
+                          : done || current
+                              ? const Color(0xFF047857)
+                              : Colors.grey,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${step['label']}',
+                        style: TextStyle(
+                          fontWeight: current ? FontWeight.w800 : FontWeight.w600,
+                          color: failed ? AppColors.danger : null,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               );
             }),
             if ((item['rejection_reason'] as String?)?.isNotEmpty == true)
               Padding(
-                padding: const EdgeInsets.only(top: 12),
+                padding: const EdgeInsets.only(top: 8),
                 child: Text('${item['rejection_reason']}', style: const TextStyle(color: Colors.red)),
               ),
             if (proofs.isNotEmpty) ...[
               const SizedBox(height: 16),
-              const Text('Payout proof', style: TextStyle(fontWeight: FontWeight.w800)),
+              const Text('Payout proof', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+              const SizedBox(height: 8),
               ...proofs.map((proof) {
                 final url = proof['url'] as String?;
-                return TextButton(
-                  onPressed: url == null
-                      ? null
-                      : () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-                  child: Text('${proof['original_name'] ?? 'View proof'}'),
+                if (url == null || url.isEmpty) {
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${proof['original_name'] ?? 'Proof'}'),
+                  );
+                }
+                return GestureDetector(
+                  onTap: () => _openImage(url),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: AspectRatio(
+                      aspectRatio: 3 / 4,
+                      child: CachedNetworkImage(
+                        imageUrl: ApiConfig.resolveMediaUrl(url),
+                        fit: BoxFit.contain,
+                        errorWidget: (_, _, _) => const Center(child: Icon(Icons.broken_image_outlined)),
+                      ),
+                    ),
+                  ),
                 );
               }),
             ],
@@ -624,7 +857,7 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
                 title: Text('${field['label']}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
                 subtitle: url != null
                     ? GestureDetector(
-                        onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+                        onTap: () => _openImage(url),
                         child: const Text(
                           'View file',
                           style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
@@ -646,4 +879,10 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
       ),
     );
   }
+}
+
+String str(dynamic value, [String fallback = '']) {
+  if (value == null) return fallback;
+  final text = '$value'.trim();
+  return text.isEmpty ? fallback : text;
 }

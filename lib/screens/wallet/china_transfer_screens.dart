@@ -53,6 +53,8 @@ bool _transferIsTerminal(String? status) {
     'payment_rejected',
     'transfer_failed',
     'refunded',
+    'rejected',
+    'failed',
   ].contains(status);
 }
 
@@ -617,7 +619,7 @@ class _BuyRmbTransferStatusStyle {
   final IconData icon;
 }
 
-_BuyRmbTransferStatusStyle _buyRmbTransferStatusStyle(Map<String, dynamic> item) {
+_BuyRmbTransferStatusStyle buyRmbTransferStatusStyle(Map<String, dynamic> item) {
   final status = '${item['status'] ?? ''}';
   final label = '${item['status_label'] ?? status}';
   switch (status) {
@@ -632,6 +634,10 @@ _BuyRmbTransferStatusStyle _buyRmbTransferStatusStyle(Map<String, dynamic> item)
     case 'processing':
     case 'payment_verification':
     case 'payment_submitted':
+    case 'submitted':
+    case 'rmb_verification':
+    case 'rmb_received':
+    case 'payout_processing':
       return _BuyRmbTransferStatusStyle(
         label: label,
         color: const Color(0xFF6D28D9),
@@ -640,6 +646,7 @@ _BuyRmbTransferStatusStyle _buyRmbTransferStatusStyle(Map<String, dynamic> item)
         icon: Icons.hourglass_top_rounded,
       );
     case 'rmb_sent':
+    case 'paid':
       return _BuyRmbTransferStatusStyle(
         label: label,
         color: const Color(0xFF047857),
@@ -659,6 +666,8 @@ _BuyRmbTransferStatusStyle _buyRmbTransferStatusStyle(Map<String, dynamic> item)
     case 'payment_rejected':
     case 'transfer_failed':
     case 'refunded':
+    case 'rejected':
+    case 'failed':
       return _BuyRmbTransferStatusStyle(
         label: label,
         color: const Color(0xFFB91C1C),
@@ -699,7 +708,7 @@ class BuyRmbRecentTransferTile extends StatelessWidget {
     final usdPayout = (quote['usd_payout'] as num?)?.toDouble() ?? 0;
     final reference = '${item['reference'] ?? 'Transfer'}';
     final when = _formatTransferListDate(item['created_at'] as String?);
-    final status = _buyRmbTransferStatusStyle(item);
+    final status = buyRmbTransferStatusStyle(item);
     final payoutLabel = payoutCurrency == 'ghs'
         ? _ghs.format(ghsPayout)
         : '\$${usdPayout.toStringAsFixed(2)}';
