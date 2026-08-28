@@ -16,6 +16,7 @@ import '../../utils/wallet_statement_printer.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
+import '../../widgets/momo_widgets.dart';
 import '../../widgets/tab_refresh.dart';
 import '../../widgets/wallet_receipt_sheet.dart';
 import '../cart/paystack_payment_screen.dart';
@@ -298,7 +299,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
       return;
     }
     if (!paystackConfigured && manualEnabled) {
-      await _openManualDeposit();
+      await _openManualRechargePreview();
       return;
     }
 
@@ -411,7 +412,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
 
     if (!mounted || choice == null) return;
     if (choice == 'manual') {
-      await _openManualDeposit();
+      await _openManualRechargePreview();
     } else if (choice == 'paystack') {
       await _paystackTopUp();
     }
@@ -583,6 +584,106 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     // Reload either way: Paystack's webhook may have credited the top-up even
     // when the in-app verification did not run.
     await _load();
+  }
+
+  /// MoMo accounts keyed mtn|telecel|airteltigo from cached manual funding.
+  Map<String, Map> _momoByNetworkFromFunding() {
+    final map = <String, Map>{};
+    final accounts = funding?['accounts'];
+    if (accounts is! List) return map;
+    for (final raw in accounts) {
+      if (raw is! Map) continue;
+      if (raw['type'] == 'bank') continue;
+      final id = normalizeMomoNetworkId('${raw['network'] ?? ''}');
+      if (id != null && !map.containsKey(id)) map[id] = raw;
+    }
+    return map;
+  }
+
+  String _fundingNumber(Map account) => '${account['account_number'] ?? account['number'] ?? ''}';
+
+  String _fundingName(Map account) => '${account['account_name'] ?? account['name'] ?? ''}';
+
+  /// Compact MoMo picker + pay-to details, then full manual deposit for proof.
+  Future<void> _openManualRechargePreview() async {
+    if (!await _ensureKycToStoreFunds()) return;
+    if (!mounted) return;
+
+    final momo = _momoByNetworkFromFunding();
+    if (momo.isEmpty) {
+      await _openManualDeposit();
+      return;
+    }
+
+    String? selected;
+    for (final id in ['mtn', 'telecel', 'airteltigo']) {
+      if (momo.containsKey(id)) {
+        selected = id;
+        break;
+      }
+    }
+
+    final continued = await showAppSheet<bool>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            final account = selected != null ? momo[selected] : null;
+            return SheetShell(
+              action: SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF16A34A),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: selected == null ? null : () => Navigator.pop(ctx, true),
+                  child: const Text(
+                    'Continue — submit proof',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                ),
+              ),
+              children: [
+                const Text(
+                  'Manual deposit',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Choose network, copy the CityShop number, then submit proof.',
+                  style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+                ),
+                const SizedBox(height: 16),
+                MomoNetworkPicker(
+                  value: selected,
+                  enabledNetworks: momo.keys.toSet(),
+                  onChanged: (id) {
+                    if (!momo.containsKey(id)) return;
+                    setModal(() => selected = id);
+                  },
+                  label: 'Pay with',
+                  hint: 'Tap to change',
+                ),
+                if (account != null && selected != null) ...[
+                  const SizedBox(height: 14),
+                  PaymentDetailsCard(
+                    accountNumber: _fundingNumber(account),
+                    accountName: _fundingName(account),
+                    network: selected,
+                    hint: 'Send payment from your phone, then continue to upload proof.',
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || continued != true) return;
+    await context.push('/wallet/manual-deposit', extra: selected);
+    if (mounted) await _load();
   }
 
   /// Manual deposit lives on its own page, mirroring the web flow.

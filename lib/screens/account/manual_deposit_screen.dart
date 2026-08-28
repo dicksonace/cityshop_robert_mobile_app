@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import '../../api/api_client.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/momo_widgets.dart';
 
@@ -19,7 +18,10 @@ final _stamp = DateFormat('d MMM yyyy, h:mm a');
 /// Manual deposit, laid out like the web `/wallet/manual-top-up` page: pick a
 /// network, copy the CityShop number, then submit proof for admin review.
 class ManualDepositScreen extends StatefulWidget {
-  const ManualDepositScreen({super.key});
+  const ManualDepositScreen({super.key, this.initialNetwork});
+
+  /// Pre-select mtn|telecel|airteltigo when opened from the recharge sheet.
+  final String? initialNetwork;
 
   @override
   State<ManualDepositScreen> createState() => _ManualDepositScreenState();
@@ -62,6 +64,7 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
       setState(() {
         funding = data;
         loading = false;
+        _ensureDefaultNetwork();
       });
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -105,50 +108,24 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
 
   String _name(Map account) => '${account['account_name'] ?? account['name'] ?? ''}';
 
-  void _selectNetwork(String id) {
-    final account = _momoByNetwork[id];
-    if (account == null) return;
-    setState(() => selectedNetwork = id);
-    _showDetails(id, account);
+  void _ensureDefaultNetwork() {
+    final preferred = widget.initialNetwork;
+    if (preferred != null && _momoByNetwork.containsKey(preferred)) {
+      selectedNetwork = preferred;
+      return;
+    }
+    if (selectedNetwork != null && _momoByNetwork.containsKey(selectedNetwork)) return;
+    for (final id in ['mtn', 'telecel', 'airteltigo']) {
+      if (_momoByNetwork.containsKey(id)) {
+        selectedNetwork = id;
+        return;
+      }
+    }
   }
 
-  Future<void> _showDetails(String id, Map account) async {
-    await showAppSheet<void>(
-      context: context,
-      builder: (ctx) => SheetShell(
-        action: SizedBox(
-          height: 48,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              "I've copied — continue",
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-            ),
-          ),
-        ),
-        children: [
-          Text(
-            momoNetworkLabel(id),
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Copy the number, send from your phone, then submit proof on this page.',
-            style: TextStyle(color: AppColors.textSecondary, height: 1.35),
-          ),
-          const SizedBox(height: 14),
-          PaymentDetailsCard(
-            accountNumber: _number(account),
-            accountName: _name(account),
-            network: id,
-          ),
-        ],
-      ),
-    );
+  void _selectNetwork(String id) {
+    if (!_momoByNetwork.containsKey(id)) return;
+    setState(() => selectedNetwork = id);
   }
 
   Future<void> _pickProof() async {
@@ -304,45 +281,19 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Tap a network to see the number / till and account name — then Copy and send.',
+                'Tap a network, copy the CityShop number, send payment, then submit proof below.',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
               ),
-              const SizedBox(height: 12),
-              for (final network in momoNetworks) ...[
-                _NetworkTile(
-                  network: network,
-                  selected: selected == network.id,
-                  configured: momo.containsKey(network.id),
-                  onTap: () => _selectNetwork(network.id),
-                ),
-                const SizedBox(height: 8),
-              ],
-              if (selectedAccount != null) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Paying via ${momoNetworkLabel(selected)}',
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _showDetails(selected!, selectedAccount),
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        foregroundColor: const Color(0xFF0369A1),
-                        minimumSize: const Size(0, 32),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text(
-                        'View details again',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
+              const SizedBox(height: 14),
+              MomoNetworkPicker(
+                value: selected,
+                enabledNetworks: momo.keys.toSet(),
+                onChanged: _selectNetwork,
+                label: 'Pay with',
+                hint: 'Tap to change',
+              ),
+              if (selectedAccount != null && selected != null) ...[
+                const SizedBox(height: 14),
                 PaymentDetailsCard(
                   accountNumber: _number(selectedAccount),
                   accountName: _name(selectedAccount),
@@ -479,79 +430,6 @@ class _Card extends StatelessWidget {
         border: Border.all(color: AppColors.border),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
-    );
-  }
-}
-
-class _NetworkTile extends StatelessWidget {
-  const _NetworkTile({
-    required this.network,
-    required this.selected,
-    required this.configured,
-    required this.onTap,
-  });
-
-  final MomoNetwork network;
-  final bool selected;
-  final bool configured;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tile = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: selected ? network.selectedFill : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: selected ? network.selectedBorder : const Color(0xFFE5E7EB),
-          width: selected ? 2 : 1.4,
-        ),
-      ),
-      child: Row(
-        children: [
-          MomoNetworkLogo(network: network.id, size: 38),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  network.id == 'mtn' ? 'RECOMMENDED' : 'MOMO',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.7,
-                    color: selected ? network.accent : AppColors.textMuted,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  network.label,
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  configured ? 'Tap to view & copy' : 'Not configured',
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                ),
-              ],
-            ),
-          ),
-          if (selected)
-            Icon(Icons.check_circle, color: network.selectedBorder, size: 20)
-          else if (configured)
-            const Icon(Icons.chevron_right, color: AppColors.textMuted),
-        ],
-      ),
-    );
-
-    if (!configured) return Opacity(opacity: 0.45, child: tile);
-
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(borderRadius: BorderRadius.circular(14), onTap: onTap, child: tile),
     );
   }
 }

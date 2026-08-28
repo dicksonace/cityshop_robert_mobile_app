@@ -72,11 +72,6 @@ class _FakeApiClient extends ApiClient {
   }
 }
 
-/// Choosing a network fills the page card and opens the sheet at the same time,
-/// so sheet assertions have to say which copy of the details they mean.
-Finder _inSheet(Finder finder) =>
-    find.descendant(of: find.byType(BottomSheet), matching: finder);
-
 Future<void> _pumpScreen(WidgetTester tester, ApiClient api) async {
   final store = AppStore(api)
     ..user = const AppUser(id: 1, name: 'Robert', email: 'robert@example.com');
@@ -90,8 +85,18 @@ Future<void> _pumpScreen(WidgetTester tester, ApiClient api) async {
   await tester.pumpAndSettle();
 }
 
+Finder _networkChip(String label) => find.descendant(
+      of: find.byType(MomoNetworkPicker),
+      matching: find.text(label),
+    );
+
+Future<void> _tapNetwork(WidgetTester tester, String label) async {
+  await tester.tap(_networkChip(label).last);
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  testWidgets('lays out the two numbered steps and every network', (tester) async {
+  testWidgets('lays out the two numbered steps and compact network picker', (tester) async {
     tester.view.physicalSize = const Size(1440, 3000);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
@@ -101,60 +106,40 @@ void main() {
     expect(find.text('1. Choose payment method'), findsOneWidget);
     expect(find.text('2. After you pay — submit proof'), findsOneWidget);
 
-    // Same wording and ordering as the web page.
-    expect(find.text('MTN Mobile Money'), findsOneWidget);
-    expect(find.text('Telecel Cash'), findsOneWidget);
-    expect(find.text('AirtelTigo Cash'), findsOneWidget);
-    expect(find.text('RECOMMENDED'), findsOneWidget);
-    expect(find.text('MOMO'), findsNWidgets(2));
-    expect(find.text('Tap to view & copy'), findsNWidgets(3));
+    expect(find.text('Pay with'), findsOneWidget);
+    expect(find.byType(MomoNetworkPicker), findsOneWidget);
+    expect(_networkChip('MTN'), findsNWidgets(2));
+    expect(_networkChip('Telecel'), findsOneWidget);
+    expect(_networkChip('AT'), findsNWidgets(2));
+
+    // MTN is selected by default — pay-to details show inline.
+    expect(find.text('PAY TO'), findsOneWidget);
+    expect(find.text('0539790093'), findsOneWidget);
 
     expect(find.text('Amount sent (GH₵)'), findsOneWidget);
     expect(find.text("I've paid — submit for verification"), findsOneWidget);
   });
 
-  testWidgets('picking MTN shows the pay-to details and keeps them on the page', (tester) async {
+  testWidgets('switching networks updates inline pay-to details', (tester) async {
     tester.view.physicalSize = const Size(1440, 3000);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
 
     await _pumpScreen(tester, _FakeApiClient());
 
-    await tester.tap(find.text('MTN Mobile Money'));
-    await tester.pumpAndSettle();
-
-    // The sheet mirrors the web dialog.
-    expect(find.text('Copy the number, send from your phone, then submit proof on this page.'), findsOneWidget);
-    expect(_inSheet(find.text('PAY TO')), findsOneWidget);
-    expect(_inSheet(find.text('MOMO NUMBER')), findsOneWidget);
-    expect(_inSheet(find.text('0539790093')), findsOneWidget);
-    expect(_inSheet(find.text('CITY UNLOCK VENTURES')), findsOneWidget);
-    expect(_inSheet(find.text('ROBERT ASARE')), findsOneWidget);
-    expect(_inSheet(find.text('COPY')), findsOneWidget);
-
-    await tester.tap(find.text("I've copied — continue"));
-    await tester.pumpAndSettle();
-
-    // Details stay visible inline once a network is chosen.
-    expect(find.text('Paying via MTN Mobile Money'), findsOneWidget);
-    expect(find.text('View details again'), findsOneWidget);
-    expect(find.text('Send the exact amount, then fill the proof form below.'), findsOneWidget);
     expect(find.text('0539790093'), findsOneWidget);
-  });
 
-  testWidgets('Telecel is paid into a till, not a MoMo number', (tester) async {
-    tester.view.physicalSize = const Size(1440, 3000);
-    tester.view.devicePixelRatio = 2;
-    addTearDown(tester.view.reset);
+    await _tapNetwork(tester, 'Telecel');
 
-    await _pumpScreen(tester, _FakeApiClient());
-
-    await tester.tap(find.text('Telecel Cash'));
-    await tester.pumpAndSettle();
-
-    expect(_inSheet(find.text('TILL NUMBER')), findsOneWidget);
+    expect(find.text('TILL NUMBER'), findsOneWidget);
     expect(find.text('MOMO NUMBER'), findsNothing);
-    expect(_inSheet(find.text('513014')), findsOneWidget);
+    expect(find.text('513014'), findsOneWidget);
+    expect(find.text('0539790093'), findsNothing);
+
+    await _tapNetwork(tester, 'MTN');
+
+    expect(find.text('0539790093'), findsOneWidget);
+    expect(find.text('Send the exact amount, then fill the proof form below.'), findsOneWidget);
   });
 
   testWidgets('copy puts the number on the clipboard', (tester) async {
@@ -177,48 +162,32 @@ void main() {
 
     await _pumpScreen(tester, _FakeApiClient());
 
-    await tester.tap(find.text('AirtelTigo Cash'));
-    await tester.pumpAndSettle();
-    await tester.tap(_inSheet(find.text('COPY')));
+    await _tapNetwork(tester, 'AT');
+    await tester.tap(find.text('COPY'));
     await tester.pump();
 
     expect(copied, ['0273706541']);
-    expect(_inSheet(find.text('COPIED')), findsOneWidget);
+    expect(find.text('COPIED'), findsOneWidget);
 
-    // The button goes back to "Copy" on its own.
     await tester.pump(const Duration(seconds: 2));
-    expect(_inSheet(find.text('COPY')), findsOneWidget);
+    expect(find.text('COPY'), findsOneWidget);
   });
 
-  testWidgets('submitting is blocked until a network is chosen', (tester) async {
+  testWidgets('submit is enabled when a network is auto-selected', (tester) async {
     tester.view.physicalSize = const Size(1440, 3000);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
 
     await _pumpScreen(tester, _FakeApiClient());
 
-    expect(find.text('Choose a payment method above first.'), findsOneWidget);
+    expect(find.text('Choose a payment method above first.'), findsNothing);
     final button = tester.widget<ElevatedButton>(
       find.ancestor(
         of: find.text("I've paid — submit for verification"),
         matching: find.byType(ElevatedButton),
       ),
     );
-    expect(button.onPressed, isNull);
-
-    await tester.tap(find.text('MTN Mobile Money'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text("I've copied — continue"));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Choose a payment method above first.'), findsNothing);
-    final enabled = tester.widget<ElevatedButton>(
-      find.ancestor(
-        of: find.text("I've paid — submit for verification"),
-        matching: find.byType(ElevatedButton),
-      ),
-    );
-    expect(enabled.onPressed, isNotNull);
+    expect(button.onPressed, isNotNull);
   });
 
   testWidgets('an unconfigured network cannot be selected', (tester) async {
@@ -234,12 +203,12 @@ void main() {
       }),
     );
 
-    expect(find.text('Not configured'), findsNWidgets(2));
+    expect(find.text('0539790093'), findsOneWidget);
 
-    await tester.tap(find.text('Telecel Cash'));
-    await tester.pumpAndSettle();
+    await _tapNetwork(tester, 'Telecel');
 
-    expect(find.text('PAY TO'), findsNothing);
+    expect(find.text('513014'), findsNothing);
+    expect(find.text('0539790093'), findsOneWidget);
   });
 
   testWidgets('recent requests show amount and review status', (tester) async {
@@ -249,7 +218,7 @@ void main() {
 
     await _pumpScreen(tester, _FakeApiClient());
 
-    final requests = find.text('Your recent requests');
+    final requests = find.text('Recent Deposit');
     await tester.scrollUntilVisible(requests, 300, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
 

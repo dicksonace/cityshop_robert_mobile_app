@@ -105,6 +105,123 @@ String momoNumberFieldLabel(String? network, String? accountNumber) {
   return momoNetworkMeta(id)?.numberLabel ?? 'MoMo number';
 }
 
+/// Compact MTN / Telecel / AirtelTigo selector — one row, tap to switch network.
+class MomoNetworkPicker extends StatelessWidget {
+  const MomoNetworkPicker({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.enabledNetworks,
+    this.label = 'Network',
+    this.hint = 'Tap to change network',
+  });
+
+  final String? value;
+  final ValueChanged<String> onChanged;
+  final Set<String>? enabledNetworks;
+  final String label;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+            const Spacer(),
+            if (value != null)
+              Text(hint, style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            for (final network in momoNetworks) ...[
+              if (network != momoNetworks.first) const SizedBox(width: 8),
+              Expanded(
+                child: _CompactNetworkChip(
+                  network: network,
+                  selected: value == network.id,
+                  enabled: enabledNetworks?.contains(network.id) ?? true,
+                  onTap: () => onChanged(network.id),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactNetworkChip extends StatelessWidget {
+  const _CompactNetworkChip({
+    required this.network,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final MomoNetwork network;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: selected ? network.selectedFill : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: selected ? network.selectedBorder : const Color(0xFFE5E7EB),
+          width: selected ? 2 : 1.2,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          MomoNetworkLogo(network: network.id, size: 32),
+          const SizedBox(height: 6),
+          Text(
+            network.id == 'mtn'
+                ? 'MTN'
+                : network.id == 'telecel'
+                    ? 'Telecel'
+                    : 'AT',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              color: selected ? network.accent : AppColors.textPrimary,
+            ),
+          ),
+          if (selected)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Icon(Icons.check_circle, size: 14, color: network.selectedBorder),
+            ),
+        ],
+      ),
+    );
+
+    if (!enabled) {
+      return Opacity(opacity: 0.4, child: child);
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: child,
+      ),
+    );
+  }
+}
+
 /// Brand-coloured network mark (not an official trademark), same as the web.
 class MomoNetworkLogo extends StatelessWidget {
   const MomoNetworkLogo({super.key, this.network, this.size = 40});

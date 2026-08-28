@@ -169,7 +169,12 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
       GoRoute(path: '/following', builder: (_, __) => const FollowingScreen()),
       GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
-      GoRoute(path: '/wallet/manual-deposit', builder: (_, __) => const ManualDepositScreen()),
+      GoRoute(
+        path: '/wallet/manual-deposit',
+        builder: (_, state) => ManualDepositScreen(
+          initialNetwork: state.extra is String ? state.extra as String : null,
+        ),
+      ),
       GoRoute(
         path: '/wallet/manual-deposit/:id',
         builder: (_, state) => ManualDepositStatusScreen(
