@@ -1,13 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
-
-final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
+import 'china_transfer_screens.dart';
 
 String _formatBuyRate(double n) {
   if (n <= 0) return '—';
@@ -29,6 +29,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   Map<String, dynamic> sellConfig = {};
   List<Map<String, dynamic>> buyTransfers = [];
   List<Map<String, dynamic>> sellTransfers = [];
+  Timer? _pollTimer;
 
   @override
   void initState() {
@@ -36,11 +37,24 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      loading = true;
-      error = null;
-    });
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  void _schedulePoll() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) => _load(silent: true));
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        loading = true;
+        error = null;
+      });
+    }
     try {
       final store = context.read<AppStore>();
       await store.loadWallet();
@@ -59,11 +73,13 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
         loading = false;
+        error = null;
       });
+      _schedulePoll();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        error = e.toString();
+        if (!silent) error = e.toString();
         loading = false;
       });
     }
@@ -78,6 +94,26 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   bool get buyOpen => buyConfig['enabled'] == true;
   bool get sellOpen => sellConfig['enabled'] == true;
 
+  Map<String, dynamic>? get buyTransferHours =>
+      buyConfig['transfer_hours'] is Map ? Map<String, dynamic>.from(buyConfig['transfer_hours'] as Map) : null;
+
+  bool get buyHoursOpen {
+    final hours = buyTransferHours;
+    if (hours == null || hours['configured'] != true) return true;
+    return hours['is_open_now'] == true;
+  }
+
+  String get buyClosedNote {
+    final hours = buyTransferHours;
+    final fromApi = (hours?['closed_message'] as String?)?.trim();
+    if (fromApi != null && fromApi.isNotEmpty) return fromApi;
+    final openLabel = hours?['open_time_label'] as String?;
+    if (openLabel != null && openLabel.isNotEmpty) {
+      return "Sorry, we're closed. We continue at $openLabel.";
+    }
+    return "Sorry, we're closed. We continue when we reopen.";
+  }
+
   @override
   Widget build(BuildContext context) {
     final buyGhsPerRmb = (buyRate?['ghs_per_rmb'] as num?)?.toDouble();
@@ -90,12 +126,47 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('China / RMB')),
+      appBar: AppBar(
+        title: const Text('China / RMB'),
+        actions: [
+          if (!loading)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 6),
+                      Text('Auto refresh', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: () => _load(),
+          ),
+        ],
+      ),
       body: loading
           ? const FullPageLoader(label: 'Loading China / RMB…')
           : RefreshIndicator(
-              onRefresh: _load,
+              onRefresh: () => _load(),
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 children: [
                   if (error != null)
@@ -137,6 +208,36 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                           'No hidden fees · Secure transactions',
                           style: TextStyle(color: Colors.white70, fontSize: 13),
                         ),
+                        if (buyOpen && buyRmbPerGhs != null && !buyHoursOpen) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.schedule_rounded, color: Colors.white, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    buyClosedNote,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
@@ -150,7 +251,11 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             child: Text(
-                              buyOpen ? 'Buy RMB →' : 'Buy RMB paused',
+                              !buyOpen
+                                  ? 'Buy RMB paused'
+                                  : !buyHoursOpen
+                                      ? 'Closed · opens ${buyTransferHours?['open_time_label'] ?? 'soon'}'
+                                      : 'Buy RMB →',
                               style: const TextStyle(fontWeight: FontWeight.w900),
                             ),
                           ),
@@ -196,49 +301,25 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  const Text('Recent activity', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 10),
-                  if (buyTransfers.isEmpty && sellTransfers.isEmpty)
-                    const Text('No China / RMB transactions yet.', style: TextStyle(color: AppColors.textMuted)),
-                  ...buyTransfers.map((item) {
-                    final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
-                    final rmb = (quote['rmb_amount'] as num?)?.toDouble() ?? 0;
-                    final total = (quote['total_payable_ghs'] as num?)?.toDouble() ?? 0;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        onTap: () => context.push('/wallet/china-transfer/${item['id']}'),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          side: const BorderSide(color: AppColors.border),
-                        ),
-                        title: Text('Buy RMB · ${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                        subtitle: Text('${_ghs.format(total)} → ¥${rmb.toStringAsFixed(2)}'),
-                        trailing: Text('${item['status_label'] ?? item['status']}', style: const TextStyle(fontSize: 12)),
-                      ),
-                    );
-                  }),
-                  ...sellTransfers.map((item) {
-                    final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
-                    final rmb = (quote['rmb_amount'] as num?)?.toDouble() ?? 0;
-                    final payoutCurrency = quote['payout_currency']?.toString() ?? 'ghs';
-                    final payout = payoutCurrency == 'ghs'
-                        ? _ghs.format((quote['ghs_payout'] as num?)?.toDouble() ?? 0)
-                        : '\$${((quote['usd_payout'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}';
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        onTap: () => context.push('/wallet/sell-rmb/${item['id']}'),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          side: const BorderSide(color: AppColors.border),
-                        ),
-                        title: Text('Sell · ${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                        subtitle: Text('¥${rmb.toStringAsFixed(2)} → $payout'),
-                        trailing: Text('${item['status_label'] ?? item['status']}', style: const TextStyle(fontSize: 12)),
-                      ),
-                    );
-                  }),
+                  BuyRmbRecentTransfersSection(
+                    title: 'Recent activity',
+                    showAutoRefresh: true,
+                    transfers: [
+                      ...buyTransfers,
+                      ...sellTransfers.map((item) => {
+                            ...item,
+                            'reference': 'Sell · ${item['reference']}',
+                          }),
+                    ],
+                    sellFlowFor: (item) => sellTransfers.any((s) => s['id'] == item['id']),
+                    onTransferTap: (item) {
+                      if (sellTransfers.any((s) => s['id'] == item['id'])) {
+                        context.push('/wallet/sell-rmb/${item['id']}');
+                      } else {
+                        context.push('/wallet/china-transfer/${item['id']}');
+                      }
+                    },
+                  ),
                 ],
               ),
             ),

@@ -53,6 +53,17 @@ String _formatBuyRate(double n) {
   return n.toStringAsFixed(3);
 }
 
+/// Use the same 3-decimal rate for math as we show buyers (avoids 71,000×0.561 ≠ 39,831.71 drift).
+double _buyRateForCalculation(double rmbPerGhs) {
+  if (rmbPerGhs <= 0) return 0;
+  return double.parse(_formatBuyRate(rmbPerGhs));
+}
+
+String _formatRmbAmount(double n) {
+  if (n <= 0) return '';
+  return n.toStringAsFixed(2);
+}
+
 String _formatFileSize(int bytes) {
   if (bytes < 1024) return '$bytes B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(2)} KB';
@@ -91,7 +102,7 @@ class BuyRmbClosedBanner extends StatelessWidget {
 
     final message = (hours['closed_message'] as String?)?.trim().isNotEmpty == true
         ? '${hours['closed_message']}'
-        : "We're currently closed. Orders placed now will be processed when we reopen.";
+        : "Sorry, we're closed. We continue when we reopen.";
     final openLabel = hours['open_time_label'] as String?;
     final closeLabel = hours['close_time_label'] as String?;
 
@@ -248,6 +259,8 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
   late final TextEditingController cny;
   bool syncing = false;
 
+  double get calcRate => _buyRateForCalculation(widget.rmbPerGhs);
+
   @override
   void initState() {
     super.initState();
@@ -255,9 +268,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
     ghs = TextEditingController(text: start);
     final send = double.tryParse(start) ?? 0;
     cny = TextEditingController(
-      text: send > 0 && widget.rmbPerGhs > 0
-          ? (send * widget.rmbPerGhs).toStringAsFixed(2)
-          : '',
+      text: send > 0 && calcRate > 0 ? _formatRmbAmount(send * calcRate) : '',
     );
   }
 
@@ -279,8 +290,8 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
       );
     }
     final send = double.tryParse(cleaned) ?? 0;
-    if (send > 0 && widget.rmbPerGhs > 0) {
-      cny.text = (send * widget.rmbPerGhs).toStringAsFixed(2);
+    if (send > 0 && calcRate > 0) {
+      cny.text = _formatRmbAmount(send * calcRate);
     } else {
       cny.text = '';
     }
@@ -299,8 +310,8 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
       );
     }
     final receive = double.tryParse(cleaned) ?? 0;
-    if (receive > 0 && widget.rmbPerGhs > 0) {
-      ghs.text = (receive / widget.rmbPerGhs).toStringAsFixed(2);
+    if (receive > 0 && calcRate > 0) {
+      ghs.text = (receive / calcRate).toStringAsFixed(2);
     } else {
       ghs.text = '';
     }
@@ -309,8 +320,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
   }
 
   double get send => double.tryParse(ghs.text) ?? 0;
-  double get receive =>
-      widget.rmbPerGhs > 0 && send > 0 ? send * widget.rmbPerGhs : 0;
+  double get receive => calcRate > 0 && send > 0 ? send * calcRate : 0;
   double get fee =>
       widget.feeMode == 'percent' ? send * widget.feeValue / 100 : widget.feeValue;
   bool get canContinue => widget.enabled && send > 0;
@@ -367,7 +377,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '1 GHS → ${_formatBuyRate(widget.rmbPerGhs)} RMB',
+                  '1 GHS → ${_formatBuyRate(calcRate)} RMB',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white,
@@ -376,10 +386,10 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
                     letterSpacing: 0.2,
                   ),
                 ),
-                if (widget.rmbPerGhs > 0) ...[
+                if (calcRate > 0) ...[
                   const SizedBox(height: 6),
                   Text(
-                    'Current rate: ${_formatBuyRate(widget.rmbPerGhs)} RMB',
+                    'Current rate: ${_formatBuyRate(calcRate)} RMB',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.85),
                       fontSize: 12,
@@ -568,6 +578,359 @@ class _AmountFieldState extends State<_AmountField> {
   }
 }
 
+String _formatTransferListDate(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return '';
+  try {
+    final dt = DateTime.parse(raw).toLocal();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(dt.year, dt.month, dt.day);
+    if (day == today) return 'Today · ${DateFormat('h:mm a').format(dt)}';
+    if (day == today.subtract(const Duration(days: 1))) return 'Yesterday';
+    return DateFormat('d MMM yyyy').format(dt);
+  } catch (_) {
+    return raw;
+  }
+}
+
+class _BuyRmbTransferStatusStyle {
+  const _BuyRmbTransferStatusStyle({
+    required this.label,
+    required this.color,
+    required this.background,
+    required this.border,
+    required this.icon,
+  });
+
+  final String label;
+  final Color color;
+  final Color background;
+  final Color border;
+  final IconData icon;
+}
+
+_BuyRmbTransferStatusStyle _buyRmbTransferStatusStyle(Map<String, dynamic> item) {
+  final status = '${item['status'] ?? ''}';
+  final label = '${item['status_label'] ?? status}';
+  switch (status) {
+    case 'completed':
+      return _BuyRmbTransferStatusStyle(
+        label: label,
+        color: const Color(0xFF047857),
+        background: const Color(0xFFD1FAE5),
+        border: const Color(0xFFA7F3D0),
+        icon: Icons.check_circle_rounded,
+      );
+    case 'processing':
+    case 'rmb_sent':
+    case 'payment_verification':
+    case 'payment_submitted':
+      return _BuyRmbTransferStatusStyle(
+        label: label,
+        color: const Color(0xFF6D28D9),
+        background: const Color(0xFFEDE9FE),
+        border: const Color(0xFFDDD6FE),
+        icon: Icons.hourglass_top_rounded,
+      );
+    case 'pending_payment':
+      return _BuyRmbTransferStatusStyle(
+        label: label,
+        color: const Color(0xFFB45309),
+        background: const Color(0xFFFFEDD5),
+        border: const Color(0xFFFED7AA),
+        icon: Icons.schedule_rounded,
+      );
+    case 'cancelled':
+    case 'payment_rejected':
+    case 'transfer_failed':
+    case 'refunded':
+      return _BuyRmbTransferStatusStyle(
+        label: label,
+        color: const Color(0xFFB91C1C),
+        background: const Color(0xFFFEE2E2),
+        border: const Color(0xFFFECACA),
+        icon: Icons.cancel_rounded,
+      );
+    default:
+      return _BuyRmbTransferStatusStyle(
+        label: label,
+        color: AppColors.primary,
+        background: AppColors.ringOrange,
+        border: const Color(0xFFFED7AA),
+        icon: Icons.sync_rounded,
+      );
+  }
+}
+
+class BuyRmbRecentTransferTile extends StatelessWidget {
+  const BuyRmbRecentTransferTile({
+    super.key,
+    required this.item,
+    required this.onTap,
+    this.sellFlow = false,
+  });
+
+  final Map<String, dynamic> item;
+  final VoidCallback onTap;
+  final bool sellFlow;
+
+  @override
+  Widget build(BuildContext context) {
+    final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : <String, dynamic>{};
+    final ghs = (quote['total_payable_ghs'] as num?)?.toDouble() ?? 0;
+    final rmb = (quote['rmb_amount'] as num?)?.toDouble() ?? 0;
+    final payoutCurrency = quote['payout_currency']?.toString() ?? 'ghs';
+    final ghsPayout = (quote['ghs_payout'] as num?)?.toDouble() ?? 0;
+    final usdPayout = (quote['usd_payout'] as num?)?.toDouble() ?? 0;
+    final reference = '${item['reference'] ?? 'Transfer'}';
+    final when = _formatTransferListDate(item['created_at'] as String?);
+    final status = _buyRmbTransferStatusStyle(item);
+    final payoutLabel = payoutCurrency == 'ghs'
+        ? _ghs.format(ghsPayout)
+        : '\$${usdPayout.toStringAsFixed(2)}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.white,
+        elevation: 0,
+        shadowColor: Colors.black.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: sellFlow
+                            ? const [Color(0xFF059669), Color(0xFF047857)]
+                            : const [Color(0xFF7C3AED), Color(0xFF5B21B6)],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      sellFlow ? Icons.south_west_rounded : Icons.currency_exchange_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          reference,
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 0.1),
+                        ),
+                        if (when.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            when,
+                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            if (sellFlow) ...[
+                              Text(
+                                '¥${rmb.toStringAsFixed(2)}',
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF047857)),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 6),
+                                child: Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFF9CA3AF)),
+                              ),
+                              Text(
+                                payoutLabel,
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF111827)),
+                              ),
+                            ] else ...[
+                              Text(
+                                _ghs.format(ghs),
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF111827)),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 6),
+                                child: Icon(Icons.arrow_forward_rounded, size: 14, color: Color(0xFF9CA3AF)),
+                              ),
+                              Text(
+                                '¥${rmb.toStringAsFixed(2)}',
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF5B21B6)),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: status.background,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: status.border),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(status.icon, size: 13, color: status.color),
+                            const SizedBox(width: 4),
+                            Text(
+                              status.label,
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: status.color),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Icon(Icons.chevron_right_rounded, color: Color(0xFF9CA3AF), size: 22),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class BuyRmbRecentTransfersSection extends StatelessWidget {
+  const BuyRmbRecentTransfersSection({
+    super.key,
+    required this.transfers,
+    required this.onTransferTap,
+    this.title = 'Recent transfers',
+    this.sellFlowFor,
+    this.showAutoRefresh = false,
+  });
+
+  final List<Map<String, dynamic>> transfers;
+  final void Function(Map<String, dynamic> item) onTransferTap;
+  final String title;
+  final bool Function(Map<String, dynamic> item)? sellFlowFor;
+  final bool showAutoRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.history_rounded, size: 20, color: Color(0xFF5B21B6)),
+            const SizedBox(width: 8),
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const Spacer(),
+            if (showAutoRefresh)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 8,
+                      height: 8,
+                      child: CircularProgressIndicator(strokeWidth: 1.5),
+                    ),
+                    SizedBox(width: 5),
+                    Text('Live', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFF1D4ED8))),
+                  ],
+                ),
+              ),
+            if (transfers.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEDE9FE),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${transfers.length}',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF6D28D9)),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (transfers.isEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F3FF),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.receipt_long_rounded, color: Color(0xFF7C3AED), size: 28),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'No transfers yet',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Your Buy RMB history will show up here after your first transfer.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600, height: 1.4, fontSize: 13),
+                ),
+              ],
+            ),
+          )
+        else
+          ...transfers.map(
+            (item) => BuyRmbRecentTransferTile(
+              item: item,
+              sellFlow: sellFlowFor?.call(item) ?? false,
+              onTap: () => onTransferTap(item),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class ChinaTransferHubScreen extends StatefulWidget {
   const ChinaTransferHubScreen({super.key});
 
@@ -580,6 +943,7 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
   String? error;
   Map<String, dynamic> config = {};
   List<Map<String, dynamic>> transfers = [];
+  Timer? _pollTimer;
 
   @override
   void initState() {
@@ -587,11 +951,24 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      loading = true;
-      error = null;
-    });
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  void _schedulePoll() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) => _load(silent: true));
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        loading = true;
+        error = null;
+      });
+    }
     try {
       final data = await context.read<AppStore>().loadChinaTransfers();
       if (!mounted) return;
@@ -602,11 +979,13 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
         loading = false;
+        error = null;
       });
+      _schedulePoll();
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        error = e.toString();
+        if (!silent) error = e.toString();
         loading = false;
       });
     }
@@ -630,14 +1009,48 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       resizeToAvoidBottomInset: true,
-      appBar: AppBar(title: const Text('Buy RMB')),
+      appBar: AppBar(
+        title: const Text('Buy RMB'),
+        actions: [
+          if (!loading)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 10,
+                        height: 10,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 6),
+                      Text('Auto refresh', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: () => _load(),
+          ),
+        ],
+      ),
       body: loading
           ? const FullPageLoader(label: 'Loading rates…')
           : GestureDetector(
               onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
               behavior: HitTestBehavior.opaque,
               child: RefreshIndicator(
-                onRefresh: _load,
+                onRefresh: () => _load(),
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -687,27 +1100,12 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
                           ],
                         ),
                       ),
-                    const SizedBox(height: 24),
-                    const Text('Your transfers', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 8),
-                    if (transfers.isEmpty)
-                      const Text('No China transfers yet.', style: TextStyle(color: Colors.black54)),
-                    ...transfers.map((item) {
-                      final quote =
-                          item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : {};
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text('${item['reference']}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                        subtitle: Text(
-                          '${_ghs.format((quote['total_payable_ghs'] as num?)?.toDouble() ?? 0)} → ¥${((quote['rmb_amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
-                        ),
-                        trailing: Text(
-                          '${item['status_label']}',
-                          style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
-                        ),
-                        onTap: () => context.push('/wallet/china-transfer/${item['id']}'),
-                      );
-                    }),
+                    const SizedBox(height: 28),
+                    BuyRmbRecentTransfersSection(
+                      transfers: transfers,
+                      showAutoRefresh: true,
+                      onTransferTap: (item) => context.push('/wallet/china-transfer/${item['id']}'),
+                    ),
                   ],
                 ),
               ),
@@ -842,12 +1240,13 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
     final hasPin = store.user?.hasPaymentPin ?? false;
     final rate = config['rate'] is Map ? Map<String, dynamic>.from(config['rate'] as Map) : null;
     final ghsPerRmb = (rate?['ghs_per_rmb'] as num?)?.toDouble() ?? 0;
-    final rmbPerGhs = (rate?['rmb_per_ghs'] as num?)?.toDouble() ??
-        (ghsPerRmb > 0 ? 1 / ghsPerRmb : 0);
+    final rmbPerGhs = _buyRateForCalculation(
+      (rate?['rmb_per_ghs'] as num?)?.toDouble() ?? (ghsPerRmb > 0 ? 1 / ghsPerRmb : 0),
+    );
     final send = double.tryParse(amount.text) ?? 0;
     final feeMode = rate?['fee_mode'] as String? ?? 'flat';
     final feeValue = (rate?['fee_value'] as num?)?.toDouble() ?? 0;
-    // Same as rmb-wallet: RMB = GHS × (RMB per 1 GHS).
+    // Same as rmb-wallet: RMB = GHS × (RMB per 1 GHS), using the 3-decimal displayed rate.
     final rmb = rmbPerGhs > 0 ? send * rmbPerGhs : 0.0;
     final fee = feeMode == 'percent' ? send * feeValue / 100 : feeValue;
 
@@ -1590,16 +1989,6 @@ class _ChinaTransferShowScreenState extends State<ChinaTransferShowScreen> {
                     : const Icon(Icons.receipt_long),
                 label: Text(saving ? 'Saving…' : 'Download receipt'),
               ),
-            if (item['can_cancel'] == true) ...[
-              const SizedBox(height: 10),
-              OutlinedButton(
-                onPressed: () async {
-                  await context.read<AppStore>().cancelChinaTransfer(widget.id);
-                  await _load();
-                },
-                child: const Text('Cancel transfer'),
-              ),
-            ],
           ],
         ),
       ),
