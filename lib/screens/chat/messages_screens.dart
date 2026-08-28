@@ -2222,7 +2222,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                 : m.isProduct || m.isTransfer || m.isFile
                                     ? Colors.white
                                     : (m.mine ? ChatColors.outgoing : ChatColors.incoming);
-                            final compactMediaBubble = (m.isPhoto || m.isVideo) && !m.isDeleted;
+                            final compactMediaBubble =
+                                (m.isPhoto || m.isVideo || m.isVoice) && !m.isDeleted;
                             return Column(
                               children: [
                                 if (showDay && m.createdAt != null)
