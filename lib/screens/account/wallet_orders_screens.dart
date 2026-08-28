@@ -649,29 +649,22 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                   'Manual deposit',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Choose network, copy the CityShop number, then submit proof.',
-                  style: TextStyle(color: AppColors.textSecondary, height: 1.35),
-                ),
                 const SizedBox(height: 16),
-                MomoNetworkPicker(
-                  value: selected,
-                  enabledNetworks: momo.keys.toSet(),
-                  onChanged: (id) {
-                    if (!momo.containsKey(id)) return;
-                    setModal(() => selected = id);
-                  },
-                  label: 'Pay with',
-                  hint: 'Tap to change',
-                ),
                 if (account != null && selected != null) ...[
-                  const SizedBox(height: 14),
+                  MomoNetworkPicker(
+                    value: selected,
+                    enabledNetworks: momo.keys.toSet(),
+                    onChanged: (id) {
+                      if (!momo.containsKey(id)) return;
+                      setModal(() => selected = id);
+                    },
+                    selectedOnly: true,
+                  ),
+                  const SizedBox(height: 12),
                   PaymentDetailsCard(
                     accountNumber: _fundingNumber(account),
                     accountName: _fundingName(account),
                     network: selected,
-                    hint: 'Send payment from your phone, then continue to upload proof.',
                   ),
                 ],
               ],

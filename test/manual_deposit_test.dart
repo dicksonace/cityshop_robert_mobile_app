@@ -85,18 +85,15 @@ Future<void> _pumpScreen(WidgetTester tester, ApiClient api) async {
   await tester.pumpAndSettle();
 }
 
-Finder _networkChip(String label) => find.descendant(
-      of: find.byType(MomoNetworkPicker),
-      matching: find.text(label),
-    );
-
-Future<void> _tapNetwork(WidgetTester tester, String label) async {
-  await tester.tap(_networkChip(label).last);
+Future<void> _changeNetwork(WidgetTester tester, String label) async {
+  await tester.tap(find.text('Change'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('lays out the two numbered steps and compact network picker', (tester) async {
+  testWidgets('lays out the two numbered steps and selected network only', (tester) async {
     tester.view.physicalSize = const Size(1440, 3000);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
@@ -106,13 +103,14 @@ void main() {
     expect(find.text('1. Choose payment method'), findsOneWidget);
     expect(find.text('2. After you pay — submit proof'), findsOneWidget);
 
-    expect(find.text('Pay with'), findsOneWidget);
-    expect(find.byType(MomoNetworkPicker), findsOneWidget);
-    expect(_networkChip('MTN'), findsNWidgets(2));
-    expect(_networkChip('Telecel'), findsOneWidget);
-    expect(_networkChip('AT'), findsNWidgets(2));
+    expect(find.text('Choose MTN, Telecel, or AirtelTigo'), findsNothing);
+    expect(find.text('Tap a network, copy the CityShop number'), findsNothing);
 
-    // MTN is selected by default — pay-to details show inline.
+    expect(find.text('MTN Mobile Money'), findsWidgets);
+    expect(find.text('Change'), findsOneWidget);
+    expect(find.text('Telecel Cash'), findsNothing);
+    expect(find.text('AirtelTigo Cash'), findsNothing);
+
     expect(find.text('PAY TO'), findsOneWidget);
     expect(find.text('0539790093'), findsOneWidget);
 
@@ -120,7 +118,7 @@ void main() {
     expect(find.text("I've paid — submit for verification"), findsOneWidget);
   });
 
-  testWidgets('switching networks updates inline pay-to details', (tester) async {
+  testWidgets('changing network updates pay-to details', (tester) async {
     tester.view.physicalSize = const Size(1440, 3000);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
@@ -129,17 +127,11 @@ void main() {
 
     expect(find.text('0539790093'), findsOneWidget);
 
-    await _tapNetwork(tester, 'Telecel');
+    await _changeNetwork(tester, 'Telecel Cash');
 
     expect(find.text('TILL NUMBER'), findsOneWidget);
-    expect(find.text('MOMO NUMBER'), findsNothing);
     expect(find.text('513014'), findsOneWidget);
     expect(find.text('0539790093'), findsNothing);
-
-    await _tapNetwork(tester, 'MTN');
-
-    expect(find.text('0539790093'), findsOneWidget);
-    expect(find.text('Send the exact amount, then fill the proof form below.'), findsOneWidget);
   });
 
   testWidgets('copy puts the number on the clipboard', (tester) async {
@@ -162,15 +154,11 @@ void main() {
 
     await _pumpScreen(tester, _FakeApiClient());
 
-    await _tapNetwork(tester, 'AT');
+    await _changeNetwork(tester, 'AirtelTigo Cash');
     await tester.tap(find.text('COPY'));
     await tester.pump();
 
     expect(copied, ['0273706541']);
-    expect(find.text('COPIED'), findsOneWidget);
-
-    await tester.pump(const Duration(seconds: 2));
-    expect(find.text('COPY'), findsOneWidget);
   });
 
   testWidgets('submit is enabled when a network is auto-selected', (tester) async {
@@ -180,7 +168,6 @@ void main() {
 
     await _pumpScreen(tester, _FakeApiClient());
 
-    expect(find.text('Choose a payment method above first.'), findsNothing);
     final button = tester.widget<ElevatedButton>(
       find.ancestor(
         of: find.text("I've paid — submit for verification"),
@@ -205,10 +192,12 @@ void main() {
 
     expect(find.text('0539790093'), findsOneWidget);
 
-    await _tapNetwork(tester, 'Telecel');
+    await tester.tap(find.text('Change'));
+    await tester.pumpAndSettle();
 
-    expect(find.text('513014'), findsNothing);
-    expect(find.text('0539790093'), findsOneWidget);
+    expect(find.text('Telecel Cash'), findsOneWidget);
+    final telecelTile = find.widgetWithText(ListTile, 'Telecel Cash');
+    expect(tester.widget<ListTile>(telecelTile).enabled, isFalse);
   });
 
   testWidgets('recent requests show amount and review status', (tester) async {

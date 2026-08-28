@@ -105,8 +105,9 @@ String momoNumberFieldLabel(String? network, String? accountNumber) {
   return momoNetworkMeta(id)?.numberLabel ?? 'MoMo number';
 }
 
-/// Compact MTN / Telecel / AirtelTigo selector — one row, tap to switch network.
-class MomoNetworkPicker extends StatelessWidget {
+/// Compact MTN / Telecel / AirtelTigo selector.
+/// With [selectedOnly], shows one network and a Change action — not all three at once.
+class MomoNetworkPicker extends StatefulWidget {
   const MomoNetworkPicker({
     super.key,
     required this.value,
@@ -114,6 +115,7 @@ class MomoNetworkPicker extends StatelessWidget {
     this.enabledNetworks,
     this.label = 'Network',
     this.hint = 'Tap to change network',
+    this.selectedOnly = false,
   });
 
   final String? value;
@@ -121,21 +123,117 @@ class MomoNetworkPicker extends StatelessWidget {
   final Set<String>? enabledNetworks;
   final String label;
   final String hint;
+  final bool selectedOnly;
+
+  @override
+  State<MomoNetworkPicker> createState() => _MomoNetworkPickerState();
+}
+
+class _MomoNetworkPickerState extends State<MomoNetworkPicker> {
+  bool _enabled(String id) => widget.enabledNetworks?.contains(id) ?? true;
+
+  Future<void> _pickNetwork(BuildContext context) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Choose network',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                ),
+                const SizedBox(height: 12),
+                for (final network in momoNetworks) ...[
+                  ListTile(
+                    enabled: _enabled(network.id),
+                    leading: MomoNetworkLogo(network: network.id, size: 36),
+                    title: Text(
+                      network.label,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    trailing: widget.value == network.id
+                        ? Icon(Icons.check_circle, color: network.selectedBorder)
+                        : null,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    onTap: _enabled(network.id)
+                        ? () => Navigator.pop(ctx, network.id)
+                        : null,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (picked != null) widget.onChanged(picked);
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (widget.selectedOnly && widget.value != null) {
+      final meta = momoNetworkMeta(widget.value);
+      return Material(
+        color: meta?.selectedFill ?? Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _pickNetwork(context),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: meta?.selectedBorder ?? const Color(0xFFE5E7EB), width: 2),
+            ),
+            child: Row(
+              children: [
+                MomoNetworkLogo(network: widget.value, size: 36),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    momoNetworkLabel(widget.value),
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
+                ),
+                Text(
+                  'Change',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: meta?.accent ?? AppColors.primary,
+                  ),
+                ),
+                Icon(Icons.chevron_right, size: 18, color: meta?.accent ?? AppColors.primary),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-            const Spacer(),
-            if (value != null)
-              Text(hint, style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
-          ],
-        ),
-        const SizedBox(height: 10),
+        if (!widget.selectedOnly) ...[
+          Row(
+            children: [
+              Text(widget.label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+              const Spacer(),
+              if (widget.value != null)
+                Text(
+                  widget.hint,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+        ],
         Row(
           children: [
             for (final network in momoNetworks) ...[
@@ -143,9 +241,9 @@ class MomoNetworkPicker extends StatelessWidget {
               Expanded(
                 child: _CompactNetworkChip(
                   network: network,
-                  selected: value == network.id,
-                  enabled: enabledNetworks?.contains(network.id) ?? true,
-                  onTap: () => onChanged(network.id),
+                  selected: widget.value == network.id,
+                  enabled: _enabled(network.id),
+                  onTap: () => widget.onChanged(network.id),
                 ),
               ),
             ],

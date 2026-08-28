@@ -252,11 +252,6 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
             'Manual deposit',
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: 22),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Choose MTN, Telecel, or AirtelTigo — we show the CityShop number to pay. Then submit proof.',
-            style: TextStyle(color: AppColors.textSecondary, height: 1.4),
-          ),
           if (instructions.isNotEmpty) ...[
             const SizedBox(height: 14),
             Container(
@@ -279,26 +274,19 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
                 '1. Choose payment method',
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
               ),
-              const SizedBox(height: 4),
-              const Text(
-                'Tap a network, copy the CityShop number, send payment, then submit proof below.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
-              ),
-              const SizedBox(height: 14),
-              MomoNetworkPicker(
-                value: selected,
-                enabledNetworks: momo.keys.toSet(),
-                onChanged: _selectNetwork,
-                label: 'Pay with',
-                hint: 'Tap to change',
-              ),
+              const SizedBox(height: 12),
               if (selectedAccount != null && selected != null) ...[
-                const SizedBox(height: 14),
+                MomoNetworkPicker(
+                  value: selected,
+                  enabledNetworks: momo.keys.toSet(),
+                  onChanged: _selectNetwork,
+                  selectedOnly: true,
+                ),
+                const SizedBox(height: 12),
                 PaymentDetailsCard(
                   accountNumber: _number(selectedAccount),
                   accountName: _name(selectedAccount),
                   network: selected,
-                  hint: 'Send the exact amount, then fill the proof form below.',
                 ),
               ],
             ],
@@ -323,11 +311,6 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
               const Text(
                 '2. After you pay — submit proof',
                 style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'We credit your wallet once an admin verifies the transfer.',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
               ),
               const SizedBox(height: 14),
               TextField(
