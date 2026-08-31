@@ -41,9 +41,9 @@ void _popToChinaRmbHub(BuildContext context) {
 
 bool _isBuyerQrField(Map<String, dynamic> field) {
   if ((field['file_url'] as String? ?? '').trim().isEmpty) return false;
-  final type = (field['type'] as String? ?? '').toLowerCase();
   final blob = '${field['name'] ?? ''} ${field['label'] ?? ''}'.toLowerCase();
-  return ['image', 'document', 'files'].contains(type) || blob.contains('qr');
+  // Only real QR uploads (e.g. alipay_qr) — not payment screenshots / proofs.
+  return blob.contains('qr');
 }
 
 bool _transferIsTerminal(String? status) {
@@ -1198,9 +1198,9 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
       }).toList();
 
   bool _isQrField(Map<String, dynamic> field) {
-    final type = field['type'] as String? ?? 'text';
     final blob = '${field['name'] ?? ''} ${field['label'] ?? ''}'.toLowerCase();
-    return ['image', 'document', 'files'].contains(type) || blob.contains('qr');
+    // Only real QR uploads (e.g. alipay_qr) — not payment screenshots / proofs.
+    return blob.contains('qr');
   }
 
   List<Map<String, dynamic>> get qrFields => recipientFields.where(_isQrField).toList();
