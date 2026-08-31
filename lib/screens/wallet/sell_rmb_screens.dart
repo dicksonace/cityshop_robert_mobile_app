@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +18,12 @@ import 'china_transfer_screens.dart';
 final _ghs = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 final _usd = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
 final _transferStamp = DateFormat('d MMM yyyy, h:mm a');
+
+String _formatSellFileSize(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+}
 
 void _popToChinaRmbHub(BuildContext context) {
   if (context.canPop()) {
@@ -664,33 +671,16 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        const Text('Payment screenshot *', style: TextStyle(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        InkWell(
-          onTap: () async {
+        _SellPaymentScreenshotCard(
+          file: picked,
+          onPick: () async {
             if (screenshotId == null) return;
             final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
             if (file != null) setState(() => files[screenshotId] = file);
           },
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              border: Border.all(color: picked == null ? const Color(0xFFFCA5A5) : const Color(0xFF86EFAC), width: 2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Icon(Icons.cloud_upload_outlined, size: 40, color: picked == null ? Colors.grey : const Color(0xFF047857)),
-                const SizedBox(height: 8),
-                Text(
-                  picked == null ? 'Tap to upload Alipay screenshot' : picked.name,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
+          onClear: screenshotId == null || picked == null
+              ? null
+              : () => setState(() => files.remove(screenshotId)),
         ),
       ],
     );
@@ -867,6 +857,195 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// Sell payment screenshot: green check + size + Change / X + image preview.
+class _SellPaymentScreenshotCard extends StatelessWidget {
+  const _SellPaymentScreenshotCard({
+    required this.file,
+    required this.onPick,
+    this.onClear,
+  });
+
+  final XFile? file;
+  final VoidCallback onPick;
+  final VoidCallback? onClear;
+
+  Future<void> _openPreview(BuildContext context) async {
+    if (file == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              child: Image.file(File(file!.path), fit: BoxFit.contain),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                onPressed: () => Navigator.pop(ctx),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final picked = file != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: 'Payment screenshot',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.black),
+              ),
+              TextSpan(
+                text: ' *',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFFDC2626)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Upload a clear Alipay payment screenshot so admin can verify.',
+          style: TextStyle(color: Colors.black54, fontSize: 13),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: picked ? const Color(0xFFECFDF5) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: picked ? const Color(0xFF6EE7B7) : const Color(0xFFFCA5A5),
+              width: picked ? 1.6 : 1.2,
+            ),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: picked
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 28),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                file!.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                              ),
+                              FutureBuilder<int>(
+                                future: file!.length(),
+                                builder: (context, snap) {
+                                  final size = snap.data;
+                                  return Text(
+                                    size == null ? '…' : _formatSellFileSize(size),
+                                    style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: onPick,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          icon: const Icon(Icons.edit_outlined, size: 16),
+                          label: const Text('Change', style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                        if (onClear != null) ...[
+                          const SizedBox(width: 6),
+                          Material(
+                            color: const Color(0xFFDC2626),
+                            shape: const CircleBorder(),
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: onClear,
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(Icons.close, color: Colors.white, size: 16),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () => _openPreview(context),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          File(file!.path),
+                          height: 180,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Tap image to view full size',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: Color(0xFF6B7280), fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                )
+              : InkWell(
+                  onTap: onPick,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 22),
+                    child: Column(
+                      children: [
+                        Icon(Icons.image_outlined, size: 40, color: Colors.grey.shade500),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Upload Alipay payment screenshot',
+                          style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF4B5563)),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: onPick,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFDC2626),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                          ),
+                          child: const Text('Choose Image', style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }
