@@ -63,7 +63,7 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
   String? error;
   Map<String, dynamic> config = {};
   List<Map<String, dynamic>> transfers = [];
-  final amount = TextEditingController(text: '10000');
+  final amount = TextEditingController(text: '50');
   Timer? _pollTimer;
 
   @override
@@ -383,7 +383,7 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
   @override
   void initState() {
     super.initState();
-    amount.text = widget.initialRmb ?? '100';
+    amount.text = widget.initialRmb ?? '50';
     _load();
   }
 
