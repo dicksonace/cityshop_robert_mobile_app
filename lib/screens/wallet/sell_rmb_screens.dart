@@ -507,7 +507,19 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
             files: files,
           );
       if (!mounted) return;
-      context.go('/wallet/sell-rmb/${created['id']}');
+      final transferId = switch (created['id']) {
+        final num n => n.toInt(),
+        final String s => int.tryParse(s),
+        _ => null,
+      };
+      if (transferId == null || transferId <= 0) {
+        setState(() {
+          error = 'Sell RMB submitted, but we could not open the receipt. Check Recent activity.';
+          submitting = false;
+        });
+        return;
+      }
+      context.go('/wallet/sell-rmb/$transferId', extra: created);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -849,9 +861,10 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
 }
 
 class SellRmbShowScreen extends StatefulWidget {
-  const SellRmbShowScreen({super.key, required this.id});
+  const SellRmbShowScreen({super.key, required this.id, this.initialTransfer});
 
   final int id;
+  final Map<String, dynamic>? initialTransfer;
 
   @override
   State<SellRmbShowScreen> createState() => _SellRmbShowScreenState();
@@ -865,6 +878,9 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialTransfer != null) {
+      transfer = Map<String, dynamic>.from(widget.initialTransfer!);
+    }
     _load();
   }
 
@@ -882,6 +898,11 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
   }
 
   Future<void> _load({bool silent = false}) async {
+    if (widget.id <= 0) {
+      if (!mounted) return;
+      setState(() => error = 'Invalid sell request.');
+      return;
+    }
     try {
       final data = await context.read<AppStore>().fetchSellRmb(widget.id);
       if (!mounted) return;
@@ -892,9 +913,37 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
       _schedulePoll();
     } catch (e) {
       if (!mounted) return;
-      if (!silent) setState(() => error = e.toString());
+      final message = e.toString().trim();
+      final friendly = message == 'Server Error' || message.contains('500')
+          ? 'We received your sell request. Processing may take a moment — this page will refresh automatically.'
+          : message;
+      if (!silent || transfer == null) {
+        setState(() => error = transfer == null ? friendly : null);
+      }
+      if (transfer != null && !_sellTransferIsTerminal(transfer?['status'] as String?)) {
+        _schedulePoll();
+      }
     }
   }
+
+  bool get _isProcessing {
+    final item = transfer;
+    if (item == null) return true;
+    if (item['processing'] == true) return true;
+    return !_sellTransferIsTerminal(item['status'] as String?);
+  }
+
+  String get _processingTitle {
+    final status = transfer?['status'] as String? ?? 'submitted';
+    return switch (status) {
+      'payout_processing' || 'paid' => 'Processing payout',
+      'rmb_verification' || 'rmb_received' => 'Verifying payment',
+      _ => 'Processing your sell',
+    };
+  }
+
+  String get _processingSubtitle =>
+      'Admin will verify your Alipay payment and send GHS to your MoMo number.';
 
   void _openImage(String url) {
     final resolved = ApiConfig.resolveMediaUrl(url);
@@ -929,6 +978,62 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
     );
   }
 
+  Widget _processingHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: _isProcessing
+              ? const [Color(0xFF2563EB), Color(0xFF1D4ED8)]
+              : const [Color(0xFF047857), Color(0xFF059669)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            width: 72,
+            height: 72,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (_isProcessing)
+                  SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: Colors.white.withValues(alpha: 0.35),
+                    ),
+                  ),
+                Icon(
+                  _isProcessing ? Icons.hourglass_top_rounded : Icons.check_circle_rounded,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _isProcessing ? _processingTitle : 'Payout complete',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 22),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _isProcessing ? _processingSubtitle : 'GHS has been sent to your Mobile Money.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = transfer;
@@ -942,7 +1047,24 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
           automaticallyImplyLeading: false,
           title: const Text('Sell RMB'),
         ),
-        body: error != null ? Center(child: Text(error!)) : const FullPageLoader(label: 'Loading…'),
+        body: error != null
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                children: [
+                  _processingHeader(),
+                  const SizedBox(height: 16),
+                  Text(error!, textAlign: TextAlign.center, style: const TextStyle(height: 1.4)),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: FilledButton(
+                      onPressed: _load,
+                      child: const Text('Try again'),
+                    ),
+                  ),
+                ],
+              )
+            : const FullPageLoader(label: 'Loading…'),
       );
     }
 
@@ -1015,7 +1137,23 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
-            if (!terminal)
+            if (_isProcessing) ...[
+              _processingHeader(),
+              const SizedBox(height: 16),
+            ],
+            if (error != null && _isProcessing) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: Text(error!, style: const TextStyle(fontSize: 13, height: 1.35)),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (!terminal && !_isProcessing)
               Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),

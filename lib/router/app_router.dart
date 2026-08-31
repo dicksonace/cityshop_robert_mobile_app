@@ -213,9 +213,17 @@ GoRouter createRouter(AppStore store) {
       ),
       GoRoute(
         path: '/wallet/sell-rmb/:id',
-        builder: (_, state) => SellRmbShowScreen(
-          id: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
-        ),
+        builder: (_, state) {
+          Map<String, dynamic>? initial;
+          final extra = state.extra;
+          if (extra is Map) {
+            initial = Map<String, dynamic>.from(extra);
+          }
+          return SellRmbShowScreen(
+            id: int.tryParse(state.pathParameters['id'] ?? '') ?? 0,
+            initialTransfer: initial,
+          );
+        },
       ),
       GoRoute(path: '/qr', builder: (_, __) => const QrPayHubScreen()),
       GoRoute(path: '/qr/scan', builder: (_, __) => const QrScanScreen()),
