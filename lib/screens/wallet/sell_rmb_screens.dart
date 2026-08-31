@@ -122,7 +122,16 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
     final ghsGross = rmb * ghsPerRmb;
     final feeGhs = usdGross > 0 ? ghsGross * (fee / usdGross) : 0.0;
     final ghsPayout = ghsGross - feeGhs;
-    final enabled = config['enabled'] == true;
+    final live = config['live'] == true || (config['live'] == null && config['enabled'] == true);
+    final open = config['open'] == true || (config['open'] == null && config['enabled'] == true);
+    final statusMessage = () {
+      final msg = config['status_message'] as String?;
+      if (msg != null && msg.trim().isNotEmpty) return msg.trim();
+      if (!live) return 'Sell RMB is paused by admin.';
+      if (rate == null) return 'Buying rate not published yet.';
+      if (!open) return 'Alipay QR not ready yet.';
+      return null;
+    }();
 
     return PopScope(
       canPop: false,
@@ -214,6 +223,27 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                         ],
                       ),
                     ),
+                    if (statusMessage != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: !live ? const Color(0xFFFFF7ED) : const Color(0xFFF3F4F6),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: !live ? const Color(0xFFFDBA74) : const Color(0xFFE5E7EB)),
+                        ),
+                        child: Text(
+                          statusMessage,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: !live ? const Color(0xFF9A3412) : const Color(0xFF4B5563),
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
                     if ((config['instructions'] as String?)?.isNotEmpty == true) ...[
                       const SizedBox(height: 12),
                       Text('${config['instructions']}', style: const TextStyle(color: Color(0xFF065F46))),
@@ -235,7 +265,7 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                       _row('You receive (GHS)', _ghs.format(ghsPayout), bold: true),
                       const SizedBox(height: 16),
                       FilledButton(
-                        onPressed: enabled
+                        onPressed: open
                             ? () async {
                                 await context.push(
                                   '/wallet/sell-rmb/create',
@@ -248,7 +278,11 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                               }
                             : null,
                         style: FilledButton.styleFrom(backgroundColor: const Color(0xFF047857)),
-                        child: Text(enabled ? 'Continue' : 'Sell RMB paused'),
+                        child: Text(
+                          open
+                              ? 'Continue'
+                              : (statusMessage ?? 'Not available yet'),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 28),
@@ -330,11 +364,26 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
       if (!mounted) return;
       final cfg = Map<String, dynamic>.from(data['config'] as Map? ?? {});
       final methods = (cfg['receive_methods'] as List? ?? []).whereType<Map>().toList();
+      final open = cfg['open'] == true || (cfg['open'] == null && cfg['enabled'] == true);
       final userName = context.read<AppStore>().user?.name ?? '';
       final userMobile = context.read<AppStore>().user?.mobile ?? '';
+      int? pickedMethodId;
+      for (final raw in methods) {
+        final method = Map<String, dynamic>.from(raw);
+        final qr = ApiConfig.resolveMediaUrl(method['qr_url'] as String?);
+        if (qr.isNotEmpty || method['type'] == 'bank' || method['type'] == 'other') {
+          pickedMethodId = (method['id'] as num?)?.toInt();
+          break;
+        }
+      }
       setState(() {
         config = cfg;
-        methodId = methods.isEmpty ? null : (methods.first['id'] as num?)?.toInt();
+        methodId = pickedMethodId ?? (methods.isEmpty ? null : (methods.first['id'] as num?)?.toInt());
+        if (!open) {
+          error = (cfg['status_message'] as String?)?.trim().isNotEmpty == true
+              ? cfg['status_message'] as String
+              : 'Sell RMB is not available right now.';
+        }
         if (payoutName.text.trim().isEmpty && userName.isNotEmpty) {
           payoutName.text = userName;
         }
@@ -689,7 +738,8 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
   @override
   Widget build(BuildContext context) {
     final method = selectedMethod;
-    final qrUrl = (method?['qr_url'] as String?)?.trim() ?? '';
+    final qrUrl = ApiConfig.resolveMediaUrl(method?['qr_url'] as String?);
+    final open = config['open'] == true || (config['open'] == null && config['enabled'] == true);
 
     return Scaffold(
       appBar: AppBar(
@@ -715,7 +765,17 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
                         Text(error!, style: const TextStyle(color: Colors.red)),
                         const SizedBox(height: 8),
                       ],
-                      if (step == 0 && method != null) _stepOne(method, qrUrl),
+                      if (step == 0 && method != null && open) _stepOne(method, qrUrl),
+                      if (step == 0 && !open)
+                        Text(
+                          error ?? (config['status_message'] as String? ?? 'Sell RMB is not available right now.'),
+                          style: const TextStyle(color: Colors.red, height: 1.35),
+                        ),
+                      if (step == 0 && open && method == null)
+                        const Text(
+                          'Alipay receive method is not configured yet.',
+                          style: TextStyle(color: Colors.red, height: 1.35),
+                        ),
                       if (step == 1) _stepTwo(),
                       if (step == 2) _stepThree(),
                     ],
@@ -736,7 +796,7 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
                       Expanded(
                         flex: 2,
                         child: FilledButton(
-                          onPressed: submitting || (step == 0 && qrUrl.isEmpty)
+                          onPressed: submitting || !open || (step == 0 && qrUrl.isEmpty)
                               ? null
                               : () async {
                                   if (step < 2) {

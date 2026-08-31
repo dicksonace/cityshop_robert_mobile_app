@@ -245,7 +245,8 @@ class BuyRmbCalculatorCard extends StatefulWidget {
     required this.rmbPerGhs,
     required this.feeMode,
     required this.feeValue,
-    required this.enabled,
+    required this.open,
+    this.live = true,
     this.transferHours,
     this.instructions,
     this.initialGhs,
@@ -256,7 +257,8 @@ class BuyRmbCalculatorCard extends StatefulWidget {
   final double rmbPerGhs;
   final String feeMode;
   final double feeValue;
-  final bool enabled;
+  final bool open;
+  final bool live;
   final Map<String, dynamic>? transferHours;
   final String? instructions;
   final String? initialGhs;
@@ -335,7 +337,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
   double get receive => calcRate > 0 && send > 0 ? send * calcRate : 0;
   double get fee =>
       widget.feeMode == 'percent' ? send * widget.feeValue / 100 : widget.feeValue;
-  bool get canContinue => widget.enabled && send > 0;
+  bool get canContinue => widget.open && send > 0;
 
   bool get inProcessingWindow {
     final hours = widget.transferHours;
@@ -343,10 +345,9 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
     return hours['in_processing_window'] != false;
   }
 
-  bool get isLiveNow => widget.enabled;
-
   String get continueLabel {
-    if (!widget.enabled) return 'Transfers paused';
+    if (!widget.live) return 'Transfers paused';
+    if (!widget.open) return 'Not available yet';
     return 'Continue';
   }
 
@@ -450,7 +451,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
               height: 1.35,
             ),
           ),
-          if (!widget.enabled) ...[
+          if (!widget.live) ...[
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
@@ -472,7 +473,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
             child: FilledButton(
               onPressed: canContinue ? () => widget.onContinue(send.toStringAsFixed(2)) : null,
               style: FilledButton.styleFrom(
-                backgroundColor: isLiveNow ? const Color(0xFF6366F1) : const Color(0xFF9CA3AF),
+                backgroundColor: widget.open && widget.live ? const Color(0xFF6366F1) : const Color(0xFF9CA3AF),
                 disabledBackgroundColor: const Color(0xFFD1D5DB),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
@@ -1003,7 +1004,8 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
         (ghsPerRmb > 0 ? 1 / ghsPerRmb : 0);
     final feeMode = rate?['fee_mode'] as String? ?? 'flat';
     final feeValue = (rate?['fee_value'] as num?)?.toDouble() ?? 0;
-    final enabled = config['enabled'] == true;
+    final live = config['live'] == true || (config['live'] == null && config['enabled'] == true);
+    final open = config['open'] == true || (config['open'] == null && config['enabled'] == true);
     final minGhs = (rate?['min_ghs'] as num?)?.toDouble();
     final transferHours =
         config['transfer_hours'] is Map ? Map<String, dynamic>.from(config['transfer_hours'] as Map) : null;
@@ -1082,7 +1084,8 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
                         rmbPerGhs: rmbPerGhs,
                         feeMode: feeMode,
                         feeValue: feeValue,
-                        enabled: enabled,
+                        open: open,
+                        live: live,
                         transferHours: transferHours,
                         instructions: config['instructions'] as String?,
                         initialGhs: minGhs != null && minGhs > 0 ? minGhs.toStringAsFixed(0) : null,

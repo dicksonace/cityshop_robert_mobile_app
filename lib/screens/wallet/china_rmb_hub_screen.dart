@@ -99,8 +99,39 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   Map<String, dynamic>? get sellRate =>
       sellConfig['rate'] is Map ? Map<String, dynamic>.from(sellConfig['rate'] as Map) : null;
 
-  bool get buyOpen => buyConfig['enabled'] == true;
-  bool get sellOpen => sellConfig['enabled'] == true;
+  bool _configLive(Map<String, dynamic> config) {
+    if (config.containsKey('live')) return config['live'] == true;
+    return config['enabled'] == true;
+  }
+
+  bool _configOpen(Map<String, dynamic> config) {
+    if (config.containsKey('open')) return config['open'] == true;
+    return config['enabled'] == true;
+  }
+
+  bool get buyLive => _configLive(buyConfig);
+  bool get buyOpen => _configOpen(buyConfig);
+  bool get sellLive => _configLive(sellConfig);
+  bool get sellOpen => _configOpen(sellConfig);
+
+  Map<String, dynamic>? get sellReadiness =>
+      sellConfig['readiness'] is Map ? Map<String, dynamic>.from(sellConfig['readiness'] as Map) : null;
+
+  String? get sellStatusMessage {
+    final msg = sellConfig['status_message'] as String?;
+    if (msg != null && msg.trim().isNotEmpty) return msg.trim();
+    if (!sellLive) return 'Paused';
+    final readiness = sellReadiness;
+    if (readiness != null) {
+      if (readiness['rate_published'] != true) return 'Rate not published';
+      if (readiness['alipay_qr'] != true) return 'Alipay QR not ready';
+    } else if (sellRate == null) {
+      return 'Rate not published';
+    } else if (!sellOpen) {
+      return 'Not available yet';
+    }
+    return null;
+  }
 
   Map<String, dynamic>? get buyTransferHours =>
       buyConfig['transfer_hours'] is Map ? Map<String, dynamic>.from(buyConfig['transfer_hours'] as Map) : null;
@@ -268,7 +299,11 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             child: Text(
-                              !buyOpen ? 'Buy RMB paused' : 'Buy RMB →',
+                              !buyLive
+                                  ? 'Buy RMB paused'
+                                  : buyRate == null
+                                      ? 'Rate not published'
+                                      : 'Buy RMB →',
                               style: const TextStyle(fontWeight: FontWeight.w900),
                             ),
                           ),
@@ -306,11 +341,15 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                                   : 'Send RMB to CityShop, get MoMo payout',
                               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMuted),
                             ),
-                            if (!sellOpen) ...[
+                            if (sellStatusMessage != null) ...[
                               const SizedBox(height: 6),
                               Text(
-                                'Paused',
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.amber.shade800),
+                                sellStatusMessage!,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: !sellLive ? Colors.amber.shade800 : Colors.grey.shade700,
+                                ),
                               ),
                             ],
                           ],

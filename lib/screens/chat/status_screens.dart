@@ -1284,76 +1284,88 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
                               ),
                           ],
                         ),
-                        if (item.body != null &&
-                            item.body!.trim().isNotEmpty &&
-                            (item.isImage || item.isVideo)) ...[
-                          const Spacer(),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.fromLTRB(20, 40, 20, 28),
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Colors.transparent, Colors.black54],
-                              ),
-                            ),
-                            child: Text(
-                              item.body!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                height: 1.35,
-                                shadows: [Shadow(blurRadius: 8, color: Colors.black54)],
-                              ),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
                 ),
-                if (widget.isMine)
+                if ((item.body != null &&
+                        item.body!.trim().isNotEmpty &&
+                        (item.isImage || item.isVideo)) ||
+                    widget.isMine)
                   Align(
                     alignment: Alignment.bottomCenter,
                     child: SafeArea(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        child: Material(
-                          color: Colors.black45,
-                          borderRadius: BorderRadius.circular(999),
-                          child: InkWell(
-                            onTap: loadingViews ? null : _openViewersSheet,
-                            borderRadius: BorderRadius.circular(999),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.remove_red_eye_outlined, color: Colors.white, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    viewCount == 1 ? '1 view' : '$viewCount views',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 14,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (item.body != null &&
+                                item.body!.trim().isNotEmpty &&
+                                (item.isImage || item.isVideo))
+                              Container(
+                                width: double.infinity,
+                                margin: EdgeInsets.only(bottom: widget.isMine ? 12 : 0),
+                                padding: const EdgeInsets.fromLTRB(12, 24, 12, 12),
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.transparent, Colors.black54],
+                                  ),
+                                ),
+                                child: Text(
+                                  item.body!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.35,
+                                    shadows: [Shadow(blurRadius: 8, color: Colors.black54)],
+                                  ),
+                                ),
+                              ),
+                            if (widget.isMine)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Material(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(999),
+                                  child: InkWell(
+                                    onTap: loadingViews ? null : _openViewersSheet,
+                                    borderRadius: BorderRadius.circular(999),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.remove_red_eye_outlined, color: Colors.white, size: 18),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            viewCount == 1 ? '1 view' : '$viewCount views',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          if (loadingViews) ...[
+                                            const SizedBox(width: 10),
+                                            const SizedBox(
+                                              width: 14,
+                                              height: 14,
+                                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                  if (loadingViews) ...[
-                                    const SizedBox(width: 10),
-                                    const SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                    ),
-                                  ],
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
