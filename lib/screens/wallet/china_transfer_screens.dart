@@ -441,8 +441,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
           Text(
             inProcessingWindow
                 ? 'Arrives in 5–30 minutes'
-                : (widget.transferHours?['processing_note'] as String?) ??
-                    'Submitted now — processed in the next admin window.',
+                : 'Transfer now will be processed tomorrow morning by 7:00 AM.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontWeight: FontWeight.w700,
@@ -451,23 +450,6 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
               height: 1.35,
             ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _BuyRmbLiveStatusChip(live: isLiveNow, serviceEnabled: widget.enabled),
-              const Spacer(),
-              if (widget.transferHours?['open_time_label'] != null &&
-                  widget.transferHours?['close_time_label'] != null)
-                Text(
-                  '${widget.transferHours!['open_time_label']} – ${widget.transferHours!['close_time_label']}',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF6B7280)),
-                ),
-            ],
-          ),
-          if (!inProcessingWindow && widget.enabled) ...[
-            const SizedBox(height: 12),
-            BuyRmbClosedBanner(transferHours: widget.transferHours, compact: true),
-          ],
           if (!widget.enabled) ...[
             const SizedBox(height: 12),
             Container(

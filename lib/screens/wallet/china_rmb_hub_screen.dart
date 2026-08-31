@@ -106,10 +106,8 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
       buyConfig['transfer_hours'] is Map ? Map<String, dynamic>.from(buyConfig['transfer_hours'] as Map) : null;
 
   String? get buyProcessingNote {
-    final hours = buyTransferHours;
-    final note = (hours?['processing_note'] as String?)?.trim();
-    if (note != null && note.isNotEmpty) return note;
-    return null;
+    if (buyInProcessingWindow) return null;
+    return 'Transfer now will be processed tomorrow morning by 7:00 AM.';
   }
 
   bool get buyInProcessingWindow {
