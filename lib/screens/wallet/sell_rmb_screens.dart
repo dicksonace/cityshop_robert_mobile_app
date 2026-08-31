@@ -933,18 +933,6 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
     return !_sellTransferIsTerminal(item['status'] as String?);
   }
 
-  String get _processingTitle {
-    final status = transfer?['status'] as String? ?? 'submitted';
-    return switch (status) {
-      'payout_processing' || 'paid' => 'Processing payout',
-      'rmb_verification' || 'rmb_received' => 'Verifying payment',
-      _ => 'Processing your sell',
-    };
-  }
-
-  String get _processingSubtitle =>
-      'Admin will verify your Alipay payment and send GHS to your MoMo number.';
-
   void _openImage(String url) {
     final resolved = ApiConfig.resolveMediaUrl(url);
     if (resolved.isEmpty) return;
@@ -978,56 +966,416 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
     );
   }
 
-  Widget _processingHeader() {
+  String _fieldValue(List<Map<String, dynamic>> fields, String name) {
+    for (final field in fields) {
+      if (field['name'] == name) {
+        return str(field['value']);
+      }
+    }
+    return '';
+  }
+
+  Map<String, dynamic> _presentation(Map<String, dynamic> item) {
+    final raw = item['status_presentation'];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    final status = str(item['status'], 'submitted');
+    return switch (status) {
+      'payout_processing' || 'paid' => {
+          'header_title': 'Processing Payout',
+          'header_subtitle': 'Admin is sending GHS to your MoMo',
+          'header_color': '#3b82f6',
+          'badge_label': 'Processing',
+        },
+      'completed' => {
+          'header_title': 'Payout Complete!',
+          'header_subtitle': 'GHS has been sent to your Mobile Money',
+          'header_color': '#22c55e',
+          'badge_label': 'Completed',
+        },
+      'rejected' || 'failed' => {
+          'header_title': 'Sell Request Rejected',
+          'header_subtitle': 'See details below',
+          'header_color': '#dc2626',
+          'badge_label': 'Rejected',
+        },
+      _ => {
+          'header_title': 'Awaiting Review',
+          'header_subtitle': 'Your RMB sell is being verified',
+          'header_color': '#ef4444',
+          'badge_label': 'Pending',
+        },
+    };
+  }
+
+  Map<String, String> _payoutAccount(Map<String, dynamic> item, List<Map<String, dynamic>> fields) {
+    final raw = item['payout_account'];
+    if (raw is Map) {
+      return {
+        'network': str(raw['network'], '—'),
+        'number': str(raw['number'], '—'),
+        'account_name': str(raw['account_name'], '—'),
+      };
+    }
+    return {
+      'network': _fieldValue(fields, 'payout_bank_name').isEmpty ? '—' : _fieldValue(fields, 'payout_bank_name'),
+      'number': () {
+        final mobile = _fieldValue(fields, 'payout_mobile');
+        if (mobile.isNotEmpty) return mobile;
+        return _fieldValue(fields, 'payout_account_number').isEmpty ? '—' : _fieldValue(fields, 'payout_account_number');
+      }(),
+      'account_name': _fieldValue(fields, 'payout_name').isEmpty ? '—' : _fieldValue(fields, 'payout_name'),
+    };
+  }
+
+  Color _hexColor(String hex, {Color fallback = const Color(0xFFEF4444)}) {
+    final value = hex.replaceAll('#', '');
+    if (value.length != 6) return fallback;
+    return Color(int.parse('FF$value', radix: 16));
+  }
+
+  Widget _statusHeader(Map<String, dynamic> presentation, {required bool completed, required bool rejected, required bool processing}) {
+    final color = _hexColor(str(presentation['header_color'], '#ef4444'));
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: _isProcessing
-              ? const [Color(0xFF2563EB), Color(0xFF1D4ED8)]
-              : const [Color(0xFF047857), Color(0xFF059669)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+      decoration: BoxDecoration(color: color),
       child: Column(
         children: [
-          SizedBox(
-            width: 72,
-            height: 72,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (_isProcessing)
+          if (completed)
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+              child: const Icon(Icons.check_circle, color: Colors.white, size: 48),
+            )
+          else if (rejected)
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+              child: const Icon(Icons.cancel, color: Colors.white, size: 48),
+            )
+          else
+            SizedBox(
+              width: 80,
+              height: 80,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
                   SizedBox(
-                    width: 72,
-                    height: 72,
+                    width: 80,
+                    height: 80,
                     child: CircularProgressIndicator(
-                      strokeWidth: 3,
+                      strokeWidth: 4,
                       color: Colors.white.withValues(alpha: 0.35),
                     ),
                   ),
-                Icon(
-                  _isProcessing ? Icons.hourglass_top_rounded : Icons.check_circle_rounded,
-                  color: Colors.white,
-                  size: 36,
-                ),
-              ],
+                  const SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 4,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Text(
-            _isProcessing ? _processingTitle : 'Payout complete',
+            str(presentation['header_title'], 'Awaiting Review'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 22),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 24),
           ),
           const SizedBox(height: 6),
           Text(
-            _isProcessing ? _processingSubtitle : 'GHS has been sent to your Mobile Money.',
+            str(presentation['header_subtitle'], 'Your RMB sell is being verified'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.35),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13, height: 1.35),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryCard({
+    required double rmbAmount,
+    required double ghsPerRmb,
+    required String youReceive,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFEE2E2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'SELL SUMMARY',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFB91C1C), letterSpacing: 0.6),
+          ),
+          const SizedBox(height: 10),
+          _summaryRow('RMB Sent', '¥ ${rmbAmount.toStringAsFixed(2)}', valueColor: const Color(0xFFDC2626), valueSize: 20),
+          const SizedBox(height: 8),
+          _summaryRow('Rate', '1 RMB = ${ghsPerRmb.toStringAsFixed(4)} GHS'),
+          const Divider(height: 20, color: Color(0xFFFEE2E2)),
+          _summaryRow('You Receive', youReceive, valueColor: const Color(0xFF16A34A), valueSize: 20, bold: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, String value, {Color? valueColor, double valueSize = 14, bool bold = false}) {
+    return Row(
+      children: [
+        Expanded(child: Text(label, style: const TextStyle(color: Color(0xFF4B5563), fontSize: 14))),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor ?? const Color(0xFF1F2937),
+            fontSize: valueSize,
+            fontWeight: bold ? FontWeight.w900 : FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _payoutCard(Map<String, String> payout) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFDCFCE7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'PAYOUT ACCOUNT (MOMO)',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF166534), letterSpacing: 0.6),
+          ),
+          const SizedBox(height: 10),
+          _summaryRow('Network', payout['network'] ?? '—'),
+          const SizedBox(height: 8),
+          _summaryRow('Number', payout['number'] ?? '—'),
+          const SizedBox(height: 8),
+          _summaryRow('Account Name', payout['account_name'] ?? '—'),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailsCard({
+    required String reference,
+    required int id,
+    required String submitted,
+    required String badgeLabel,
+    required Color badgeColor,
+    required Color badgeTextColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          _summaryRow('Reference', reference),
+          const SizedBox(height: 8),
+          _summaryRow('Request ID', '#$id'),
+          const SizedBox(height: 8),
+          _summaryRow('Submitted', submitted),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Expanded(child: Text('Status', style: TextStyle(color: Color(0xFF6B7280), fontSize: 14))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: badgeColor,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  badgeLabel,
+                  style: TextStyle(color: badgeTextColor, fontSize: 12, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  (Color bg, Color text) _badgeColors(String status) {
+    return switch (status) {
+      'payout_processing' || 'paid' => (const Color(0xFFDBEAFE), const Color(0xFF1D4ED8)),
+      'completed' => (const Color(0xFFD1FAE5), const Color(0xFF047857)),
+      'rejected' || 'failed' => (const Color(0xFFFEE2E2), const Color(0xFFB91C1C)),
+      'cancelled' => (const Color(0xFFF3F4F6), const Color(0xFF374151)),
+      _ => (const Color(0xFFFEF3C7), const Color(0xFF92400E)),
+    };
+  }
+
+  Widget _statusBody(Map<String, dynamic> item) {
+    final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : <String, dynamic>{};
+    final fields = (item['fields'] as List? ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    final proofs = (item['proofs'] as List? ?? [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((p) => p['type'] == 'payout_sent')
+        .toList();
+    final presentation = _presentation(item);
+    final payout = _payoutAccount(item, fields);
+    final status = str(item['status']);
+    final completed = status == 'completed';
+    final rejected = status == 'rejected' || status == 'failed';
+    final processing = _isProcessing;
+    final currency = str(quote['payout_currency'], 'ghs');
+    final youReceive = currency == 'ghs'
+        ? _ghs.format((quote['ghs_payout'] as num?)?.toDouble() ?? 0)
+        : _usd.format((quote['usd_payout'] as num?)?.toDouble() ?? 0);
+    final ghsPerRmb = (quote['ghs_per_rmb'] as num?)?.toDouble() ??
+        (((quote['usd_per_rmb'] as num?)?.toDouble() ?? 0) * ((quote['ghs_per_usd'] as num?)?.toDouble() ?? 0));
+    final rmbAmount = (quote['rmb_amount'] as num?)?.toDouble() ?? 0;
+    final badge = _badgeColors(status);
+    final badgeLabel = str(presentation['badge_label'], str(item['status_label'], status));
+
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      elevation: 8,
+      shadowColor: Colors.black26,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _statusHeader(presentation, completed: completed, rejected: rejected, processing: processing),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _summaryCard(rmbAmount: rmbAmount, ghsPerRmb: ghsPerRmb, youReceive: youReceive),
+                const SizedBox(height: 14),
+                _payoutCard(payout),
+                const SizedBox(height: 14),
+                _detailsCard(
+                  reference: str(item['reference'], '#${item['id']}'),
+                  id: item['id'] as int? ?? widget.id,
+                  submitted: _formatSellWhen(item['submitted_at'] as String? ?? item['created_at'] as String?),
+                  badgeLabel: badgeLabel,
+                  badgeColor: badge.$1,
+                  badgeTextColor: badge.$2,
+                ),
+                if ((item['rejection_reason'] as String?)?.isNotEmpty == true) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border(left: BorderSide(color: Colors.red.shade400, width: 4)),
+                    ),
+                    child: Text('${item['rejection_reason']}', style: const TextStyle(color: Color(0xFFB91C1C), height: 1.35)),
+                  ),
+                ],
+                if (completed && proofs.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  const Text('MoMo Payment Proof', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFF166534))),
+                  const SizedBox(height: 8),
+                  ...proofs.map((proof) {
+                    final url = proof['url'] as String?;
+                    if (url == null || url.isEmpty) return const SizedBox.shrink();
+                    return GestureDetector(
+                      onTap: () => _openImage(url),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: CachedNetworkImage(
+                          imageUrl: ApiConfig.resolveMediaUrl(url),
+                          fit: BoxFit.contain,
+                          errorWidget: (_, _, _) => const Center(child: Icon(Icons.broken_image_outlined)),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+                if (completed) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border(left: BorderSide(color: Colors.green.shade400, width: 4)),
+                    ),
+                    child: Text(
+                      '$youReceive was sent to your ${payout['network']} account.',
+                      style: const TextStyle(color: Color(0xFF166534), height: 1.35),
+                    ),
+                  ),
+                ],
+                if (processing) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Status updates automatically every few seconds.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Tap Refresh below or return to your wallet anytime.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xFF9CA3AF), fontSize: 12),
+                  ),
+                ],
+                if (error != null && processing) ...[
+                  const SizedBox(height: 12),
+                  Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF1D4ED8), fontSize: 13, height: 1.35)),
+                ],
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _load,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        child: const Text('Refresh'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => context.go('/wallet/china-rmb'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFDC2626),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        child: const Text('Back to Wallet'),
+                      ),
+                    ),
+                  ],
+                ),
+                if (item['can_cancel'] == true)
+                  TextButton(
+                    onPressed: () async {
+                      await context.read<AppStore>().cancelSellRmb(widget.id);
+                      await _load();
+                    },
+                    child: const Text('Cancel request'),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1037,57 +1385,7 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
   @override
   Widget build(BuildContext context) {
     final item = transfer;
-    if (item == null) {
-      return Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.canPop() ? context.pop() : context.go('/wallet/china-rmb'),
-          ),
-          automaticallyImplyLeading: false,
-          title: const Text('Sell RMB'),
-        ),
-        body: error != null
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _processingHeader(),
-                  const SizedBox(height: 16),
-                  Text(error!, textAlign: TextAlign.center, style: const TextStyle(height: 1.4)),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: FilledButton(
-                      onPressed: _load,
-                      child: const Text('Try again'),
-                    ),
-                  ),
-                ],
-              )
-            : const FullPageLoader(label: 'Loading…'),
-      );
-    }
-
-    final quote = item['quote'] is Map ? Map<String, dynamic>.from(item['quote'] as Map) : <String, dynamic>{};
-    final breakdown = quote['breakdown'] is Map ? Map<String, dynamic>.from(quote['breakdown'] as Map) : <String, dynamic>{};
-    final timeline = (item['timeline'] as List? ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
-    final fields = (item['fields'] as List? ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
-    final proofs = (item['proofs'] as List? ?? [])
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .where((p) => p['type'] == 'payout_sent')
-        .toList();
-    final currency = (quote['payout_currency'] as String?) ?? 'ghs';
-    final payout = currency == 'ghs'
-        ? _ghs.format((quote['ghs_payout'] as num?)?.toDouble() ?? 0)
-        : _usd.format((quote['usd_payout'] as num?)?.toDouble() ?? 0);
-    final reference = '${item['reference'] ?? ''}';
-    final status = '${item['status'] ?? ''}';
-    final statusLabel = '${item['status_label'] ?? status}';
-    final terminal = _sellTransferIsTerminal(status);
-    final completed = status == 'completed';
-    final rmbAmount = (quote['rmb_amount'] as num?)?.toDouble() ?? 0;
-    final statusStyle = buyRmbTransferStatusStyle(item);
+    final terminal = item != null && _sellTransferIsTerminal(item['status'] as String?);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -1097,9 +1395,9 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
           onPressed: () => context.canPop() ? context.pop() : context.go('/wallet/china-rmb'),
         ),
         automaticallyImplyLeading: false,
-        title: Text(reference),
+        title: const Text('Sell RMB'),
         actions: [
-          if (!terminal)
+          if (item != null && !terminal)
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: Center(
@@ -1137,192 +1435,21 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
-            if (_isProcessing) ...[
-              _processingHeader(),
-              const SizedBox(height: 16),
-            ],
-            if (error != null && _isProcessing) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFBFDBFE)),
-                ),
-                child: Text(error!, style: const TextStyle(fontSize: 13, height: 1.35)),
-              ),
-              const SizedBox(height: 12),
-            ],
-            if (!terminal && !_isProcessing)
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFFBEB),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFFDE68A)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(statusStyle.icon, color: statusStyle.color, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        statusLabel,
-                        style: TextStyle(fontWeight: FontWeight.w800, color: statusStyle.color),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFFE5E7EB)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '¥${rmbAmount.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF047857)),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Expected payout: $payout',
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                  ),
-                  if (str(breakdown['rate']).isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text('${breakdown['rate']}', style: const TextStyle(color: AppColors.textSecondary)),
-                  ],
-                  if (completed) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Completed ${_formatSellWhen(item['completed_at'] as String?)}',
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text('Progress', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 10),
-            ...timeline.map((step) {
-              final current = step['current'] == true;
-              final done = step['done'] == true;
-              final failed = step['failed'] == true;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: current
-                      ? const Color(0xFFECFDF5)
-                      : done
-                          ? const Color(0xFFF0FDF4)
-                          : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: failed
-                        ? const Color(0xFFFECACA)
-                        : current
-                            ? const Color(0xFF6EE7B7)
-                            : const Color(0xFFE5E7EB),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      failed
-                          ? Icons.cancel_rounded
-                          : done
-                              ? Icons.check_circle_rounded
-                              : current
-                                  ? Icons.hourglass_top_rounded
-                                  : Icons.radio_button_unchecked,
-                      color: failed
-                          ? AppColors.danger
-                          : done || current
-                              ? const Color(0xFF047857)
-                              : Colors.grey,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        '${step['label']}',
-                        style: TextStyle(
-                          fontWeight: current ? FontWeight.w800 : FontWeight.w600,
-                          color: failed ? AppColors.danger : null,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-            if ((item['rejection_reason'] as String?)?.isNotEmpty == true)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text('${item['rejection_reason']}', style: const TextStyle(color: Colors.red)),
-              ),
-            if (proofs.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              const Text('Payout proof', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-              const SizedBox(height: 8),
-              ...proofs.map((proof) {
-                final url = proof['url'] as String?;
-                if (url == null || url.isEmpty) {
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('${proof['original_name'] ?? 'Proof'}'),
-                  );
-                }
-                return GestureDetector(
-                  onTap: () => _openImage(url),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: AspectRatio(
-                      aspectRatio: 3 / 4,
-                      child: CachedNetworkImage(
-                        imageUrl: ApiConfig.resolveMediaUrl(url),
-                        fit: BoxFit.contain,
-                        errorWidget: (_, _, _) => const Center(child: Icon(Icons.broken_image_outlined)),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ],
-            const SizedBox(height: 16),
-            const Text('Submitted details', style: TextStyle(fontWeight: FontWeight.w800)),
-            ...fields.map((field) {
-              final url = field['file_url'] as String?;
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('${field['label']}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                subtitle: url != null
-                    ? GestureDetector(
-                        onTap: () => _openImage(url),
-                        child: const Text(
-                          'View file',
-                          style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
-                        ),
-                      )
-                    : Text('${field['value'] ?? '—'}'),
-              );
-            }),
-            if (item['can_cancel'] == true)
-              TextButton(
-                onPressed: () async {
-                  await context.read<AppStore>().cancelSellRmb(widget.id);
-                  await _load();
-                },
-                child: const Text('Cancel request'),
-              ),
+            if (item == null)
+              (widget.initialTransfer != null || error != null)
+                  ? _statusBody({
+                      'id': widget.id,
+                      'reference': str(widget.initialTransfer?['reference'], 'Sell RMB'),
+                      'status': str(widget.initialTransfer?['status'], 'submitted'),
+                      'quote': widget.initialTransfer?['quote'] ?? {},
+                      'fields': widget.initialTransfer?['fields'] ?? [],
+                      'payout_account': widget.initialTransfer?['payout_account'],
+                      'status_presentation': widget.initialTransfer?['status_presentation'],
+                      'can_cancel': widget.initialTransfer?['can_cancel'] == true,
+                    })
+                  : const FullPageLoader(label: 'Loading…')
+            else
+              _statusBody(item),
           ],
         ),
       ),
