@@ -14,6 +14,11 @@ String _formatBuyRate(double n) {
   return n.toStringAsFixed(3);
 }
 
+String _formatSellRate(double n) {
+  if (n <= 0) return '—';
+  return n.toStringAsFixed(4);
+}
+
 void _popToWallet(BuildContext context) {
   if (context.canPop()) {
     context.pop();
@@ -312,49 +317,111 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      onTap: sellOpen
-                          ? () async {
-                              await context.push('/wallet/sell-rmb');
-                              if (mounted) _load(silent: true);
-                            }
-                          : null,
-                      borderRadius: BorderRadius.circular(14),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.border, width: 2),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Sell RMB → GHS', style: TextStyle(fontWeight: FontWeight.w800)),
-                            const SizedBox(height: 4),
-                            Text(
-                              sellGhsPerRmb != null
-                                  ? '1 RMB = GH₵${sellGhsPerRmb.toStringAsFixed(4)}'
-                                  : 'Send RMB to CityShop, get MoMo payout',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMuted),
-                            ),
-                            if (sellStatusMessage != null) ...[
-                              const SizedBox(height: 6),
-                              Text(
-                                sellStatusMessage!,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: !sellLive ? Colors.amber.shade800 : Colors.grey.shade700,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF047857), Color(0xFF059669)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF047857).withValues(alpha: 0.25),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'SELL RMB',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 22,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          sellGhsPerRmb != null
+                              ? '1 RMB → GH₵${_formatSellRate(sellGhsPerRmb)}'
+                              : 'Rate not published',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Send RMB via Alipay · get MoMo payout',
+                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                        if (sellStatusMessage != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  !sellLive ? Icons.pause_circle_outline : Icons.info_outline_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    sellStatusMessage!,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: sellOpen && sellRate != null
+                                ? () async {
+                                    await context.push('/wallet/sell-rmb');
+                                    if (mounted) _load(silent: true);
+                                  }
+                                : null,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF047857),
+                              disabledBackgroundColor: Colors.white.withValues(alpha: 0.55),
+                              disabledForegroundColor: const Color(0xFF065F46),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: Text(
+                              !sellLive
+                                  ? 'Sell RMB paused'
+                                  : sellRate == null
+                                      ? 'Rate not published'
+                                      : !sellOpen
+                                          ? (sellStatusMessage ?? 'Not available yet')
+                                          : 'Sell RMB →',
+                              style: const TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 24),
