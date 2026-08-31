@@ -106,13 +106,15 @@ class BuyRmbClosedBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hours = transferHours;
-    if (hours == null || hours['configured'] != true || hours['is_open_now'] == true) {
+    final message = (hours?['processing_note'] as String?)?.trim().isNotEmpty == true
+        ? '${hours!['processing_note']}'
+        : (hours?['closed_message'] as String?)?.trim().isNotEmpty == true
+            ? '${hours!['closed_message']}'
+            : null;
+    if (hours == null || hours['configured'] != true || message == null) {
       return const SizedBox.shrink();
     }
 
-    final message = (hours['closed_message'] as String?)?.trim().isNotEmpty == true
-        ? '${hours['closed_message']}'
-        : "Sorry, we're closed. We continue when we reopen.";
     final openLabel = hours['open_time_label'] as String?;
     final closeLabel = hours['close_time_label'] as String?;
 
@@ -120,9 +122,9 @@ class BuyRmbClosedBanner extends StatelessWidget {
       margin: compact ? EdgeInsets.zero : const EdgeInsets.only(bottom: 14),
       padding: EdgeInsets.all(compact ? 12 : 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF7ED),
+        color: const Color(0xFFEFF6FF),
         borderRadius: BorderRadius.circular(compact ? 14 : 16),
-        border: Border.all(color: const Color(0xFFFED7AA)),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,10 +133,10 @@ class BuyRmbClosedBanner extends StatelessWidget {
             width: compact ? 30 : 34,
             height: compact ? 30 : 34,
             decoration: const BoxDecoration(
-              color: Color(0xFFFFEDD5),
+              color: Color(0xFFDBEAFE),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.schedule_rounded, color: const Color(0xFFB45309), size: compact ? 16 : 18),
+            child: Icon(Icons.schedule_rounded, color: const Color(0xFF2563EB), size: compact ? 16 : 18),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -146,25 +148,25 @@ class BuyRmbClosedBanner extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: compact ? 13 : 14,
-                    color: const Color(0xFF78350F),
+                    color: const Color(0xFF1E3A8A),
                     height: 1.35,
                   ),
                 ),
                 if (openLabel != null || closeLabel != null) ...[
                   const SizedBox(height: 8),
                   const Text(
-                    'Transfer time',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF92400E)),
+                    'Admin processing window',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFF1D4ED8)),
                   ),
                   if (openLabel != null)
                     Text(
-                      'Open time $openLabel',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF92400E)),
+                      'From $openLabel',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1D4ED8)),
                     ),
                   if (closeLabel != null)
                     Text(
-                      'Close time $closeLabel',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF92400E)),
+                      'Until $closeLabel',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1D4ED8)),
                     ),
                 ],
               ],
@@ -335,17 +337,16 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
       widget.feeMode == 'percent' ? send * widget.feeValue / 100 : widget.feeValue;
   bool get canContinue => widget.enabled && send > 0;
 
-  bool get hoursOpen {
+  bool get inProcessingWindow {
     final hours = widget.transferHours;
     if (hours == null || hours['configured'] != true) return true;
-    return hours['is_open_now'] == true;
+    return hours['in_processing_window'] != false;
   }
 
-  bool get isLiveNow => widget.enabled && hoursOpen;
+  bool get isLiveNow => widget.enabled;
 
   String get continueLabel {
     if (!widget.enabled) return 'Transfers paused';
-    if (!hoursOpen) return 'Continue anyway';
     return 'Continue';
   }
 
@@ -438,11 +439,14 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
           ],
           const SizedBox(height: 14),
           Text(
-            hoursOpen ? 'Arrives in 5–30 minutes' : 'Orders outside hours are queued for the next open window.',
+            inProcessingWindow
+                ? 'Arrives in 5–30 minutes'
+                : (widget.transferHours?['processing_note'] as String?) ??
+                    'Submitted now — processed in the next admin window.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: hoursOpen ? const Color(0xFF059669) : const Color(0xFFB45309),
+              color: inProcessingWindow ? const Color(0xFF059669) : const Color(0xFF2563EB),
               fontSize: 13,
               height: 1.35,
             ),
@@ -460,7 +464,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
                 ),
             ],
           ),
-          if (!hoursOpen && widget.enabled) ...[
+          if (!inProcessingWindow && widget.enabled) ...[
             const SizedBox(height: 12),
             BuyRmbClosedBanner(transferHours: widget.transferHours, compact: true),
           ],
@@ -486,7 +490,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
             child: FilledButton(
               onPressed: canContinue ? () => widget.onContinue(send.toStringAsFixed(2)) : null,
               style: FilledButton.styleFrom(
-                backgroundColor: isLiveNow ? const Color(0xFF6366F1) : const Color(0xFFF59E0B),
+                backgroundColor: isLiveNow ? const Color(0xFF6366F1) : const Color(0xFF9CA3AF),
                 disabledBackgroundColor: const Color(0xFFD1D5DB),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
@@ -497,14 +501,6 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
               ),
             ),
           ),
-          if (canContinue && !hoursOpen) ...[
-            const SizedBox(height: 8),
-            Text(
-              'You can still submit — we process when transfer hours reopen.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade600),
-            ),
-          ],
         ],
       ),
     );

@@ -105,21 +105,17 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   Map<String, dynamic>? get buyTransferHours =>
       buyConfig['transfer_hours'] is Map ? Map<String, dynamic>.from(buyConfig['transfer_hours'] as Map) : null;
 
-  bool get buyHoursOpen {
+  String? get buyProcessingNote {
     final hours = buyTransferHours;
-    if (hours == null || hours['configured'] != true) return true;
-    return hours['is_open_now'] == true;
+    final note = (hours?['processing_note'] as String?)?.trim();
+    if (note != null && note.isNotEmpty) return note;
+    return null;
   }
 
-  String get buyClosedNote {
+  bool get buyInProcessingWindow {
     final hours = buyTransferHours;
-    final fromApi = (hours?['closed_message'] as String?)?.trim();
-    if (fromApi != null && fromApi.isNotEmpty) return fromApi;
-    final openLabel = hours?['open_time_label'] as String?;
-    if (openLabel != null && openLabel.isNotEmpty) {
-      return "Sorry, we're closed. We continue at $openLabel.";
-    }
-    return "Sorry, we're closed. We continue when we reopen.";
+    if (hours == null || hours['configured'] != true) return true;
+    return hours['in_processing_window'] != false;
   }
 
   @override
@@ -228,7 +224,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                           'No hidden fees · Secure transactions',
                           style: TextStyle(color: Colors.white70, fontSize: 13),
                         ),
-                        if (buyOpen && buyRmbPerGhs != null && !buyHoursOpen) ...[
+                        if (buyOpen && buyRmbPerGhs != null && buyProcessingNote != null) ...[
                           const SizedBox(height: 12),
                           Container(
                             width: double.infinity,
@@ -245,7 +241,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    buyClosedNote,
+                                    buyProcessingNote!,
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w700,
@@ -274,11 +270,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             child: Text(
-                              !buyOpen
-                                  ? 'Buy RMB paused'
-                                  : !buyHoursOpen
-                                      ? 'Closed · opens ${buyTransferHours?['open_time_label'] ?? 'soon'}'
-                                      : 'Buy RMB →',
+                              !buyOpen ? 'Buy RMB paused' : 'Buy RMB →',
                               style: const TextStyle(fontWeight: FontWeight.w900),
                             ),
                           ),
