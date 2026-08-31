@@ -268,8 +268,52 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                           border: OutlineInputBorder(),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      _row('You receive (GHS)', _ghs.format(ghsPayout), bold: true),
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFF6EE7B7)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.payments_outlined, color: Color(0xFF047857), size: 18),
+                                SizedBox(width: 8),
+                                Text(
+                                  'You receive (GHS)',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: Color(0xFF047857),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              rmb > 0 ? _ghs.format(ghsPayout) : 'GH₵0.00',
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF065F46),
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              rmb > 0
+                                  ? 'Estimated MoMo payout for ¥${rmb.toStringAsFixed(rmb == rmb.roundToDouble() ? 0 : 2)}'
+                                  : 'Enter RMB above to see your GHS payout',
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280), height: 1.35),
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       FilledButton(
                         onPressed: open
@@ -306,19 +350,6 @@ class _SellRmbHubScreenState extends State<SellRmbHubScreen> {
                   ],
                 ),
               ),
-      ),
-    );
-  }
-
-  Widget _row(String label, String value, {bool bold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.black54, fontWeight: bold ? FontWeight.w800 : FontWeight.w500)),
-          Text(value, style: TextStyle(fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
-        ],
       ),
     );
   }
@@ -658,9 +689,28 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          'You will receive: ${_ghs.format(ghsPayout)}',
-          style: const TextStyle(color: Color(0xFF047857), fontWeight: FontWeight.w800),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFECFDF5),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF6EE7B7)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'You receive (GHS)',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: Color(0xFF047857)),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _ghs.format(ghsPayout),
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF065F46)),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 14),
         TextField(
