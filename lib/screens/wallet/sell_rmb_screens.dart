@@ -793,67 +793,78 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  child: Row(
-                    children: [
-                      if (step > 0)
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: submitting ? null : () => setState(() => step -= 1),
-                            child: const Text('Back'),
+                SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (step == 1)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              'Next: enter your Mobile Money details to receive GHS',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 12, color: Colors.black54),
+                            ),
                           ),
-                        ),
-                      if (step > 0) const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: FilledButton(
-                          onPressed: submitting || !open || (step == 0 && qrUrl.isEmpty)
-                              ? null
-                              : () async {
-                                  if (step < 2) {
-                                    final validation = _validateStep(step + 1);
-                                    if (validation != null) {
-                                      setState(() => error = validation);
-                                      return;
-                                    }
-                                    setState(() {
-                                      error = null;
-                                      step += 1;
-                                    });
-                                  } else {
-                                    await _submit();
-                                  }
-                                },
-                          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
-                          child: Text(
-                            submitting
-                                ? 'Submitting…'
-                                : step == 2
-                                    ? 'Submit'
-                                    : 'Continue',
+                        if (step == 2)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              'Admin will verify your payment and send GHS to this MoMo number',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 12, color: Colors.black54),
+                            ),
                           ),
+                        Row(
+                          children: [
+                            if (step > 0)
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: submitting ? null : () => setState(() => step -= 1),
+                                  child: const Text('Back'),
+                                ),
+                              ),
+                            if (step > 0) const SizedBox(width: 12),
+                            Expanded(
+                              flex: 2,
+                              child: FilledButton(
+                                onPressed: submitting || !open || (step == 0 && qrUrl.isEmpty)
+                                    ? null
+                                    : () async {
+                                        if (step < 2) {
+                                          final validation = _validateStep(step + 1);
+                                          if (validation != null) {
+                                            setState(() => error = validation);
+                                            return;
+                                          }
+                                          setState(() {
+                                            error = null;
+                                            step += 1;
+                                          });
+                                        } else {
+                                          await _submit();
+                                        }
+                                      },
+                                style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                                child: Text(
+                                  submitting
+                                      ? 'Submitting…'
+                                      : step == 2
+                                          ? 'Submit'
+                                          : 'Continue',
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-                if (step == 1)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      'Next: enter your Mobile Money details to receive GHS',
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                  ),
-                if (step == 2)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      'Admin will verify your payment and send GHS to this MoMo number',
-                      style: TextStyle(fontSize: 12, color: Colors.black54),
-                    ),
-                  ),
               ],
             ),
     );
