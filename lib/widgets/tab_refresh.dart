@@ -60,6 +60,9 @@ mixin AutoRefreshTab<T extends StatefulWidget> on State<T> {
   /// so a tab can show a loader instead of a misleading "please log in" screen.
   bool get tabIsWarmingUp => !_loaded && (_store?.booting ?? false);
 
+  /// True while a foreground or background refresh is in flight.
+  bool get tabAutoRefreshing => _busy;
+
   @override
   void initState() {
     super.initState();
@@ -170,12 +173,54 @@ mixin AutoRefreshTab<T extends StatefulWidget> on State<T> {
     if (background && (!isTabVisible || !_foreground)) return;
 
     _busy = true;
+    if (mounted) setState(() {});
     try {
       await refreshTabData(background: background);
     } catch (_) {
       // Tabs surface their own errors; a failed tick must not stop the timer.
     } finally {
       _busy = false;
+      if (mounted) setState(() {});
     }
+  }
+}
+
+/// Live indicator for tabs that poll via [AutoRefreshTab].
+class TabAutoRefreshBadge extends StatelessWidget {
+  const TabAutoRefreshBadge({super.key, this.active = false});
+
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 10,
+            height: 10,
+            child: active
+                ? const CircularProgressIndicator(strokeWidth: 2)
+                : const DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Color(0xFF3B82F6),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'Auto refresh',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/api_client.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
@@ -91,8 +92,13 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
       _schedulePoll();
     } catch (e) {
       if (!mounted) return;
+      final message = e is ApiException
+          ? (e.statusCode == 403
+              ? 'China / RMB is not available for this account.'
+              : e.message)
+          : e.toString();
       setState(() {
-        if (!silent) error = e.toString();
+        if (!silent) error = message;
         loading = false;
       });
     }
@@ -119,23 +125,60 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
   bool get sellLive => _configLive(sellConfig);
   bool get sellOpen => _configOpen(sellConfig);
 
+  Map<String, dynamic>? get buyReadiness =>
+      buyConfig['readiness'] is Map ? Map<String, dynamic>.from(buyConfig['readiness'] as Map) : null;
+
   Map<String, dynamic>? get sellReadiness =>
       sellConfig['readiness'] is Map ? Map<String, dynamic>.from(sellConfig['readiness'] as Map) : null;
+
+  String? _statusFromReadiness(Map<String, dynamic>? readiness, {required String pausedLabel}) {
+    if (readiness == null) return null;
+    if (readiness['live'] != true) return pausedLabel;
+    if (readiness['rate_published'] != true) return 'Rate not published';
+    if (readiness['alipay_qr'] == false) return 'Alipay QR not ready';
+    return null;
+  }
+
+  String? get buyStatusMessage {
+    final msg = buyConfig['status_message'] as String?;
+    if (msg != null && msg.trim().isNotEmpty) return msg.trim();
+    return _statusFromReadiness(buyReadiness, pausedLabel: 'Paused by admin');
+  }
 
   String? get sellStatusMessage {
     final msg = sellConfig['status_message'] as String?;
     if (msg != null && msg.trim().isNotEmpty) return msg.trim();
-    if (!sellLive) return 'Paused';
+    return _statusFromReadiness(sellReadiness, pausedLabel: 'Paused by admin');
+  }
+
+  String _buyButtonLabel() {
+    if (buyOpen && buyRate != null) return 'Buy RMB →';
+    final readiness = buyReadiness;
+    if (readiness != null) {
+      if (readiness['live'] != true) return 'Buy RMB paused';
+      if (readiness['rate_published'] != true) return 'Rate not published';
+    }
+    if (!buyLive) return 'Buy RMB paused';
+    if (buyRate == null) return 'Rate not published';
+    return 'Buy RMB unavailable';
+  }
+
+  String _sellButtonLabel() {
+    if (sellOpen && sellRate != null) return 'Sell RMB →';
     final readiness = sellReadiness;
     if (readiness != null) {
+      if (readiness['live'] != true) return 'Sell RMB paused';
       if (readiness['rate_published'] != true) return 'Rate not published';
       if (readiness['alipay_qr'] != true) return 'Alipay QR not ready';
-    } else if (sellRate == null) {
-      return 'Rate not published';
-    } else if (!sellOpen) {
-      return 'Not available yet';
     }
-    return null;
+    if (!sellLive) return 'Sell RMB paused';
+    if (sellRate == null) return 'Rate not published';
+    return sellStatusMessage ?? 'Not available yet';
+  }
+
+  bool _statusIsPaused(String? message) {
+    final value = (message ?? '').toLowerCase();
+    return value.contains('paused');
   }
 
   Map<String, dynamic>? get buyTransferHours =>
@@ -288,6 +331,42 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                             ),
                           ),
                         ],
+                        if (buyStatusMessage != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  _statusIsPaused(buyStatusMessage)
+                                      ? Icons.pause_circle_outline
+                                      : Icons.info_outline_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    buyStatusMessage!,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
@@ -304,11 +383,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             child: Text(
-                              !buyLive
-                                  ? 'Buy RMB paused'
-                                  : buyRate == null
-                                      ? 'Rate not published'
-                                      : 'Buy RMB →',
+                              _buyButtonLabel(),
                               style: const TextStyle(fontWeight: FontWeight.w900),
                             ),
                           ),
@@ -372,7 +447,9 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Icon(
-                                  !sellLive ? Icons.pause_circle_outline : Icons.info_outline_rounded,
+                                  _statusIsPaused(sellStatusMessage)
+                                      ? Icons.pause_circle_outline
+                                      : Icons.info_outline_rounded,
                                   color: Colors.white,
                                   size: 18,
                                 ),
@@ -410,13 +487,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             child: Text(
-                              !sellLive
-                                  ? 'Sell RMB paused'
-                                  : sellRate == null
-                                      ? 'Rate not published'
-                                      : !sellOpen
-                                          ? (sellStatusMessage ?? 'Not available yet')
-                                          : 'Sell RMB →',
+                              _sellButtonLabel(),
                               style: const TextStyle(fontWeight: FontWeight.w900),
                             ),
                           ),

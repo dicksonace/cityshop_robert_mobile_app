@@ -11,6 +11,7 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/ghana_location_fields.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
@@ -329,8 +330,10 @@ class _AddressesScreenState extends State<AddressesScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModal) {
-            final cities = store.citiesByRegion[region] ?? <String>[];
-            if (city.isEmpty && cities.isNotEmpty) city = cities.first;
+            final cityOptions = store.citiesByRegion[region] ?? ghanaCitiesForRegion(region);
+            if (city.isEmpty && cityOptions.isNotEmpty && cityOptions.first != kOtherCity) {
+              city = cityOptions.first;
+            }
             return SheetShell(
               action: SizedBox(
                 height: 48,
@@ -352,20 +355,15 @@ class _AddressesScreenState extends State<AddressesScreen> {
                 TextField(controller: last, decoration: const InputDecoration(labelText: 'Last name')),
                 TextField(controller: phone, decoration: const InputDecoration(labelText: 'Phone')),
                 TextField(controller: line, decoration: const InputDecoration(labelText: 'Address line')),
-                DropdownButtonFormField<String>(
-                  initialValue: store.regions.contains(region) ? region : null,
-                  decoration: const InputDecoration(labelText: 'Region'),
-                  items: store.regions.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
-                  onChanged: (v) => setModal(() {
-                    region = v ?? region;
-                    city = (store.citiesByRegion[region] ?? []).firstOrNull ?? '';
+                GhanaLocationFields(
+                  region: region,
+                  city: city,
+                  citiesByRegion: store.citiesByRegion.isNotEmpty ? store.citiesByRegion : null,
+                  onRegionChanged: (value) => setModal(() {
+                    region = value;
+                    city = (store.citiesByRegion[value] ?? ghanaCitiesForRegion(value)).firstOrNull ?? '';
                   }),
-                ),
-                DropdownButtonFormField<String>(
-                  initialValue: cities.contains(city) ? city : null,
-                  decoration: const InputDecoration(labelText: 'City'),
-                  items: cities.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                  onChanged: (v) => setModal(() => city = v ?? city),
+                  onCityChanged: (value) => setModal(() => city = value),
                 ),
                 TextField(controller: digital, decoration: const InputDecoration(labelText: 'Digital address (optional)')),
                 SwitchListTile(

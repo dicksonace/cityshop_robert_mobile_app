@@ -2224,6 +2224,13 @@ class _ChatScreenState extends State<ChatScreen> {
                                     : (m.mine ? ChatColors.outgoing : ChatColors.incoming);
                             final compactMediaBubble =
                                 (m.isPhoto || m.isVideo || m.isVoice) && !m.isDeleted;
+                            final shrinkWrapBubble = !m.isDeleted &&
+                                !m.isProduct &&
+                                !m.isTransfer &&
+                                !m.isFile &&
+                                !m.isMedia &&
+                                !m.isViewOnceMedia;
+                            final wrapBubbleTight = compactMediaBubble || shrinkWrapBubble;
                             return Column(
                               children: [
                                 if (showDay && m.createdAt != null)
@@ -2274,7 +2281,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                           if (!m.mine)
                                             ChatBubbleTail(mine: false, color: bubbleColor),
                                           Flexible(
-                                            fit: compactMediaBubble ? FlexFit.loose : FlexFit.tight,
+                                            fit: wrapBubbleTight ? FlexFit.loose : FlexFit.tight,
                                             child: Builder(
                                               builder: (context) {
                                                 final bubble = Container(
@@ -2465,7 +2472,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                               ),
                                               child: Align(
                                                 alignment: Alignment.centerRight,
-                                                widthFactor: compactMediaBubble ? null : 1,
                                                 child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
@@ -2502,7 +2508,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         ],
                                       ),
                                     );
-                                                return compactMediaBubble
+                                                return wrapBubbleTight
                                                     ? IntrinsicWidth(child: bubble)
                                                     : bubble;
                                               },

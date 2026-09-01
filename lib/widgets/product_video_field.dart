@@ -16,6 +16,13 @@ String formatVideoClock(Duration duration) {
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
+/// Same preview height as the buyer product gallery (not full portrait video height).
+double productVideoPreviewHeight(BuildContext context, double width) {
+  final size = MediaQuery.sizeOf(context);
+  final maxH = (size.height * 0.42).clamp(220.0, 320.0);
+  return (width * 0.75).clamp(200.0, maxH);
+}
+
 /// Seller add/edit product video: plays the existing clip or a newly picked file.
 class ProductVideoField extends StatefulWidget {
   const ProductVideoField({
@@ -274,19 +281,24 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
 
   Widget _player() {
     if (_failed) {
-      return Container(
-        height: 180,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(14)),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.videocam_off_outlined, color: Colors.white70),
-            const SizedBox(height: 8),
-            const Text('Could not load video', style: TextStyle(color: Colors.white70)),
-            TextButton(onPressed: _load, child: const Text('Retry')),
-          ],
-        ),
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final height = productVideoPreviewHeight(context, constraints.maxWidth);
+          return Container(
+            height: height,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(14)),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.videocam_off_outlined, color: Colors.white70),
+                const SizedBox(height: 8),
+                const Text('Could not load video', style: TextStyle(color: Colors.white70)),
+                TextButton(onPressed: _load, child: const Text('Retry')),
+              ],
+            ),
+          );
+        },
       );
     }
 
@@ -297,16 +309,18 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
     final duration = ready && controller.value.duration > Duration.zero
         ? controller.value.duration
         : Duration(seconds: widget.durationSeconds ?? 0);
-    final ratio = ready && controller.value.aspectRatio > 0 ? controller.value.aspectRatio : 16 / 9;
+    final ratio = ready && controller.value.aspectRatio > 0 ? controller.value.aspectRatio : 1.0;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: ColoredBox(
-        color: Colors.black,
-        child: Column(
-          children: [
-            AspectRatio(
-              aspectRatio: ratio.clamp(0.6, 1.9),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = productVideoPreviewHeight(context, constraints.maxWidth);
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            height: height,
+            width: double.infinity,
+            child: ColoredBox(
+              color: Colors.black,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -343,30 +357,41 @@ class _ProductVideoFieldState extends State<ProductVideoField> {
                         ),
                       ),
                     ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(12, 24, 4, 8),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [Color(0xCC111827), Colors.transparent],
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${formatVideoClock(position)} / ${formatVideoClock(duration)}',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            onPressed: ready ? _toggleMute : null,
+                            icon: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: Colors.white, size: 20),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
-            Container(
-              color: const Color(0xFF111827),
-              padding: const EdgeInsets.fromLTRB(12, 8, 8, 10),
-              child: Row(
-                children: [
-                  Text(
-                    '${formatVideoClock(position)} / ${formatVideoClock(duration)}',
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    onPressed: ready ? _toggleMute : null,
-                    icon: Icon(_muted ? Icons.volume_off : Icons.volume_up, color: Colors.white, size: 20),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

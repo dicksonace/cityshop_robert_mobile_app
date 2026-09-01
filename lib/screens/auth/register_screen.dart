@@ -9,6 +9,7 @@ import '../../support/countries.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/auth_help_link.dart';
 import '../../widgets/common_widgets.dart';
+import '../../widgets/ghana_location_fields.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -24,9 +25,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _password = TextEditingController();
   final _confirm = TextEditingController();
   String _country = kDefaultCountry;
+  String _region = '';
+  String _city = '';
   bool _loading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<AppStore>().loadGhanaLocations();
+    });
+  }
 
   @override
   void dispose() {
@@ -48,6 +60,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       return;
     }
+    if (_region.trim().isEmpty || _city.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please choose your region and city'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return;
+    }
     setState(() => _loading = true);
     try {
       await context.read<AppStore>().register(
@@ -55,6 +76,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             email: _email.text.trim().isEmpty ? null : _email.text.trim(),
             mobile: _mobile.text.trim(),
             country: _country,
+            region: _region,
+            city: _city,
             password: _password.text,
             passwordConfirmation: _confirm.text,
           );
@@ -88,6 +111,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final store = context.watch<AppStore>();
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -131,6 +155,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 _field('Mobile Number', _mobile, Icons.phone_outlined,
                     hint: '0241234567', keyboard: TextInputType.phone),
                 _countryField(),
+                GhanaLocationFields(
+                  region: _region,
+                  city: _city,
+                  citiesByRegion: store.citiesByRegion.isNotEmpty ? store.citiesByRegion : null,
+                  onRegionChanged: (value) => setState(() => _region = value),
+                  onCityChanged: (value) => setState(() => _city = value),
+                ),
                 _field('Email Address (Optional)', _email, Icons.email_outlined,
                     hint: 'Optional', keyboard: TextInputType.emailAddress),
                 _field(

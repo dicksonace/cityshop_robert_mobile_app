@@ -174,9 +174,45 @@ class _SellerShellScreenState extends State<SellerShellScreen> with AutoRefreshT
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Open store on the web',
-                  onPressed: _openStoreOnWeb,
-                  icon: const Icon(Icons.storefront_outlined),
+                  tooltip: 'Wallet',
+                  onPressed: () => setState(() => _tab = 3),
+                  icon: const Icon(Icons.account_balance_wallet_outlined),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'More tools',
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'store_web':
+                        _openStoreOnWeb();
+                      case 'store':
+                        context.push('/seller/store');
+                      case 'reviews':
+                        context.push('/seller/reviews');
+                      case 'promos':
+                        context.push('/seller/promotions');
+                      case 'payments':
+                        context.push('/seller/payment-methods');
+                      case 'followers':
+                        context.push('/seller/followers');
+                      case 'refunds':
+                        context.push('/seller/refunds');
+                      case 'activation':
+                        context.push('/seller/activation');
+                      case 'order_sms':
+                        context.push('/seller/order-sms');
+                    }
+                  },
+                  itemBuilder: (ctx) => const [
+                    PopupMenuItem(value: 'store_web', child: Text('Web store')),
+                    PopupMenuItem(value: 'store', child: Text('Store look')),
+                    PopupMenuItem(value: 'reviews', child: Text('Reviews')),
+                    PopupMenuItem(value: 'promos', child: Text('Promos')),
+                    PopupMenuItem(value: 'payments', child: Text('Payment methods')),
+                    PopupMenuItem(value: 'followers', child: Text('Followers')),
+                    PopupMenuItem(value: 'refunds', child: Text('Refunds')),
+                    PopupMenuItem(value: 'activation', child: Text('Seller fee')),
+                    PopupMenuItem(value: 'order_sms', child: Text('Order SMS')),
+                  ],
                 ),
                 IconButton(
                   tooltip: 'Log out',
@@ -218,8 +254,8 @@ class _SellerShellScreenState extends State<SellerShellScreen> with AutoRefreshT
               labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
               destinations: [
                 NavigationDestination(
-                  icon: Icon(Icons.dashboard_outlined, color: _tab == 0 ? Colors.white : AppColors.textSecondary),
-                  selectedIcon: Icon(Icons.dashboard, color: _tab == 0 ? Colors.white : AppColors.textSecondary),
+                  icon: Icon(Icons.home_outlined, color: _tab == 0 ? Colors.white : AppColors.textSecondary),
+                  selectedIcon: Icon(Icons.home_rounded, color: _tab == 0 ? Colors.white : AppColors.textSecondary),
                   label: 'Home',
                 ),
                 NavigationDestination(
@@ -271,8 +307,6 @@ class _SellerShellScreenState extends State<SellerShellScreen> with AutoRefreshT
           onOpenOrder: (id) => context.push('/seller/orders/$id'),
           onOpenProducts: () => setState(() => _tab = 2),
           onOpenWallet: () => setState(() => _tab = 3),
-          onOpenPayments: () => context.push('/seller/payment-methods'),
-          onOpenStoreWeb: _openStoreOnWeb,
         );
     }
   }
@@ -289,8 +323,6 @@ class _OverviewTab extends StatelessWidget {
     required this.onOpenOrder,
     required this.onOpenProducts,
     required this.onOpenWallet,
-    required this.onOpenPayments,
-    required this.onOpenStoreWeb,
   });
 
   final bool loading;
@@ -302,8 +334,6 @@ class _OverviewTab extends StatelessWidget {
   final void Function(int id) onOpenOrder;
   final VoidCallback onOpenProducts;
   final VoidCallback onOpenWallet;
-  final VoidCallback onOpenPayments;
-  final VoidCallback onOpenStoreWeb;
 
   @override
   Widget build(BuildContext context) {
@@ -329,26 +359,14 @@ class _OverviewTab extends StatelessWidget {
         .toList();
     final healthScore = _asInt(health['score']);
     final stages = [
-      ('Pending', 'new', pipeline['pending'], Icons.schedule, const Color(0xFFF59E0B)),
-      ('Processing', 'processing', pipeline['processing'], Icons.sync, const Color(0xFF3B82F6)),
-      ('Packed', 'packing', pipeline['packed'], Icons.inventory_2_outlined, const Color(0xFF8B5CF6)),
-      ('Shipped', 'delivery', pipeline['shipped'], Icons.local_shipping_outlined, const Color(0xFF0EA5E9)),
-      ('Awaiting', 'awaiting', pipeline['awaiting_confirmation'], Icons.mark_email_read_outlined, const Color(0xFF14B8A6)),
-      ('Delivered', 'completed', pipeline['delivered'], Icons.check_circle_outline, const Color(0xFF059669)),
+      ('Pending', 'new', pipeline['pending'], Icons.schedule_rounded, const Color(0xFFF59E0B)),
+      ('Processing', 'processing', pipeline['processing'], Icons.sync_rounded, const Color(0xFF3B82F6)),
+      ('Packed', 'packing', pipeline['packed'], Icons.inventory_2_rounded, const Color(0xFF8B5CF6)),
+      ('Shipped', 'delivery', pipeline['shipped'], Icons.local_shipping_rounded, const Color(0xFF0EA5E9)),
+      ('Awaiting', 'awaiting', pipeline['awaiting_confirmation'], Icons.move_to_inbox_rounded, const Color(0xFF14B8A6)),
+      ('Delivered', 'completed', pipeline['delivered'], Icons.verified_rounded, const Color(0xFF059669)),
     ];
-    final tools = [
-      (Icons.qr_code_2_rounded, 'Receive payment', () => context.push('/qr/receive')),
-      (Icons.qr_code_scanner_rounded, 'Scan to pay', () => context.push('/qr/scan')),
-      (Icons.language, 'Web store', onOpenStoreWeb),
-      (Icons.storefront_outlined, 'Store look', () => context.push('/seller/store')),
-      (Icons.star_outline, 'Reviews', () => context.push('/seller/reviews')),
-      (Icons.local_offer_outlined, 'Promos', () => context.push('/seller/promotions')),
-      (Icons.people_outline, 'Followers', () => context.push('/seller/followers')),
-      (Icons.replay, 'Refunds', () => context.push('/seller/refunds')),
-      (Icons.account_balance_outlined, 'Payments', onOpenPayments),
-      (Icons.workspace_premium_outlined, 'Seller fee', () => context.push('/seller/activation')),
-      (Icons.sms_outlined, 'Order SMS', () => context.push('/seller/order-sms')),
-    ];
+    final healthTip = tips.isNotEmpty ? tips.first : null;
 
     return Column(
       children: [
@@ -358,17 +376,8 @@ class _OverviewTab extends StatelessWidget {
             onRefresh: onRefresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
               children: [
-                const Text(
-                  'Welcome back',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Sales, payouts, and orders',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-                ),
                 if (error != null) ...[
                   const SizedBox(height: 12),
                   Material(
@@ -410,7 +419,7 @@ class _OverviewTab extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _WalletHero(
                   available: _asDouble(stats['available_balance']),
                   pending: _asDouble(stats['pending_balance']),
@@ -440,15 +449,15 @@ class _OverviewTab extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: _MiniStat(
-                        icon: Icons.trending_up,
+                        icon: Icons.trending_up_rounded,
                         label: 'Earnings',
-                        value: _compactMoney(_asDouble(stats['total_earnings'])),
+                        value: _money.format(_asDouble(stats['total_earnings'])),
                         onTap: onOpenWallet,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 18),
                 const Text('Order pipeline', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
                 const Text(
@@ -462,7 +471,7 @@ class _OverviewTab extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 10,
                   crossAxisSpacing: 10,
-                  childAspectRatio: 1.05,
+                  childAspectRatio: 1.08,
                   children: [
                     for (final stage in stages)
                       _PipelineTile(
@@ -474,12 +483,12 @@ class _OverviewTab extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 18),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(18),
                     border: Border.all(color: const Color(0xFFE5E7EB)),
                   ),
                   child: Column(
@@ -505,18 +514,18 @@ class _OverviewTab extends StatelessWidget {
                             ),
                           ),
                           Container(
-                            width: 56,
-                            height: 56,
+                            width: 52,
+                            height: 52,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFECFDF5),
-                              borderRadius: BorderRadius.circular(16),
+                              color: const Color(0xFFDCFCE7),
+                              borderRadius: BorderRadius.circular(14),
                             ),
                             child: Text(
                               '$healthScore',
                               style: const TextStyle(
-                                color: Color(0xFF0F766E),
-                                fontSize: 18,
+                                color: Color(0xFF15803D),
+                                fontSize: 20,
                                 fontWeight: FontWeight.w900,
                               ),
                             ),
@@ -525,81 +534,38 @@ class _OverviewTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(999),
                         child: LinearProgressIndicator(
                           value: (healthScore / 100).clamp(0, 1),
-                          minHeight: 8,
-                          color: const Color(0xFF0F766E),
+                          minHeight: 7,
+                          color: const Color(0xFF22C55E),
                           backgroundColor: const Color(0xFFE5E7EB),
                         ),
                       ),
-                      if (tips.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        ...tips.map(
-                          (tip) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 2),
-                                  child: Icon(Icons.circle, size: 7, color: AppColors.accent),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(tip, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35)),
-                                ),
-                              ],
-                            ),
-                          ),
+                      if (healthTip != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          '* $healthTip',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.35),
                         ),
                       ],
                     ],
                   ),
                 ),
-                const SizedBox(height: 22),
-                const Text('Shortcuts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
-                GridView.count(
-                  crossAxisCount: 4,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 0.82,
-                  children: [
-                    for (final tool in tools)
-                      _ToolTile(icon: tool.$1, label: tool.$2, onTap: tool.$3),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text('Recent orders', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                    ),
-                    TextButton(
-                      onPressed: () => onOpenOrders(),
-                      child: const Text('See all'),
-                    ),
-                  ],
-                ),
-                if (recent.isEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 28),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
-                    child: const Text(
-                      'No recent orders yet.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.textSecondary),
-                    ),
-                  )
-                else
+                if (recent.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Recent orders', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                      ),
+                      TextButton(
+                        onPressed: () => onOpenOrders(),
+                        child: const Text('See all'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   ...recent.map((item) {
                     final status = (item['status'] as String? ?? '').replaceAll('_', ' ');
                     return Padding(
@@ -658,6 +624,7 @@ class _OverviewTab extends StatelessWidget {
                       ),
                     );
                   }),
+                ],
               ],
             ),
           ),
@@ -703,26 +670,16 @@ class _WalletHero extends StatelessWidget {
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+            padding: const EdgeInsets.fromLTRB(18, 20, 18, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
-                  children: [
-                    Text('Available to withdraw', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
-                    Spacer(),
-                    Text('Wallet', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
-                    SizedBox(width: 4),
-                    Icon(Icons.chevron_right, color: Colors.white, size: 18),
-                  ],
-                ),
-                const SizedBox(height: 8),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
                     _money.format(available),
-                    style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900, height: 1.1),
+                    style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900, height: 1.05),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -808,17 +765,21 @@ class _MiniStat extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
+        child: Container(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 18, color: AppColors.accent),
-              const SizedBox(height: 10),
+              Icon(icon, size: 20, color: AppColors.accent),
+              const SizedBox(height: 8),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                child: Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
               ),
               const SizedBox(height: 2),
               Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
@@ -855,63 +816,34 @@ class _PipelineTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: active ? color.withValues(alpha: 0.35) : const Color(0xFFE5E7EB)),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 18, color: color),
-              const Spacer(),
-              Text('$count', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: active ? AppColors.textPrimary : AppColors.textMuted)),
-              Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ToolTile extends StatelessWidget {
-  const _ToolTile({required this.icon, required this.label, required this.onTap});
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: AppColors.ringOrange,
-                  borderRadius: BorderRadius.circular(12),
+                  color: color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(icon, color: AppColors.primary, size: 20),
+                child: Icon(icon, size: 18, color: color),
               ),
-              const SizedBox(height: 6),
+              const Spacer(),
               Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, height: 1.15),
+                '$count',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: active ? AppColors.textPrimary : AppColors.textMuted,
+                ),
               ),
+              Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
             ],
           ),
         ),

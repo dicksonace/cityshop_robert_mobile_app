@@ -1017,6 +1017,8 @@ class AppStore extends ChangeNotifier {
     String? email,
     required String mobile,
     required String country,
+    required String region,
+    required String city,
     required String password,
     required String passwordConfirmation,
   }) async {
@@ -1025,6 +1027,8 @@ class AppStore extends ChangeNotifier {
       if (email != null && email.isNotEmpty) 'email': email,
       'mobile': mobile,
       'country': country,
+      'region': region,
+      'city': city,
       'password': password,
       'password_confirmation': passwordConfirmation,
       'device_name': ApiConfig.deviceName,
@@ -2510,6 +2514,29 @@ class AppStore extends ChangeNotifier {
   /// Warm the ICE cache while the chat screen loads so the call path never waits.
   void primeIceServers() {
     if (_iceServers == null) unawaited(fetchIceServers());
+  }
+
+  Future<void> loadGhanaLocations() async {
+    if (regions.isNotEmpty && citiesByRegion.isNotEmpty) return;
+    try {
+      final res = await _api.get('/locations/ghana');
+      final regs = res.data is Map ? res.data['regions'] : null;
+      if (regs is List && regs.isNotEmpty) {
+        regions = regs.map((e) => e.toString()).toList();
+      }
+      final cities = res.data is Map ? res.data['cities_by_region'] : null;
+      if (cities is Map && cities.isNotEmpty) {
+        citiesByRegion = cities.map(
+          (k, v) => MapEntry(
+            k.toString(),
+            v is List ? v.map((e) => e.toString()).toList() : <String>[],
+          ),
+        );
+      }
+      notifyListeners();
+    } catch (_) {
+      // Offline signup still works with bundled defaults in ghana_location_fields.dart.
+    }
   }
 
   Future<void> loadAddresses() async {

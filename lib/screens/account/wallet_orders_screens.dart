@@ -1496,12 +1496,32 @@ class _OrdersTabState extends State<OrdersTab> with AutoRefreshTab {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(0, 0, 0, 28),
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Text(
-              'Manage orders',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 14, 4, 8),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Text(
+                  'Manage orders',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!loading) TabAutoRefreshBadge(active: tabAutoRefreshing),
+                      IconButton(
+                        icon: const Icon(Icons.refresh, size: 22),
+                        tooltip: 'Refresh',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: tabAutoRefreshing ? null : refreshNow,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
           Container(

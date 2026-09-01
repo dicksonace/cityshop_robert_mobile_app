@@ -866,9 +866,12 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
           ? const FullPageLoader(label: 'Loading…')
           : error != null
               ? Center(child: Text(error!))
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              : Column(
                   children: [
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                        children: [
                     TextField(controller: name, decoration: const InputDecoration(labelText: 'Product name')),
                     const SizedBox(height: 12),
                     TextField(
@@ -1181,10 +1184,22 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                           const SizedBox(height: 8),
                         ],
                       ),
-                    const SizedBox(height: 20),
-                    FilledButton(
-                      onPressed: saving ? null : _save,
-                      child: Text(saving ? 'Saving…' : (isEdit ? 'Save changes' : 'Publish product')),
+                        ],
+                      ),
+                    ),
+                    SafeArea(
+                      top: false,
+                      minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: saving ? null : _save,
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Text(saving ? 'Saving…' : (isEdit ? 'Save changes' : 'Publish product')),
+                        ),
+                      ),
                     ),
                   ],
                 ),
