@@ -358,7 +358,6 @@ class _AddressesScreenState extends State<AddressesScreen> {
                 GhanaLocationFields(
                   region: region,
                   city: city,
-                  citiesByRegion: store.citiesByRegion.isNotEmpty ? store.citiesByRegion : null,
                   onRegionChanged: (value) => setModal(() {
                     region = value;
                     city = (store.citiesByRegion[value] ?? ghanaCitiesForRegion(value)).firstOrNull ?? '';

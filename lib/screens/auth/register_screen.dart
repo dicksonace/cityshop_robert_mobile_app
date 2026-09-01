@@ -111,7 +111,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final store = context.watch<AppStore>();
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -158,7 +157,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 GhanaLocationFields(
                   region: _region,
                   city: _city,
-                  citiesByRegion: store.citiesByRegion.isNotEmpty ? store.citiesByRegion : null,
                   onRegionChanged: (value) => setState(() => _region = value),
                   onCityChanged: (value) => setState(() => _city = value),
                 ),

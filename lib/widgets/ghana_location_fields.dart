@@ -5,13 +5,26 @@ import '../theme/app_theme.dart';
 /// Keep in sync with [App\Support\GhanaLocations] on the backend.
 const kOtherCity = 'Other city';
 
+const kGhanaRegionOrder = [
+  'Greater Accra',
+  'Ashanti',
+  'Western',
+  'Eastern',
+  'Central',
+  'Northern',
+  'Upper East',
+  'Upper West',
+  'Volta',
+  'Bono',
+  'Western North',
+  'Ahafo',
+  'Bono East',
+  'North East',
+  'Savannah',
+  'Oti',
+];
+
 const Map<String, List<String>> kGhanaCitiesByRegion = {
-  'Ahafo': ['Goaso', 'Bechem', 'Duayaw Nkwanta', 'Kukuom', 'Hwidiem'],
-  'Ashanti': ['Kumasi', 'Obuasi', 'Ejisu', 'Konongo', 'Mampong', 'Bekwai', 'Offinso'],
-  'Bono': ['Sunyani', 'Berekum', 'Dormaa Ahenkro', 'Wenchi'],
-  'Bono East': ['Techiman', 'Kintampo', 'Nkoranza', 'Atebubu'],
-  'Central': ['Cape Coast', 'Kasoa', 'Winneba', 'Elmina', 'Mankessim', 'Swedru'],
-  'Eastern': ['Koforidua', 'Nkawkaw', 'Akosombo', 'Nsawam', 'Suhum', 'Akim Oda'],
   'Greater Accra': [
     'Abeka', 'Ablekuma', 'Accra', 'Accra Central', 'Achimota', 'Adabraka', 'Adenta', 'Airport',
     'Amasaman', 'Ashaiman', 'Atomic', 'Avenor', 'Awoshie', 'Baatsona', 'Bubuashie', 'Cantonments',
@@ -23,30 +36,73 @@ const Map<String, List<String>> kGhanaCitiesByRegion = {
     'South Industrial Area', 'Spintex', 'Spintex Road', 'Tema', 'Teshie', 'Teshie Nungua', 'Tesano',
     'Trasaco', 'Tudu', 'Usher Town', 'Weija', kOtherCity,
   ],
+  'Ashanti': ['Kumasi', 'Obuasi', 'Ejisu', 'Konongo', 'Mampong', 'Bekwai', 'Offinso', kOtherCity],
+  'Western': ['Takoradi', 'Sekondi', 'Tarkwa', 'Axim', kOtherCity],
+  'Eastern': ['Koforidua', 'Nkawkaw', 'Akosombo', 'Nsawam', 'Suhum', 'Akim Oda', kOtherCity],
+  'Central': ['Cape Coast', 'Kasoa', 'Winneba', 'Elmina', 'Mankessim', 'Swedru', kOtherCity],
+  'Northern': ['Tamale', 'Yendi', 'Savelugu', kOtherCity],
+  'Upper East': ['Bolgatanga', 'Bawku', 'Navrongo', kOtherCity],
+  'Upper West': ['Wa', 'Lawra', 'Nandom', 'Jirapa', kOtherCity],
+  'Volta': ['Ho', 'Hohoe', 'Keta', 'Aflao', 'Kpandu', kOtherCity],
+  'Bono': ['Sunyani', 'Berekum', 'Dormaa Ahenkro', 'Wenchi', kOtherCity],
+  'Western North': ['Sefwi Wiawso', 'Bibiani', 'Sefwi Bekwai', 'Enchi', 'Juaboso', kOtherCity],
+  'Ahafo': ['Goaso', 'Bechem', 'Duayaw Nkwanta', 'Kukuom', 'Hwidiem', kOtherCity],
+  'Bono East': ['Techiman', 'Kintampo', 'Nkoranza', 'Atebubu', kOtherCity],
   'North East': [
     'Bunkpurugu', 'Chereponi', 'Demon', 'Gambaga', 'Jimbale', 'Nakpanduri',
     'Nalerigu', 'Walewale', 'Wenchiki', 'Yunyoo', kOtherCity,
-  ],
-  'Northern': ['Tamale', 'Yendi', 'Savelugu'],
-  'Oti': [
-    'Akpafu', 'Brewaniase', 'Chinderi', 'Dambai', 'Jasikan', 'Kate krachi', 'Kpassa',
-    'Krachi Nchumuru', 'Kwamekrom', 'Likpe', 'Lolobi', 'Nkwanta', 'Santrokofi',
-    'Worawora', kOtherCity,
   ],
   'Savannah': [
     'Bole', 'Buipe', 'Canteen', 'Daboya', 'Damongo', 'Gbintiri', 'Grupe', 'Kalande',
     'Lungbunga', 'Salaga', 'Sawla', 'Tuna', 'Yapei', kOtherCity,
   ],
-  'Upper East': ['Bolgatanga', 'Bawku', 'Navrongo'],
-  'Upper West': ['Wa', 'Lawra', 'Nandom', 'Jirapa'],
-  'Volta': ['Ho', 'Hohoe', 'Keta', 'Aflao', 'Kpandu'],
-  'Western': ['Takoradi', 'Sekondi', 'Tarkwa', 'Axim'],
-  'Western North': ['Sefwi Wiawso', 'Bibiani', 'Sefwi Bekwai', 'Enchi', 'Juaboso'],
+  'Oti': [
+    'Akpafu', 'Brewaniase', 'Chinderi', 'Dambai', 'Jasikan', 'Kate krachi', 'Kpassa',
+    'Krachi Nchumuru', 'Kwamekrom', 'Likpe', 'Lolobi', 'Nkwanta', 'Santrokofi',
+    'Worawora', kOtherCity,
+  ],
 };
+
+Map<String, List<String>> mergeGhanaCitiesByRegion(
+  Map<String, List<String>>? remote,
+) {
+  final merged = <String, List<String>>{};
+  final keys = <String>{
+    ...kGhanaCitiesByRegion.keys,
+    if (remote != null) ...remote.keys,
+  };
+
+  for (final key in keys) {
+    final local = kGhanaCitiesByRegion[key] ?? const <String>[];
+    final api = remote?[key] ?? const <String>[];
+    final ordered = <String>[];
+
+    for (final city in local) {
+      if (!ordered.contains(city)) {
+        ordered.add(city);
+      }
+    }
+    for (final city in api) {
+      if (!ordered.contains(city)) {
+        ordered.add(city);
+      }
+    }
+
+    merged[key] = ordered;
+  }
+
+  return merged;
+}
 
 List<String> ghanaRegions({Map<String, List<String>>? citiesByRegion}) {
   final source = citiesByRegion ?? kGhanaCitiesByRegion;
-  return source.keys.toList();
+  final ordered = kGhanaRegionOrder.where(source.containsKey).toList();
+  for (final key in source.keys) {
+    if (!ordered.contains(key)) {
+      ordered.add(key);
+    }
+  }
+  return ordered;
 }
 
 List<String> ghanaCitiesForRegion(
@@ -88,7 +144,7 @@ class _GhanaLocationFieldsState extends State<GhanaLocationFields> {
   bool _usingCustomCity = false;
 
   Map<String, List<String>> get _citiesByRegion =>
-      widget.citiesByRegion ?? kGhanaCitiesByRegion;
+      mergeGhanaCitiesByRegion(widget.citiesByRegion);
 
   @override
   void initState() {

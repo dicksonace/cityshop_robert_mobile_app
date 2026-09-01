@@ -9,6 +9,7 @@ import '../api/chat_realtime.dart';
 import '../models/models.dart';
 import '../services/chat_thread_cache.dart';
 import '../services/recent_views.dart';
+import '../widgets/ghana_location_fields.dart';
 import '../widgets/product_image_limits.dart';
 
 class AppStore extends ChangeNotifier {
@@ -2517,26 +2518,25 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> loadGhanaLocations() async {
-    if (regions.isNotEmpty && citiesByRegion.isNotEmpty) return;
+    Map<String, List<String>>? remoteCities;
     try {
       final res = await _api.get('/locations/ghana');
-      final regs = res.data is Map ? res.data['regions'] : null;
-      if (regs is List && regs.isNotEmpty) {
-        regions = regs.map((e) => e.toString()).toList();
-      }
       final cities = res.data is Map ? res.data['cities_by_region'] : null;
       if (cities is Map && cities.isNotEmpty) {
-        citiesByRegion = cities.map(
+        remoteCities = cities.map(
           (k, v) => MapEntry(
             k.toString(),
             v is List ? v.map((e) => e.toString()).toList() : <String>[],
           ),
         );
       }
-      notifyListeners();
     } catch (_) {
       // Offline signup still works with bundled defaults in ghana_location_fields.dart.
     }
+
+    citiesByRegion = mergeGhanaCitiesByRegion(remoteCities);
+    regions = ghanaRegions(citiesByRegion: citiesByRegion);
+    notifyListeners();
   }
 
   Future<void> loadAddresses() async {
@@ -2548,18 +2548,16 @@ class AppStore extends ChangeNotifier {
           .map((e) => BuyerAddress.fromJson(Map<String, dynamic>.from(e)))
           .toList();
     }
-    final regs = res.data is Map ? res.data['regions'] : null;
-    if (regs is List) {
-      regions = regs.map((e) => e.toString()).toList();
-    }
     final cities = res.data is Map ? res.data['cities_by_region'] : null;
     if (cities is Map) {
-      citiesByRegion = cities.map(
+      final remoteCities = cities.map(
         (k, v) => MapEntry(
           k.toString(),
           v is List ? v.map((e) => e.toString()).toList() : <String>[],
         ),
       );
+      citiesByRegion = mergeGhanaCitiesByRegion(remoteCities);
+      regions = ghanaRegions(citiesByRegion: citiesByRegion);
     }
     notifyListeners();
   }
