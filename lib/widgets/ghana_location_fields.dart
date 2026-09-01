@@ -37,7 +37,11 @@ const Map<String, List<String>> kGhanaCitiesByRegion = {
     'Trasaco', 'Tudu', 'Usher Town', 'Weija', kOtherCity,
   ],
   'Ashanti': ['Kumasi', 'Obuasi', 'Ejisu', 'Konongo', 'Mampong', 'Bekwai', 'Offinso', kOtherCity],
-  'Western': ['Takoradi', 'Sekondi', 'Tarkwa', 'Axim', kOtherCity],
+  'Western': [
+    'Aboadze', 'Agona Nkwanta', 'Asankragua', 'Axim', 'Bogoso', 'Busua', 'Dixcove', 'Elubo',
+    'Esiama', 'Essikado', 'Half Assini', 'Huni Valley', 'Mpohor', 'Prestea', 'Sekondi', 'Shama',
+    'Takoradi', 'Tarkwa', 'Wassa Akropong', kOtherCity,
+  ],
   'Eastern': [
     'Aburi', 'Achiase', 'Adukrom', 'Akim Oda', 'Akosombo', 'Akropong', 'Akwatia', 'Akyem Hemang',
     'Amanokrom', 'Asamankese', 'Atimpoku', 'Begoro', 'Coaltar', 'Effiduase', 'Kibi', 'Koforidua',
