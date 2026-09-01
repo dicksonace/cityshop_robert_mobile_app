@@ -69,7 +69,10 @@ const Map<String, List<String>> kGhanaCitiesByRegion = {
     'Bawku', 'Binduri', 'Bolgatanga', 'Bongo', 'Garu', 'Navrongo', 'Paga', 'Pusiga', 'Pwalugu',
     'Telensi', 'Tempane', 'Tongo', 'Zebilla', 'Zuarungu', kOtherCity,
   ],
-  'Upper West': ['Wa', 'Lawra', 'Nandom', 'Jirapa', kOtherCity],
+  'Upper West': [
+    'Funsi', 'Gwollu', 'Hamile', 'Issa', 'Jirapa', 'Ko', 'Lawra', 'Nadowli', 'Nandom', 'Sankana',
+    'Tumu', 'Wa', 'Wechiau', kOtherCity,
+  ],
   'Volta': ['Ho', 'Hohoe', 'Keta', 'Aflao', 'Kpandu', kOtherCity],
   'Bono': ['Sunyani', 'Berekum', 'Dormaa Ahenkro', 'Wenchi', kOtherCity],
   'Western North': [
