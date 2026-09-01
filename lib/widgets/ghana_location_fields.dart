@@ -73,7 +73,11 @@ const Map<String, List<String>> kGhanaCitiesByRegion = {
     'Funsi', 'Gwollu', 'Hamile', 'Issa', 'Jirapa', 'Ko', 'Lawra', 'Nadowli', 'Nandom', 'Sankana',
     'Tumu', 'Wa', 'Wechiau', kOtherCity,
   ],
-  'Volta': ['Ho', 'Hohoe', 'Keta', 'Aflao', 'Kpandu', kOtherCity],
+  'Volta': [
+    'Adidome', 'Aflao', 'Agbozume', 'Akatsi', 'Anloga', 'Ave Dakpa', 'Battor', 'Dabala', 'Denu', 'Dzodze',
+    'Gbi Wegbe', 'Golokwati', 'Ho', 'Hohoe', 'Keta', 'Klikor', 'Kpando', 'Kpetoe', 'Kpeve', 'Mepe', 'Peki',
+    'Sogakope', 'Todze', 'Tsito', 'Xavi', kOtherCity,
+  ],
   'Bono': ['Sunyani', 'Berekum', 'Dormaa Ahenkro', 'Wenchi', kOtherCity],
   'Western North': [
     'Akontombra', 'Anhwinso', 'Asawinso', 'Bia', 'Bibiani', 'Bodi', 'Chirano', 'Dadieso', 'Debiso',
