@@ -61,7 +61,10 @@ const Map<String, List<String>> kGhanaCitiesByRegion = {
     'Mankessim', 'Mumford', 'Nsuaem', 'Nyakrom', 'Saltpong', 'Twifo Praso', 'University of Cape Coast',
     'Winneba', 'Yamoransa', kOtherCity,
   ],
-  'Northern': ['Tamale', 'Yendi', 'Savelugu', kOtherCity],
+  'Northern': [
+    'Bimbilla', 'Gushegu', 'Karaga', 'Kpandai', 'Kpasenkpe', 'Kumbungu', 'Nanton', 'Saboba', 'Salaga',
+    'Sang', 'Savelugu', 'Tamale', 'Tatale', 'Tolon', 'Wulensi', 'Yebdi', 'Zabzugu', kOtherCity,
+  ],
   'Upper East': [
     'Bawku', 'Binduri', 'Bolgatanga', 'Bongo', 'Garu', 'Navrongo', 'Paga', 'Pusiga', 'Pwalugu',
     'Telensi', 'Tempane', 'Tongo', 'Zebilla', 'Zuarungu', kOtherCity,
