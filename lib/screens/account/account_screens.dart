@@ -304,6 +304,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
       error = null;
     });
     try {
+      await context.read<AppStore>().loadGhanaLocations();
       await context.read<AppStore>().loadAddresses();
     } on ApiException catch (e) {
       error = e.message;
@@ -330,7 +331,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setModal) {
-            final cityOptions = store.citiesByRegion[region] ?? ghanaCitiesForRegion(region);
+            final cityOptions = ghanaCitiesForRegion(region);
             if (city.isEmpty && cityOptions.isNotEmpty && cityOptions.first != kOtherCity) {
               city = cityOptions.first;
             }
@@ -360,7 +361,7 @@ class _AddressesScreenState extends State<AddressesScreen> {
                   city: city,
                   onRegionChanged: (value) => setModal(() {
                     region = value;
-                    city = (store.citiesByRegion[value] ?? ghanaCitiesForRegion(value)).firstOrNull ?? '';
+                    city = ghanaCitiesForRegion(value).firstOrNull ?? '';
                   }),
                   onCityChanged: (value) => setModal(() => city = value),
                 ),

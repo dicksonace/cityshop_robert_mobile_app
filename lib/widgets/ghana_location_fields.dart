@@ -85,39 +85,28 @@ const Map<String, List<String>> kGhanaCitiesByRegion = {
   ],
 };
 
-Map<String, List<String>> mergeGhanaCitiesByRegion(
-  Map<String, List<String>>? remote,
-) {
-  final merged = <String, List<String>>{};
-  final keys = <String>{
-    ...kGhanaCitiesByRegion.keys,
-    if (remote != null) ...remote.keys,
-  };
+/// Bundled city lists are the source of truth for region/city pickers.
+Map<String, List<String>> ghanaCitiesCatalog({Map<String, List<String>>? remote}) {
+  final catalog = kGhanaCitiesByRegion.map(
+    (key, value) => MapEntry(key, List<String>.from(value)),
+  );
 
-  for (final key in keys) {
-    final local = kGhanaCitiesByRegion[key] ?? const <String>[];
-    final api = remote?[key] ?? const <String>[];
-    final ordered = <String>[];
-
-    for (final city in local) {
-      if (!ordered.contains(city)) {
-        ordered.add(city);
-      }
-    }
-    for (final city in api) {
-      if (!ordered.contains(city)) {
-        ordered.add(city);
-      }
-    }
-
-    merged[key] = ordered;
+  if (remote == null) {
+    return catalog;
   }
 
-  return merged;
+  // Only accept unknown regions from the API; never replace bundled lists.
+  for (final entry in remote.entries) {
+    if (!catalog.containsKey(entry.key) && entry.value.isNotEmpty) {
+      catalog[entry.key] = List<String>.from(entry.value);
+    }
+  }
+
+  return catalog;
 }
 
 List<String> ghanaRegions({Map<String, List<String>>? citiesByRegion}) {
-  final source = citiesByRegion ?? kGhanaCitiesByRegion;
+  final source = ghanaCitiesCatalog(remote: citiesByRegion);
   final ordered = kGhanaRegionOrder.where(source.containsKey).toList();
   for (final key in source.keys) {
     if (!ordered.contains(key)) {
@@ -131,7 +120,7 @@ List<String> ghanaCitiesForRegion(
   String region, {
   Map<String, List<String>>? citiesByRegion,
 }) {
-  final source = citiesByRegion ?? kGhanaCitiesByRegion;
+  final source = ghanaCitiesCatalog(remote: citiesByRegion);
   return List<String>.from(source[region] ?? const []);
 }
 
@@ -148,14 +137,12 @@ class GhanaLocationFields extends StatefulWidget {
     required this.city,
     required this.onRegionChanged,
     required this.onCityChanged,
-    this.citiesByRegion,
   });
 
   final String region;
   final String city;
   final ValueChanged<String> onRegionChanged;
   final ValueChanged<String> onCityChanged;
-  final Map<String, List<String>>? citiesByRegion;
 
   @override
   State<GhanaLocationFields> createState() => _GhanaLocationFieldsState();
@@ -165,8 +152,7 @@ class _GhanaLocationFieldsState extends State<GhanaLocationFields> {
   final _customCity = TextEditingController();
   bool _usingCustomCity = false;
 
-  Map<String, List<String>> get _citiesByRegion =>
-      mergeGhanaCitiesByRegion(widget.citiesByRegion);
+  Map<String, List<String>> get _citiesByRegion => ghanaCitiesCatalog();
 
   @override
   void initState() {

@@ -2534,7 +2534,7 @@ class AppStore extends ChangeNotifier {
       // Offline signup still works with bundled defaults in ghana_location_fields.dart.
     }
 
-    citiesByRegion = mergeGhanaCitiesByRegion(remoteCities);
+    citiesByRegion = ghanaCitiesCatalog(remote: remoteCities);
     regions = ghanaRegions(citiesByRegion: citiesByRegion);
     notifyListeners();
   }
@@ -2556,7 +2556,7 @@ class AppStore extends ChangeNotifier {
           v is List ? v.map((e) => e.toString()).toList() : <String>[],
         ),
       );
-      citiesByRegion = mergeGhanaCitiesByRegion(remoteCities);
+      citiesByRegion = ghanaCitiesCatalog(remote: remoteCities);
       regions = ghanaRegions(citiesByRegion: citiesByRegion);
     }
     notifyListeners();
