@@ -36,7 +36,13 @@ const Map<String, List<String>> kGhanaCitiesByRegion = {
     'South Industrial Area', 'Spintex', 'Spintex Road', 'Tema', 'Teshie', 'Teshie Nungua', 'Tesano',
     'Trasaco', 'Tudu', 'Usher Town', 'Weija', kOtherCity,
   ],
-  'Ashanti': ['Kumasi', 'Obuasi', 'Ejisu', 'Konongo', 'Mampong', 'Bekwai', 'Offinso', kOtherCity],
+  'Ashanti': [
+    'Abrepo', 'Abuakwa', 'Adum', 'Afrancho', 'Agogo', 'Agona', 'Ahafo Ano', 'Ahinsan', 'Ahodwo',
+    'Airport Roundabout', 'Amakom', 'Asafo', 'Asante Manpong', 'Asokwa', 'Atronsu', 'Ayeduase', 'Ayigya',
+    'Bantama', 'Bekwai', 'Bomfa', 'Adeduako', 'Effiduase', 'Ejisu', 'Emena', 'Fomena', 'Jacobu', 'Juaso',
+    'Kentinkrono', 'Konongo', 'Kotei', 'Kumasi', 'Kwadaso', 'Manpong', 'Manso Nkwanta', 'Nhyiaeso', 'Nkawie',
+    'Nsuta', 'Obuasi', 'Offinso', 'Pankrono', 'Tafo', 'Tanoso', 'Tech', 'Tepa', 'Toase', kOtherCity,
+  ],
   'Western': [
     'Aboadze', 'Agona Nkwanta', 'Asankragua', 'Axim', 'Bogoso', 'Busua', 'Dixcove', 'Elubo',
     'Esiama', 'Essikado', 'Half Assini', 'Huni Valley', 'Mpohor', 'Prestea', 'Sekondi', 'Shama',
