@@ -12,7 +12,17 @@ const Map<String, List<String>> kGhanaCitiesByRegion = {
   'Bono East': ['Techiman', 'Kintampo', 'Nkoranza', 'Atebubu'],
   'Central': ['Cape Coast', 'Kasoa', 'Winneba', 'Elmina', 'Mankessim', 'Swedru'],
   'Eastern': ['Koforidua', 'Nkawkaw', 'Akosombo', 'Nsawam', 'Suhum', 'Akim Oda'],
-  'Greater Accra': ['Accra', 'Tema', 'Madina', 'Kasoa', 'Ashaiman', 'Ablekuma', 'Adenta', 'Dodowa'],
+  'Greater Accra': [
+    'Abeka', 'Ablekuma', 'Accra', 'Accra Central', 'Achimota', 'Adabraka', 'Adenta', 'Airport',
+    'Amasaman', 'Ashaiman', 'Atomic', 'Avenor', 'Awoshie', 'Baatsona', 'Bubuashie', 'Cantonments',
+    'Chorkor', 'Circle', 'Dansoman', 'Darkuman', 'Dawhenya', 'Dodowa', 'Dome', 'Dzorwulu',
+    'East Legon', 'Gbawe', 'Haatso', 'Jamestown', 'Kanda', 'Kaneshie', 'Kasoa', 'Kokomlemle',
+    'Korle Bu', 'Kwashieman', 'Labadi', 'Labone', 'Lapaz', 'Lashibi', 'Legon', 'Madina', 'Makola',
+    'Mallam', 'Mamprobi', 'Mataheko', 'North Industrial Area', 'North Kaneshie', 'Nungua', 'Ofankor',
+    'Osu', 'Oyarifa', 'Pokuase', 'Prampram', 'Ridge', 'Roman Ridge', 'Sakumono', 'Santa Maria',
+    'South Industrial Area', 'Spintex', 'Spintex Road', 'Tema', 'Teshie', 'Teshie Nungua', 'Tesano',
+    'Trasaco', 'Tudu', 'Usher Town', 'Weija', kOtherCity,
+  ],
   'North East': [
     'Bunkpurugu', 'Chereponi', 'Demon', 'Gambaga', 'Jimbale', 'Nakpanduri',
     'Nalerigu', 'Walewale', 'Wenchiki', 'Yunyoo', kOtherCity,
