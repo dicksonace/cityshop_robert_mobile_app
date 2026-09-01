@@ -78,7 +78,10 @@ const Map<String, List<String>> kGhanaCitiesByRegion = {
     'Gbi Wegbe', 'Golokwati', 'Ho', 'Hohoe', 'Keta', 'Klikor', 'Kpando', 'Kpetoe', 'Kpeve', 'Mepe', 'Peki',
     'Sogakope', 'Todze', 'Tsito', 'Xavi', kOtherCity,
   ],
-  'Bono': ['Sunyani', 'Berekum', 'Dormaa Ahenkro', 'Wenchi', kOtherCity],
+  'Bono': [
+    'Abesim', 'Berekum', 'Chiraa', 'Dormaa Ahenkro', 'Drobo', 'Fiapre', 'Odumase', 'Sampa', 'Sunyani',
+    'Wenchi', 'Yawhima', kOtherCity,
+  ],
   'Western North': [
     'Akontombra', 'Anhwinso', 'Asawinso', 'Bia', 'Bibiani', 'Bodi', 'Chirano', 'Dadieso', 'Debiso',
     'Enchi', 'Juaboso', 'Sefwi Awaso', 'Sefwi Bekwai', 'Sefwi Wiawso', kOtherCity,
@@ -89,7 +92,7 @@ const Map<String, List<String>> kGhanaCitiesByRegion = {
   ],
   'Bono East': [
     'Abease', 'Amantin', 'Atebubu', 'Babatokuma', 'Jema', 'Kintampo', 'Kwame Danso', 'New Longoro',
-    'Nkoranza', 'Nsuta', 'Prang', 'Techiman', 'Tuobodom', 'Yeji', kOtherCity,
+    'Nkoranza', 'Nsuta', 'Prang', 'Tanoso', 'Techiman', 'Tuobodom', 'Yeji', kOtherCity,
   ],
   'North East': [
     'Bunkpurugu', 'Chereponi', 'Demon', 'Gambaga', 'Jimbale', 'Nakpanduri',
