@@ -9,7 +9,7 @@ TEAM_ID="${APPLE_TEAM_ID:-}"
 
 cd "$ROOT"
 
-if ! command -xcodebuild >/dev/null 2>&1 && ! xcode-select -p >/dev/null 2>&1; then
+if ! command -v xcodebuild >/dev/null 2>&1; then
   echo "Xcode is required. Install from the Mac App Store."
   exit 1
 fi

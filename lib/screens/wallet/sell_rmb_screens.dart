@@ -1344,25 +1344,89 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
     required String youReceive,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFEF2F2),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFFEE2E2)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
             'SELL SUMMARY',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFB91C1C), letterSpacing: 0.6),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF6B7280),
+              letterSpacing: 0.7,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF16A34A), Color(0xFF15803D)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'YOU RECEIVE',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.7,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  youReceive,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    height: 1.05,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'GHS to your MoMo',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          _summaryRow(
+            'RMB Sent',
+            '¥ ${rmbAmount.toStringAsFixed(2)}',
+            valueColor: const Color(0xFFDC2626),
+            valueSize: 16,
+            bold: true,
           ),
           const SizedBox(height: 10),
-          _summaryRow('RMB Sent', '¥ ${rmbAmount.toStringAsFixed(2)}', valueColor: const Color(0xFFDC2626), valueSize: 20),
-          const SizedBox(height: 8),
+          const Divider(height: 1, color: Color(0xFFF3F4F6)),
+          const SizedBox(height: 10),
           _summaryRow('Rate', '1 RMB = ${ghsPerRmb.toStringAsFixed(4)} GHS'),
-          const Divider(height: 20, color: Color(0xFFFEE2E2)),
-          _summaryRow('You Receive', youReceive, valueColor: const Color(0xFF16A34A), valueSize: 20, bold: true),
         ],
       ),
     );

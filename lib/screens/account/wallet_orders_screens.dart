@@ -288,17 +288,23 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
 
   Future<void> _openRecharge({
     required bool paystackConfigured,
+    required bool flutterwaveConfigured,
     required bool manualEnabled,
   }) async {
-    if (!paystackConfigured && !manualEnabled) return;
+    final onlineConfigured = paystackConfigured || flutterwaveConfigured;
+    if (!onlineConfigured && !manualEnabled) return;
     if (!await _ensureKycToStoreFunds()) return;
 
     // Only one path available — skip the chooser.
-    if (paystackConfigured && !manualEnabled) {
-      await _paystackTopUp();
+    if (paystackConfigured && !flutterwaveConfigured && !manualEnabled) {
+      await _onlineTopUp(gateway: 'paystack');
       return;
     }
-    if (!paystackConfigured && manualEnabled) {
+    if (!paystackConfigured && flutterwaveConfigured && !manualEnabled) {
+      await _onlineTopUp(gateway: 'flutterwave');
+      return;
+    }
+    if (!onlineConfigured && manualEnabled) {
       await _openManualRechargePreview();
       return;
     }
@@ -318,93 +324,142 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
               style: TextStyle(color: AppColors.textSecondary, height: 1.35),
             ),
             const SizedBox(height: 16),
-            Material(
-              color: const Color(0xFFFFF7ED),
-              borderRadius: BorderRadius.circular(14),
-              child: InkWell(
+            if (paystackConfigured) ...[
+              Material(
+                color: const Color(0xFFFFF7ED),
                 borderRadius: BorderRadius.circular(14),
-                onTap: () => Navigator.pop(ctx, 'paystack'),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFFDBA74)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => Navigator.pop(ctx, 'paystack'),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFFDBA74)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.smartphone, color: Colors.white, size: 22),
                         ),
-                        child: const Icon(Icons.smartphone, color: Colors.white, size: 22),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Auto Paystack', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                            SizedBox(height: 2),
-                            Text(
-                              'Instant MoMo or card',
-                              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-                            ),
-                          ],
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Paystack', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                              SizedBox(height: 2),
+                              Text(
+                                'Instant MoMo or card',
+                                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              child: InkWell(
+              const SizedBox(height: 10),
+            ],
+            if (flutterwaveConfigured) ...[
+              Material(
+                color: const Color(0xFFEEF2FF),
                 borderRadius: BorderRadius.circular(14),
-                onTap: () => Navigator.pop(ctx, 'manual'),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFBAE6FD)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0EA5E9),
-                          borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => Navigator.pop(ctx, 'flutterwave'),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFA5B4FC)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4F46E5),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.payments_outlined, color: Colors.white, size: 22),
                         ),
-                        child: const Icon(Icons.upload_rounded, color: Colors.white, size: 22),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Manual', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                            SizedBox(height: 2),
-                            Text(
-                              'MoMo / bank + upload proof',
-                              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-                            ),
-                          ],
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Flutterwave', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                              SizedBox(height: 2),
+                              Text(
+                                'Instant MoMo or card',
+                                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(height: 10),
+            ],
+            if (manualEnabled)
+              Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => Navigator.pop(ctx, 'manual'),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFBAE6FD)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0EA5E9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.upload_rounded, color: Colors.white, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Manual', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                              SizedBox(height: 2),
+                              Text(
+                                'MoMo / bank + upload proof',
+                                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },
@@ -413,12 +468,16 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     if (!mounted || choice == null) return;
     if (choice == 'manual') {
       await _openManualRechargePreview();
-    } else if (choice == 'paystack') {
-      await _paystackTopUp();
+    } else if (choice == 'paystack' || choice == 'flutterwave') {
+      await _onlineTopUp(gateway: choice);
     }
   }
 
-  Future<void> _paystackTopUp() async {
+  Future<void> _onlineTopUp({required String gateway}) async {
+    await _paystackTopUp(gateway: gateway);
+  }
+
+  Future<void> _paystackTopUp({String gateway = 'paystack'}) async {
     final amountCtrl = TextEditingController();
     String method = 'momo';
     var submitting = false;
@@ -453,10 +512,15 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                           }
                           setModal(() => submitting = true);
                           try {
-                            final pay = await context.read<AppStore>().initializeWalletPaystack(
-                                  amount: amount,
-                                  method: method,
-                                );
+                            final pay = gateway == 'flutterwave'
+                                ? await context.read<AppStore>().initializeWalletFlutterwave(
+                                      amount: amount,
+                                      method: method,
+                                    )
+                                : await context.read<AppStore>().initializeWalletPaystack(
+                                      amount: amount,
+                                      method: method,
+                                    );
                             if (ctx.mounted) Navigator.pop(ctx, pay);
                           } on ApiException catch (e) {
                             setModal(() => submitting = false);
@@ -485,14 +549,16 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 ),
               ),
               children: [
-                const Text(
-                  'Recharge',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+                Text(
+                  gateway == 'flutterwave' ? 'Flutterwave recharge' : 'Paystack recharge',
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Top up via Paystack (MoMo or card).',
-                  style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+                Text(
+                  gateway == 'flutterwave'
+                      ? 'Top up via Flutterwave (MoMo or card).'
+                      : 'Top up via Paystack (MoMo or card).',
+                  style: const TextStyle(color: AppColors.textSecondary, height: 1.35),
                 ),
                 const SizedBox(height: 16),
                 TextField(
@@ -557,7 +623,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     final reference = started['reference'] as String? ?? '';
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not start Paystack payment')),
+        SnackBar(content: Text('Could not start ${gateway == 'flutterwave' ? 'Flutterwave' : 'Paystack'} payment')),
       );
       return;
     }
@@ -569,7 +635,11 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
           authorizationUrl: url,
           reference: reference,
           onVerify: (ref) async {
-            await store.verifyWalletPaystack(ref);
+            if (gateway == 'flutterwave') {
+              await store.verifyWalletFlutterwave(ref);
+            } else {
+              await store.verifyWalletPaystack(ref);
+            }
           },
         ),
       ),
@@ -726,6 +796,9 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     final enabled = funding?['enabled'] == true || wallet?.manualTopUpEnabled == true;
     final paystackConfigured =
         wallet?.paystackConfigured == true || funding?['paystack_configured'] == true;
+    final flutterwaveConfigured =
+        wallet?.flutterwaveConfigured == true || funding?['flutterwave_configured'] == true;
+    final onlineConfigured = paystackConfigured || flutterwaveConfigured;
 
     return RefreshIndicator(
       onRefresh: refreshNow,
@@ -783,9 +856,10 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 const SizedBox(height: 16),
                 _WalletActionPair(
                   onWithdraw: _openWithdraw,
-                  onRecharge: (paystackConfigured || enabled)
+                  onRecharge: (onlineConfigured || enabled)
                       ? () => _openRecharge(
                             paystackConfigured: paystackConfigured,
+                            flutterwaveConfigured: flutterwaveConfigured,
                             manualEnabled: enabled,
                           )
                       : null,
@@ -817,7 +891,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
               ],
             ),
           ),
-          if (!paystackConfigured && !enabled) ...[
+          if (!onlineConfigured && !enabled) ...[
             const SizedBox(height: 10),
             const Text(
               'Recharge is unavailable right now.',

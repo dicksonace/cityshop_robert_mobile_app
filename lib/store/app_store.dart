@@ -2047,6 +2047,7 @@ class AppStore extends ChangeNotifier {
         ConversationModel conversation,
         List<ChatMessage> messages,
         List<ChatMessage> pendingCallSignals,
+        Map<String, dynamic>? clearRequest,
       })> loadConversation(
     int id,
   ) async {
@@ -2054,6 +2055,7 @@ class AppStore extends ChangeNotifier {
     final convJson = res.data['conversation'];
     final msgs = res.data['messages'];
     final signals = res.data['pending_call_signals'];
+    final clearReq = res.data['clear_request'];
     final conversation = ConversationModel.fromJson(Map<String, dynamic>.from(convJson as Map));
     final myId = user?.id ?? 0;
     final messages = msgs is List
@@ -2088,6 +2090,7 @@ class AppStore extends ChangeNotifier {
       conversation: conversation,
       messages: messages,
       pendingCallSignals: pendingCallSignals,
+      clearRequest: clearReq is Map ? Map<String, dynamic>.from(clearReq) : null,
     );
   }
 
@@ -2357,6 +2360,59 @@ class AppStore extends ChangeNotifier {
 
   Future<void> deleteConversation(int conversationId) async {
     await _api.delete('/messages/$conversationId');
+  }
+
+  Future<({List<ChatMessage> messages, Map<String, dynamic>? clearRequest})> clearChatHistory(
+    int conversationId,
+  ) async {
+    final res = await _api.post('/messages/$conversationId/clear');
+    final msgs = res.data is Map ? res.data['messages'] : null;
+    final clearReq = res.data is Map ? res.data['clear_request'] : null;
+    final messages = msgs is List
+        ? msgs
+            .whereType<Map>()
+            .map((e) => ChatMessage.fromJson(
+                  Map<String, dynamic>.from(e),
+                  myUserId: user?.id ?? 0,
+                ))
+            .toList()
+        : <ChatMessage>[];
+    return (
+      messages: messages,
+      clearRequest: clearReq is Map ? Map<String, dynamic>.from(clearReq) : null,
+    );
+  }
+
+  Future<Map<String, dynamic>?> requestClearBoth(int conversationId) async {
+    final res = await _api.post('/messages/$conversationId/clear-request');
+    final clearReq = res.data is Map ? res.data['clear_request'] : null;
+    return clearReq is Map ? Map<String, dynamic>.from(clearReq) : null;
+  }
+
+  Future<({List<ChatMessage>? messages, Map<String, dynamic>? clearRequest})> respondClearBoth({
+    required int conversationId,
+    required int clearRequestId,
+    required bool accept,
+  }) async {
+    final res = await _api.post(
+      '/messages/$conversationId/clear-request/$clearRequestId',
+      data: {'accept': accept},
+    );
+    final msgs = res.data is Map ? res.data['messages'] : null;
+    final clearReq = res.data is Map ? res.data['clear_request'] : null;
+    final messages = msgs is List
+        ? msgs
+            .whereType<Map>()
+            .map((e) => ChatMessage.fromJson(
+                  Map<String, dynamic>.from(e),
+                  myUserId: user?.id ?? 0,
+                ))
+            .toList()
+        : null;
+    return (
+      messages: messages,
+      clearRequest: clearReq is Map ? Map<String, dynamic>.from(clearReq) : null,
+    );
   }
 
   Future<List<ChatMessage>> searchMessages(int conversationId, String query) async {
@@ -2695,6 +2751,35 @@ class AppStore extends ChangeNotifier {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> initializeDraftFlutterwave() async {
+    final res = await _api.post('/checkout/flutterwave/initialize');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> verifyDraftFlutterwave(String reference) async {
+    final res = await _api.post('/checkout/flutterwave/verify', data: {
+      'reference': reference,
+    });
+    await loadCart();
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> initializeFlutterwave(int checkoutId) async {
+    final res = await _api.post('/checkouts/$checkoutId/pay/flutterwave/initialize');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> verifyFlutterwave({
+    required int checkoutId,
+    required String reference,
+  }) async {
+    final res = await _api.post('/checkouts/$checkoutId/pay/flutterwave/verify', data: {
+      'reference': reference,
+    });
+    await loadCart();
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> initializeWalletPaystack({
     required double amount,
     required String method,
@@ -2708,6 +2793,32 @@ class AppStore extends ChangeNotifier {
 
   Future<Map<String, dynamic>> verifyWalletPaystack(String reference) async {
     final res = await _api.post('/wallet/paystack/verify', data: {
+      'reference': reference,
+    });
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final walletJson = body['wallet'];
+    if (walletJson is Map) {
+      wallet = WalletInfo.fromJson(Map<String, dynamic>.from(walletJson));
+      notifyListeners();
+    } else {
+      await loadWallet();
+    }
+    return body;
+  }
+
+  Future<Map<String, dynamic>> initializeWalletFlutterwave({
+    required double amount,
+    required String method,
+  }) async {
+    final res = await _api.post('/wallet/flutterwave/initialize', data: {
+      'amount': amount,
+      'method': method,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> verifyWalletFlutterwave(String reference) async {
+    final res = await _api.post('/wallet/flutterwave/verify', data: {
       'reference': reference,
     });
     final body = Map<String, dynamic>.from(res.data as Map);

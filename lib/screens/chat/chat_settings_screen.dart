@@ -58,6 +58,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   List<ChatParticipant> _members = [];
   bool _loading = false;
   bool _avatarBusy = false;
+  Map<String, dynamic>? _clearRequest;
 
   int? get _complaintSellerId =>
       widget.sellerId ?? (widget.canComplain || widget.isSeller ? widget.peerId : null);
@@ -67,9 +68,18 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     super.initState();
     _name = widget.peerName;
     _avatar = widget.peerAvatar;
+    _loadClearRequest();
     if (widget.isGroup) {
       _refreshGroup();
     }
+  }
+
+  Future<void> _loadClearRequest() async {
+    try {
+      final opened = await context.read<AppStore>().loadConversation(widget.conversationId);
+      if (!mounted) return;
+      setState(() => _clearRequest = opened.clearRequest);
+    } catch (_) {}
   }
 
   Future<void> _refreshGroup() async {
@@ -468,6 +478,18 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                   );
                 },
               ),
+              _SettingsTile(
+                icon: Icons.cleaning_services_outlined,
+                label: 'Clear chat history',
+                onTap: () => _confirmClear(context),
+              ),
+              if (_clearRequest?['direction'] == 'incoming' &&
+                  _clearRequest?['status'] == 'pending')
+                _SettingsTile(
+                  icon: Icons.mark_email_unread_outlined,
+                  label: 'Respond to clear request',
+                  onTap: () => _respondClearPrompt(context),
+                ),
               if (widget.isGroup)
                 _SettingsTile(
                   icon: Icons.logout_rounded,
@@ -477,7 +499,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
                 ),
               _SettingsTile(
                 icon: Icons.delete_outline_rounded,
-                label: 'Delete',
+                label: 'Delete from inbox',
                 destructive: true,
                 onTap: () => _confirmDelete(context),
               ),
@@ -504,6 +526,96 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmClear(BuildContext context) async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear chat history'),
+        content: Text(
+          widget.isGroup
+              ? 'Clear messages on your side only. Other members keep their history. This is a soft clear — support can still review if needed.'
+              : 'Clear for you only, or ask $_name to clear for both. Soft clear — messages stay stored for support.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'me'),
+            child: const Text('Clear for me'),
+          ),
+          if (!widget.isGroup)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'both'),
+              child: const Text('Request both'),
+            ),
+        ],
+      ),
+    );
+    if (choice == null || !context.mounted) return;
+    final store = context.read<AppStore>();
+    try {
+      if (choice == 'me') {
+        final result = await store.clearChatHistory(widget.conversationId);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chat cleared on your side')),
+        );
+        Navigator.of(context).pop({'cleared': true, 'messages': result.messages});
+        return;
+      }
+      final req = await store.requestClearBoth(widget.conversationId);
+      if (!context.mounted) return;
+      setState(() => _clearRequest = req);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Clear request sent to $_name')),
+      );
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  Future<void> _respondClearPrompt(BuildContext context) async {
+    final id = (_clearRequest?['id'] as num?)?.toInt();
+    if (id == null) return;
+    final from = (_clearRequest?['from_name'] as String?) ?? _name;
+    final accept = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear for both?'),
+        content: Text('$from asked to clear this chat for both of you.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Decline')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Accept')),
+        ],
+      ),
+    );
+    if (accept == null || !context.mounted) return;
+    try {
+      final result = await context.read<AppStore>().respondClearBoth(
+            conversationId: widget.conversationId,
+            clearRequestId: id,
+            accept: accept,
+          );
+      if (!context.mounted) return;
+      setState(() => _clearRequest = result.clearRequest);
+      if (accept && result.messages != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chat cleared for both of you')),
+        );
+        Navigator.of(context).pop({'cleared': true, 'messages': result.messages});
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(accept ? 'Cleared' : 'Declined')),
+        );
+      }
+    } on ApiException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
   }
 
   Future<void> _confirmDelete(BuildContext context) async {

@@ -1878,10 +1878,10 @@ class _ChatScreenState extends State<ChatScreen> {
     if (mounted) setState(() {});
   }
 
-  void _openChatSettings() {
+  Future<void> _openChatSettings() async {
     final c = conversation;
     if (c == null) return;
-    Navigator.of(context).push(
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
         builder: (_) => ChatSettingsScreen(
           conversationId: widget.conversationId,
@@ -1898,6 +1898,13 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       ),
     );
+    if (!mounted || result == null) return;
+    if (result['cleared'] == true && result['messages'] is List<ChatMessage>) {
+      setState(() {
+        messages = List<ChatMessage>.from(result['messages'] as List<ChatMessage>);
+      });
+      _jumpToEnd();
+    }
   }
 
   Future<void> _callSellerPhone() async {

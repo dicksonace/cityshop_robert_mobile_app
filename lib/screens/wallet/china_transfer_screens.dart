@@ -1326,39 +1326,131 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
                   const SizedBox(height: 12),
                 ],
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2FF),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFC7D2FE)),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('You send', style: TextStyle(fontWeight: FontWeight.w700)),
-                          Text(_ghs.format(send), style: const TextStyle(fontWeight: FontWeight.w900)),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('They receive', style: TextStyle(fontWeight: FontWeight.w700)),
-                          Text('¥${rmb.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900)),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      if (rmbPerGhs > 0)
-                        Text(
-                          'Rate 1 GHS → ${_formatBuyRate(rmbPerGhs)} RMB',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4338CA)),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(14),
                         ),
-                      if (rmbPerGhs > 0) const SizedBox(height: 4),
-                      Text(
-                        'Fee ${_ghs.format(fee)} · Total ${_ghs.format(send + fee)}',
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF4338CA)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'THEY RECEIVE',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.7,
+                                color: Colors.white.withValues(alpha: 0.85),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '¥ ${rmb.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.w900,
+                                height: 1.05,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Alipay · RMB',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withValues(alpha: 0.8),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'You send',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF6B7280),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            _ghs.format(send),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF111827),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                      const SizedBox(height: 10),
+                      if (rmbPerGhs > 0) ...[
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Rate',
+                                style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                              ),
+                            ),
+                            Text(
+                              '1 GHS = ${_formatBuyRate(rmbPerGhs)} RMB',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF374151),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Fee · Total',
+                              style: TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                            ),
+                          ),
+                          Text(
+                            '${_ghs.format(fee)} · ${_ghs.format(send + fee)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF374151),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

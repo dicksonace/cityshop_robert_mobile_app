@@ -58,14 +58,19 @@ class _PaystackPaymentScreenState extends State<PaystackPaymentScreen> {
     if (uri == null) return false;
     final path = uri.path.toLowerCase();
     if (path.contains('paystack/mobile-return')) return true;
+    if (path.contains('flutterwave/mobile-return')) return true;
     if (path.contains('checkout/callback')) return true;
+    if (path.contains('checkout/flutterwave/callback')) return true;
     if (path.contains('wallet/callback')) return true;
+    if (path.contains('wallet/flutterwave/callback')) return true;
     if ((uri.queryParameters.containsKey('reference') ||
-            uri.queryParameters.containsKey('trxref')) &&
+            uri.queryParameters.containsKey('trxref') ||
+            uri.queryParameters.containsKey('tx_ref')) &&
         (path.contains('callback') ||
             path.contains('mobile-return') ||
             path.contains('close') ||
-            url.contains('cityshop-paystack-done'))) {
+            url.contains('cityshop-paystack-done') ||
+            url.contains('cityshop-flutterwave-done'))) {
       return true;
     }
     return false;
@@ -74,14 +79,20 @@ class _PaystackPaymentScreenState extends State<PaystackPaymentScreen> {
   String? _referenceFromUrl(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null) return null;
-    final ref = uri.queryParameters['reference'] ?? uri.queryParameters['trxref'];
+    final ref = uri.queryParameters['reference'] ??
+        uri.queryParameters['trxref'] ??
+        uri.queryParameters['tx_ref'];
     if (ref != null && ref.isNotEmpty) return ref;
     return widget.reference;
   }
 
   Future<void> _maybeHandleReturn(String url) async {
     if (_verifying) return;
-    if (!_isReturnUrl(url) && !url.contains('paystack/mobile-return')) return;
+    if (!_isReturnUrl(url) &&
+        !url.contains('paystack/mobile-return') &&
+        !url.contains('flutterwave/mobile-return')) {
+      return;
+    }
 
     final reference = _referenceFromUrl(url) ?? widget.reference;
     await _verify(reference);

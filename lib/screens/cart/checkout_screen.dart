@@ -117,15 +117,49 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
     if (paymentMethod == 'cash' && _storesWithoutCash(p).isNotEmpty) {
-      paymentMethod = p.paystackConfigured ? 'momo' : 'wallet';
+      paymentMethod = p.onlinePaymentConfigured ? 'momo' : 'wallet';
       return;
     }
     if (paymentMethod == 'wallet') {
-      paymentMethod = p.paystackConfigured ? 'momo' : paymentMethod;
+      paymentMethod = p.onlinePaymentConfigured ? 'momo' : paymentMethod;
     }
     if (paymentMethod != 'cash' && paymentMethod != 'wallet') {
-      paymentMethod = p.paystackConfigured ? 'momo' : 'wallet';
+      paymentMethod = p.onlinePaymentConfigured ? 'momo' : 'wallet';
     }
+  }
+
+  Future<String?> _pickOnlineGateway({
+    required bool paystackConfigured,
+    required bool flutterwaveConfigured,
+  }) async {
+    if (paystackConfigured && !flutterwaveConfigured) return 'paystack';
+    if (!paystackConfigured && flutterwaveConfigured) return 'flutterwave';
+    if (!paystackConfigured && !flutterwaveConfigured) return null;
+
+    return showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(
+              title: Text('Choose payment gateway', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.credit_card),
+              title: const Text('Paystack'),
+              onTap: () => Navigator.pop(ctx, 'paystack'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.payments_outlined),
+              title: const Text('Flutterwave'),
+              onTap: () => Navigator.pop(ctx, 'flutterwave'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -296,13 +330,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       if (!mounted) return;
 
-      // Deferred Paystack: no order until payment succeeds.
+      // Deferred online payment: no order until payment succeeds.
       if ((methodForApi == 'momo' || methodForApi == 'card') &&
           next == 'paystack' &&
-          (preview?.paystackConfigured ??
-              result['paystack_configured'] == true)) {
+          (preview?.onlinePaymentConfigured ??
+              (result['paystack_configured'] == true ||
+                  result['flutterwave_configured'] == true))) {
         try {
-          final pay = await store.initializeDraftPaystack();
+          final gateway = await _pickOnlineGateway(
+            paystackConfigured: preview?.paystackConfigured ??
+                result['paystack_configured'] == true,
+            flutterwaveConfigured: preview?.flutterwaveConfigured ??
+                result['flutterwave_configured'] == true,
+          );
+          if (!mounted || gateway == null) return;
+
+          final pay = gateway == 'flutterwave'
+              ? await store.initializeDraftFlutterwave()
+              : await store.initializeDraftPaystack();
           if (!mounted) return;
           final url = pay['authorization_url'] as String?;
           final reference = pay['reference'] as String? ?? '';
@@ -312,7 +357,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 builder: (_) => PaystackPaymentScreen(
                   authorizationUrl: url,
                   reference: reference,
-                  onVerify: (ref) => store.verifyDraftPaystack(ref),
+                  onVerify: (ref) => gateway == 'flutterwave'
+                      ? store.verifyDraftFlutterwave(ref)
+                      : store.verifyDraftPaystack(ref),
                 ),
               ),
             );
@@ -346,16 +393,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         }
       }
 
-      final needsPaystack =
+      final needsOnlinePay =
           (methodForApi == 'momo' || methodForApi == 'card') &&
           (next == 'paystack_or_direct' || next == 'paystack') &&
           checkoutId != null &&
-          (preview?.paystackConfigured ?? false) &&
+          (preview?.onlinePaymentConfigured ?? false) &&
           sellerChannels.values.any((c) => c == 'marketplace');
 
-      if (needsPaystack) {
+      if (needsOnlinePay) {
         try {
-          final pay = await store.initializePaystack(checkoutId);
+          final gateway = await _pickOnlineGateway(
+            paystackConfigured: preview?.paystackConfigured ?? false,
+            flutterwaveConfigured: preview?.flutterwaveConfigured ?? false,
+          );
+          if (!mounted || gateway == null) return;
+
+          final pay = gateway == 'flutterwave'
+              ? await store.initializeFlutterwave(checkoutId)
+              : await store.initializePaystack(checkoutId);
           if (!mounted) return;
           final url = pay['authorization_url'] as String?;
           final reference = pay['reference'] as String? ?? '';
@@ -365,10 +420,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 builder: (_) => PaystackPaymentScreen(
                   authorizationUrl: url,
                   reference: reference,
-                  onVerify: (ref) => store.verifyPaystack(
-                    checkoutId: checkoutId,
-                    reference: ref,
-                  ),
+                  onVerify: (ref) => gateway == 'flutterwave'
+                      ? store.verifyFlutterwave(
+                          checkoutId: checkoutId,
+                          reference: ref,
+                        )
+                      : store.verifyPaystack(
+                          checkoutId: checkoutId,
+                          reference: ref,
+                        ),
                 ),
               ),
             );
@@ -546,12 +606,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     Widget momoRow() => _PayRow(
           icon: Icons.credit_card_rounded,
           title: 'Mobile Money / Card',
-          subtitle: p.paystackConfigured
-              ? 'Paystack secure payment'
+          subtitle: p.onlinePaymentConfigured
+              ? 'Paystack or Flutterwave'
               : 'Unavailable right now',
           selected: paymentMethod == 'momo' && _hasMarketplacePay,
-          warn: !p.paystackConfigured,
-          enabled: p.paystackConfigured,
+          warn: !p.onlinePaymentConfigured,
+          enabled: p.onlinePaymentConfigured,
           onTap: () => _selectCityShopPayment('momo'),
         );
 

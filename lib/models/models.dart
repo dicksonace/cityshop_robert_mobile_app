@@ -631,6 +631,7 @@ class WalletInfo {
     this.withdrawnAmount = 0,
     this.rmbBalance = 0,
     this.paystackConfigured = false,
+    this.flutterwaveConfigured = false,
     this.manualTopUpEnabled = false,
     this.paystackFeePercent = 1.95,
     this.paystackFeeFlat = 0,
@@ -642,6 +643,7 @@ class WalletInfo {
   final double withdrawnAmount;
   final double rmbBalance;
   final bool paystackConfigured;
+  final bool flutterwaveConfigured;
   final bool manualTopUpEnabled;
   final double paystackFeePercent;
   final double paystackFeeFlat;
@@ -658,6 +660,7 @@ class WalletInfo {
       withdrawnAmount: withdrawnAmount,
       rmbBalance: rmbBalance ?? this.rmbBalance,
       paystackConfigured: paystackConfigured,
+      flutterwaveConfigured: flutterwaveConfigured,
       manualTopUpEnabled: manualTopUpEnabled,
       paystackFeePercent: paystackFeePercent,
       paystackFeeFlat: paystackFeeFlat,
@@ -672,6 +675,7 @@ class WalletInfo {
       withdrawnAmount: (json['withdrawn_amount'] as num?)?.toDouble() ?? 0,
       rmbBalance: (json['rmb_balance'] as num?)?.toDouble() ?? 0,
       paystackConfigured: json['paystack_configured'] as bool? ?? false,
+      flutterwaveConfigured: json['flutterwave_configured'] as bool? ?? false,
       manualTopUpEnabled: json['manual_top_up_enabled'] as bool? ?? false,
       paystackFeePercent: json['paystack_fee'] is Map
           ? (json['paystack_fee']['percent'] as num?)?.toDouble() ?? 1.95
@@ -2135,6 +2139,7 @@ class CheckoutPreview {
     required this.addresses,
     required this.walletAvailable,
     required this.paystackConfigured,
+    this.flutterwaveConfigured = false,
     this.sellerGroups = const [],
   });
 
@@ -2144,7 +2149,10 @@ class CheckoutPreview {
   final List<BuyerAddress> addresses;
   final double walletAvailable;
   final bool paystackConfigured;
+  final bool flutterwaveConfigured;
   final List<Map<String, dynamic>> sellerGroups;
+
+  bool get onlinePaymentConfigured => paystackConfigured || flutterwaveConfigured;
 
   factory CheckoutPreview.fromJson(Map<String, dynamic> json) {
     final addresses = json['addresses'];
@@ -2158,6 +2166,7 @@ class CheckoutPreview {
           ? (wallet['available_balance'] as num?)?.toDouble() ?? 0
           : 0,
       paystackConfigured: json['paystack_configured'] as bool? ?? false,
+      flutterwaveConfigured: json['flutterwave_configured'] as bool? ?? false,
       addresses: addresses is List
           ? addresses
               .whereType<Map>()
