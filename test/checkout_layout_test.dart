@@ -110,7 +110,7 @@ void main() {
     // Nothing is scrolled away: address, all three methods, seller choice, total.
     expect(find.text('Kofi Amoah'), findsOneWidget);
     expect(find.text('Mobile Money / Card'), findsOneWidget);
-    expect(find.text('CityShop Wallet'), findsOneWidget);
+    expect(find.text('Balance'), findsOneWidget);
     expect(find.text('Cash on delivery'), findsOneWidget);
     expect(find.text('Paying City Unlock'), findsOneWidget);
     expect(find.text('Place order'), findsOneWidget);
@@ -141,11 +141,30 @@ void main() {
     // Cash hides the per-seller choice, since there is nothing to pay online.
     expect(find.text('Paying City Unlock'), findsNothing);
 
-    await tester.tap(find.text('CityShop Wallet'));
+    await tester.tap(find.text('Balance'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Balance GH₵1,040.00'), findsOneWidget);
+    expect(find.textContaining('CityShop wallet'), findsOneWidget);
     expect(find.text('Paying City Unlock'), findsOneWidget);
+  });
+
+  testWidgets('Pay seller clears the wallet checkmark', (tester) async {
+    await _pumpCheckout(tester);
+
+    // Wallet is auto-selected when balance covers the order.
+    expect(find.textContaining('CityShop wallet'), findsOneWidget);
+
+    await tester.tap(find.text('Pay seller'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Pay seller is selected'), findsOneWidget);
+    expect(find.textContaining('SEND TO'), findsOneWidget);
+
+    // Tapping Balance again returns to Via CityShop.
+    await tester.tap(find.text('Balance'));
+    await tester.pumpAndSettle();
+    expect(find.text('Via CityShop'), findsOneWidget);
+    expect(find.text('Held by CityShop until you get the item'), findsOneWidget);
   });
 
   testWidgets('a short wallet balance says so', (tester) async {
@@ -154,7 +173,7 @@ void main() {
       'wallet': const {'available_balance': 12.0},
     });
 
-    expect(find.text('GH₵12.00 · not enough'), findsOneWidget);
+    expect(find.textContaining('not enough for this order'), findsOneWidget);
   });
 
   testWidgets('the seller switch swaps between CityShop and direct pay', (tester) async {
@@ -217,6 +236,8 @@ void main() {
     // The tap is ignored, so the seller payment choice stays on screen.
     expect(find.text('Paying City Unlock'), findsOneWidget);
 
+    await tester.tap(find.text('Mobile Money / Card'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Place order'));
     await tester.pumpAndSettle();
 
@@ -276,6 +297,8 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'save10');
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('Mobile Money / Card'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Place order'),
       120,

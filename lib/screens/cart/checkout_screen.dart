@@ -182,6 +182,42 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return payload;
   }
 
+  /// True when every seller package is "Pay seller" (no CityShop wallet / Paystack leg).
+  bool get _allDirectPay =>
+      sellerChannels.isNotEmpty && sellerChannels.values.every((c) => c == 'direct');
+
+  /// True when at least one package still goes Via CityShop.
+  bool get _hasMarketplacePay =>
+      sellerChannels.isEmpty || sellerChannels.values.any((c) => c == 'marketplace');
+
+  void _selectCityShopPayment(String method) {
+    setState(() {
+      paymentMethod = method;
+      // Wallet / MoMo / cash are Via CityShop — leave Pay seller mode.
+      for (final id in sellerChannels.keys.toList()) {
+        sellerChannels[id] = 'marketplace';
+      }
+    });
+  }
+
+  void _setSellerChannel(int sellerId, String channel, Map group) {
+    setState(() {
+      sellerChannels[sellerId] = channel;
+      if (channel == 'direct') {
+        final methods = (group['payment_methods'] is List)
+            ? (group['payment_methods'] as List).whereType<Map>().toList()
+            : <Map>[];
+        sellerMethodIds[sellerId] ??= (methods.firstOrNull?['id'] as num?)?.toInt();
+        // Pay seller is not wallet — drop the Balance checkmark when nothing
+        // remains Via CityShop.
+        if (sellerChannels.values.every((c) => c == 'direct') &&
+            (paymentMethod == 'wallet' || paymentMethod == 'cash')) {
+          paymentMethod = 'momo';
+        }
+      }
+    });
+  }
+
   List<int> _directOrderIds(Map? checkout) {
     final orders = checkout?['orders'];
     if (orders is! List) return [];
@@ -220,7 +256,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     final store = context.read<AppStore>();
     String? paymentPin;
-    if (paymentMethod == 'wallet') {
+    // All-direct orders never debit the wallet — don't ask for PIN / charge Balance.
+    final methodForApi = _allDirectPay
+        ? (paymentMethod == 'cash' ? 'cash' : 'momo')
+        : paymentMethod;
+    if (methodForApi == 'wallet') {
       if (!(store.user?.hasPaymentPin ?? false)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Set a payment PIN first in Profile → Payment PIN')),
@@ -244,7 +284,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       };
       final result = await store.placeCheckout(
         addressId: addressId!,
-        paymentMethod: paymentMethod,
+        paymentMethod: methodForApi,
         sellerPayments: sellerPayments.isEmpty ? null : sellerPayments,
         sellerCoupons: sellerCouponsPayload.isEmpty ? null : sellerCouponsPayload,
         paymentPin: paymentPin,
@@ -257,7 +297,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
 
       // Deferred Paystack: no order until payment succeeds.
-      if ((paymentMethod == 'momo' || paymentMethod == 'card') &&
+      if ((methodForApi == 'momo' || methodForApi == 'card') &&
           next == 'paystack' &&
           (preview?.paystackConfigured ??
               result['paystack_configured'] == true)) {
@@ -307,7 +347,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
 
       final needsPaystack =
-          (paymentMethod == 'momo' || paymentMethod == 'card') &&
+          (methodForApi == 'momo' || methodForApi == 'card') &&
           (next == 'paystack_or_direct' || next == 'paystack') &&
           checkoutId != null &&
           (preview?.paystackConfigured ?? false) &&
@@ -498,9 +538,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           subtitle: walletCanPay
               ? 'CityShop wallet · ${_money.format(p.walletAvailable)}'
               : '${_money.format(p.walletAvailable)} · not enough for this order',
-          selected: paymentMethod == 'wallet',
+          selected: paymentMethod == 'wallet' && _hasMarketplacePay,
           warn: walletShort,
-          onTap: () => setState(() => paymentMethod = 'wallet'),
+          onTap: () => _selectCityShopPayment('wallet'),
         );
 
     Widget momoRow() => _PayRow(
@@ -509,10 +549,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           subtitle: p.paystackConfigured
               ? 'Paystack secure payment'
               : 'Unavailable right now',
-          selected: paymentMethod == 'momo',
+          selected: paymentMethod == 'momo' && _hasMarketplacePay,
           warn: !p.paystackConfigured,
           enabled: p.paystackConfigured,
-          onTap: () => setState(() => paymentMethod = 'momo'),
+          onTap: () => _selectCityShopPayment('momo'),
         );
 
     return ListView(
@@ -531,6 +571,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
         const SizedBox(height: 14),
         const _SectionLabel('Payment'),
+        if (_allDirectPay)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFDBA74)),
+              ),
+              child: const Text(
+                'Pay seller is selected — CityShop wallet and Paystack are not used. Switch to Via CityShop to pay with Balance.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF9A3412),
+                ),
+              ),
+            ),
+          ),
         _CardShell(
           child: Column(
             children: [
@@ -550,14 +612,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 subtitle: cashAllowed
                     ? 'Pay when it arrives'
                     : '${noCashStores.join(', ')} ${noCashStores.length == 1 ? 'does' : 'do'} not take cash',
-                selected: paymentMethod == 'cash',
+                selected: paymentMethod == 'cash' && _hasMarketplacePay,
                 enabled: cashAllowed,
-                onTap: () => setState(() => paymentMethod = 'cash'),
+                onTap: () => _selectCityShopPayment('cash'),
               ),
             ],
           ),
         ),
-        if (paymentMethod != 'cash')
+        if (paymentMethod != 'cash' || _allDirectPay)
           for (final group in p.sellerGroups)
             _SellerPayBlock(
               group: group,
@@ -569,18 +631,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               onChannelChanged: (channel) {
                 final id = (group['seller_id'] as num?)?.toInt();
                 if (id == null) return;
-                setState(() {
-                  sellerChannels[id] = channel;
-                  if (channel == 'direct') {
-                    final methods = (group['payment_methods'] is List)
-                        ? (group['payment_methods'] as List)
-                              .whereType<Map>()
-                              .toList()
-                        : <Map>[];
-                    sellerMethodIds[id] ??= (methods.firstOrNull?['id'] as num?)
-                        ?.toInt();
-                  }
-                });
+                _setSellerChannel(id, channel, group);
               },
               onMethodChanged: (methodId) {
                 final id = (group['seller_id'] as num?)?.toInt();
