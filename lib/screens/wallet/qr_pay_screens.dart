@@ -17,11 +17,13 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../api/api_client.dart';
 import '../../api/api_config.dart';
+import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/payment_pin_sheet.dart';
 import '../../widgets/payment_success_screen.dart';
+import '../../widgets/wallet_receipt_sheet.dart';
 import '../../widgets/wallet_transfer_pad.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
@@ -534,11 +536,15 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
   final _qrCardKey = GlobalKey();
   final _amountFocus = FocusNode();
   final _reasonFocus = FocusNode();
+  List<WalletTransactionItem> _recentTx = [];
+  bool _txLoading = false;
+  bool _hideTxAmounts = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadRecentTransactions();
   }
 
   @override
@@ -562,6 +568,82 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
   String get _footerHint => _isSeller
       ? 'Customers can pay you by scanning this QR.'
       : 'They can add you by scanning this QR.';
+
+  Future<void> _loadRecentTransactions() async {
+    setState(() => _txLoading = true);
+    try {
+      final page = await context.read<AppStore>().fetchWalletTransactions(
+            page: 1,
+            perPage: 12,
+            currency: 'GHS',
+          );
+      if (!mounted) return;
+      setState(() {
+        _recentTx = page.items;
+        _txLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _txLoading = false);
+    }
+  }
+
+  List<WalletTransactionItem> get _receivedToday {
+    final now = DateTime.now();
+    return _recentTx.where((tx) {
+      if (!tx.isCredit) return false;
+      final raw = tx.createdAt;
+      if (raw == null || raw.isEmpty) return false;
+      try {
+        final when = DateTime.parse(raw).toLocal();
+        return when.year == now.year && when.month == now.month && when.day == now.day;
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+  }
+
+  String _txPreviewLine() {
+    final received = _receivedToday;
+    if (_txLoading) return 'Loading…';
+    if (_recentTx.isEmpty) return 'No transactions yet';
+    if (received.isEmpty) {
+      final latest = _recentTx.first;
+      final stamp = _formatTxTime(latest.createdAt);
+      final amount = _hideTxAmounts
+          ? '••••'
+          : (latest.isRmb
+              ? '¥${latest.amount.abs().toStringAsFixed(2)}'
+              : _money.format(latest.amount.abs()));
+      final verb = latest.isCredit ? 'received' : 'sent';
+      return '${latest.typeLabel} · $stamp $amount $verb';
+    }
+    final latest = received.first;
+    final stamp = _formatTxTime(latest.createdAt);
+    final amount = _hideTxAmounts ? '••••' : _money.format(latest.amount.abs());
+    final count = received.length;
+    return '$count received today · $stamp $amount';
+  }
+
+  String _formatTxTime(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    try {
+      return DateFormat('HH:mm').format(DateTime.parse(raw).toLocal());
+    } catch (_) {
+      return '';
+    }
+  }
+
+  void _openTransactionHistory() {
+    final latest = _receivedToday.isNotEmpty
+        ? _receivedToday.first
+        : (_recentTx.isNotEmpty ? _recentTx.first : null);
+    if (latest != null) {
+      showWalletReceiptSheet(context, tx: latest);
+      return;
+    }
+    context.go('/shop?tab=wallet');
+  }
 
   Future<void> _load({double? amount, String? reason}) async {
     setState(() {
@@ -1103,6 +1185,75 @@ class _QrReceiveScreenState extends State<QrReceiveScreen> {
                         color: AppColors.textSecondary,
                         fontSize: 12,
                         height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Material(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      child: InkWell(
+                        onTap: _openTransactionHistory,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF4EC),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.receipt_long_outlined,
+                                  color: AppColors.accent,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Transaction History',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _txPreviewLine(),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: _hideTxAmounts ? 'Show amounts' : 'Hide amounts',
+                                onPressed: () => setState(() => _hideTxAmounts = !_hideTxAmounts),
+                                icon: Icon(
+                                  _hideTxAmounts ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                  size: 20,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Open wallet',
+                                onPressed: () => context.go('/shop?tab=wallet'),
+                                icon: const Icon(Icons.chevron_right, color: AppColors.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                     if (_editingAmount) ...[
