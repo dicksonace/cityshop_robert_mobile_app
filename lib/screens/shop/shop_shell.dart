@@ -649,33 +649,7 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           ),
-          Expanded(
-            child: Center(
-              child: TextButton.icon(
-                onPressed: () {
-                  if (user == null) {
-                    context.push('/login');
-                    return;
-                  }
-                  context.push('/qr');
-                },
-                icon: const Icon(Icons.qr_code_scanner_rounded, size: 20, color: AppColors.accent),
-                label: const Text(
-                  'Scan',
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                  ),
-                ),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ),
-          ),
+          const Spacer(),
           if (user != null)
             IconButton(
               tooltip: 'Notifications',

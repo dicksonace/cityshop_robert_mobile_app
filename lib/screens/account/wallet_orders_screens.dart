@@ -824,7 +824,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
               style: TextStyle(color: Color(0xFFB45309), fontSize: 12),
             ),
           ],
-          if (store.isSeller) ...[
+          if (store.user != null) ...[
             const SizedBox(height: 14),
             Row(
               children: [
@@ -877,31 +877,9 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Transaction History',
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                      ),
-                    ),
-                    if (transactions.isNotEmpty)
-                      TextButton.icon(
-                        onPressed: buildingStatement ? null : _openStatement,
-                        icon: buildingStatement
-                            ? const SizedBox(
-                                height: 14,
-                                width: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.print_outlined, size: 18),
-                        label: Text(buildingStatement ? 'Preparing…' : 'Statement'),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                  ],
+                const Text(
+                  'Transaction History',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -939,6 +917,27 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                       onPressed: loadingMore ? null : () => _loadTransactions(),
                       child: Text(loadingMore ? 'Loading…' : 'Load more'),
                     ),
+                ],
+                if (transactions.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Divider(height: 1),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: buildingStatement ? null : _openStatement,
+                    icon: buildingStatement
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.print_outlined, size: 18),
+                    label: Text(buildingStatement ? 'Preparing statement…' : 'Statement'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accent,
+                      side: const BorderSide(color: AppColors.accent),
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                  ),
                 ],
               ],
             ),
