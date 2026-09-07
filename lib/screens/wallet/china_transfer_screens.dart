@@ -250,6 +250,7 @@ class BuyRmbCalculatorCard extends StatefulWidget {
     this.transferHours,
     this.instructions,
     this.initialGhs,
+    this.minGhs = 100,
     required this.onContinue,
   });
 
@@ -262,6 +263,7 @@ class BuyRmbCalculatorCard extends StatefulWidget {
   final Map<String, dynamic>? transferHours;
   final String? instructions;
   final String? initialGhs;
+  final double minGhs;
   final void Function(String ghsAmount) onContinue;
 
   @override
@@ -337,7 +339,9 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
   double get receive => calcRate > 0 && send > 0 ? send * calcRate : 0;
   double get fee =>
       widget.feeMode == 'percent' ? send * widget.feeValue / 100 : widget.feeValue;
-  bool get canContinue => widget.open && send > 0;
+  double get minimum => widget.minGhs > 0 ? widget.minGhs : 100;
+  bool get belowMinimum => send > 0 && send + 0.0001 < minimum;
+  bool get canContinue => widget.open && widget.live && send > 0 && !belowMinimum;
 
   bool get inProcessingWindow {
     final hours = widget.transferHours;
@@ -348,6 +352,7 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
   String get continueLabel {
     if (!widget.live) return 'Transfers paused';
     if (!widget.open) return 'Not available yet';
+    if (belowMinimum) return 'Minimum GH₵${minimum.toStringAsFixed(0)}';
     return 'Continue';
   }
 
@@ -436,6 +441,14 @@ class _BuyRmbCalculatorCardState extends State<BuyRmbCalculatorCard> {
               'Fee ${_ghs.format(fee)} · Total ${_ghs.format(send + fee)}',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+            ),
+          ],
+          if (belowMinimum) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Minimum amount is GH₵${minimum.toStringAsFixed(0)}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
             ),
           ],
           const SizedBox(height: 14),
@@ -1088,7 +1101,8 @@ class _ChinaTransferHubScreenState extends State<ChinaTransferHubScreen> {
                         live: live,
                         transferHours: transferHours,
                         instructions: config['instructions'] as String?,
-                        initialGhs: minGhs != null && minGhs > 0 ? minGhs.toStringAsFixed(0) : null,
+                        minGhs: minGhs != null && minGhs > 0 ? minGhs : 100,
+                        initialGhs: minGhs != null && minGhs > 0 ? minGhs.toStringAsFixed(0) : '100',
                         onContinue: (amount) async {
                           FocusManager.instance.primaryFocus?.unfocus();
                           await context.push('/wallet/china-transfer/create', extra: amount);
@@ -1221,6 +1235,14 @@ class _ChinaTransferCreateScreenState extends State<ChinaTransferCreateScreen> {
     }
     if (!(store.user?.hasPaymentPin ?? false)) {
       setState(() => error = 'Set a 4-digit payment PIN in Profile first.');
+      return;
+    }
+
+    final rateMap = config['rate'] is Map ? Map<String, dynamic>.from(config['rate'] as Map) : null;
+    final minGhs = (rateMap?['min_ghs'] as num?)?.toDouble() ?? 100;
+    final sendAmount = double.tryParse(amount.text.trim()) ?? 0;
+    if (sendAmount + 0.0001 < minGhs) {
+      setState(() => error = 'Minimum transfer is GH₵${minGhs.toStringAsFixed(0)}.');
       return;
     }
 

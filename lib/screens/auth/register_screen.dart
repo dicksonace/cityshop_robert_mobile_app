@@ -24,6 +24,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _mobile = TextEditingController();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
+  final _regionText = TextEditingController();
+  final _cityText = TextEditingController();
   String _country = kDefaultCountry;
   String _region = '';
   String _city = '';
@@ -47,8 +49,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _mobile.dispose();
     _password.dispose();
     _confirm.dispose();
+    _regionText.dispose();
+    _cityText.dispose();
     super.dispose();
   }
+
+  bool get _isGhana => _country.trim().toLowerCase() == 'ghana';
 
   Future<void> _submit() async {
     if (_country.trim().isEmpty) {
@@ -60,10 +66,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
       return;
     }
-    if (_region.trim().isEmpty || _city.trim().isEmpty) {
+    final region = _isGhana ? _region.trim() : _regionText.text.trim();
+    final city = _isGhana ? _city.trim() : _cityText.text.trim();
+    if (region.isEmpty || city.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please choose your region and city'),
+        SnackBar(
+          content: Text(_isGhana
+              ? 'Please choose your region and city'
+              : 'Please enter your region and city'),
           backgroundColor: AppColors.danger,
         ),
       );
@@ -76,8 +86,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             email: _email.text.trim().isEmpty ? null : _email.text.trim(),
             mobile: _mobile.text.trim(),
             country: _country,
-            region: _region,
-            city: _city,
+            region: region,
+            city: city,
             password: _password.text,
             passwordConfirmation: _confirm.text,
           );
@@ -105,7 +115,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
       builder: (context) => _CountryPickerSheet(selected: _country),
     );
     if (picked != null && mounted) {
-      setState(() => _country = picked);
+      setState(() {
+        _country = picked;
+        _region = '';
+        _city = '';
+        _regionText.clear();
+        _cityText.clear();
+      });
     }
   }
 
@@ -154,12 +170,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 _field('Mobile Number', _mobile, Icons.phone_outlined,
                     hint: '0241234567', keyboard: TextInputType.phone),
                 _countryField(),
-                GhanaLocationFields(
-                  region: _region,
-                  city: _city,
-                  onRegionChanged: (value) => setState(() => _region = value),
-                  onCityChanged: (value) => setState(() => _city = value),
-                ),
+                if (_isGhana)
+                  GhanaLocationFields(
+                    region: _region,
+                    city: _city,
+                    onRegionChanged: (value) => setState(() => _region = value),
+                    onCityChanged: (value) => setState(() => _city = value),
+                  )
+                else ...[
+                  _field('Region / State', _regionText, Icons.map_outlined,
+                      hint: 'Type your region or state'),
+                  _field('City / Town', _cityText, Icons.location_city_outlined,
+                      hint: 'Type your city or town'),
+                ],
                 _field('Email Address (Optional)', _email, Icons.email_outlined,
                     hint: 'Optional', keyboard: TextInputType.emailAddress),
                 _field(

@@ -300,7 +300,7 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
                 accountNumber: _number(account),
                 accountName: _name(account),
                 isBank: true,
-                bankName: '${account['bank_name'] ?? ''}',
+                bankName: '${account['bank_name'] ?? account['label'] ?? ''}',
               ),
               const SizedBox(height: 8),
             ],

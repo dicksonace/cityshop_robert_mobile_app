@@ -670,6 +670,12 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     return map;
   }
 
+  List<Map> _bankAccountsFromFunding() {
+    final accounts = funding?['accounts'];
+    if (accounts is! List) return const <Map>[];
+    return accounts.whereType<Map>().where((a) => a['type'] == 'bank').toList();
+  }
+
   String _fundingNumber(Map account) => '${account['account_number'] ?? account['number'] ?? ''}';
 
   String _fundingName(Map account) => '${account['account_name'] ?? account['name'] ?? ''}';
@@ -680,6 +686,12 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     if (!mounted) return;
 
     final momo = _momoByNetworkFromFunding();
+    final banks = _bankAccountsFromFunding();
+    if (momo.isEmpty && banks.isEmpty) {
+      await _openManualDeposit();
+      return;
+    }
+    // Banks-only: skip MoMo preview and open the full deposit form.
     if (momo.isEmpty) {
       await _openManualDeposit();
       return;
@@ -736,6 +748,20 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                     accountName: _fundingName(account),
                     network: selected,
                   ),
+                ],
+                if (_bankAccountsFromFunding().isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Text('Or pay by bank', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  for (final bank in _bankAccountsFromFunding()) ...[
+                    PaymentDetailsCard(
+                      accountNumber: _fundingNumber(bank),
+                      accountName: _fundingName(bank),
+                      isBank: true,
+                      bankName: '${bank['bank_name'] ?? bank['label'] ?? ''}',
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ],
               ],
             );
