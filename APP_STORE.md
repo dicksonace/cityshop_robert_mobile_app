@@ -168,12 +168,12 @@ Create a buyer account to shop, or apply to sell on CityShop.
 1. App Store Connect → **CityShop** → **App Store** → **+ Version** (e.g. 1.0.152)
 2. Select the uploaded build
 3. Complete **Export Compliance** (usually "No" for encryption if using standard HTTPS only)
-4. **App Review Information** — provide test login:
+4. **App Review Information** — demo buyer (created on deploy by `php artisan cityshop:ensure-app-review-buyer`):
 
-| Field | Example |
+| Field | Value |
 |-------|---------|
-| Username | test buyer phone/email |
-| Password | test password |
+| Username | `apple.review@cityunlock.net` |
+| Password | `CityUnlock2026!` |
 | Notes | "Marketplace app for Ghana. Sign in to browse and shop." |
 
 5. **Submit for Review**
