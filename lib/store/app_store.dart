@@ -1642,6 +1642,41 @@ class AppStore extends ChangeNotifier {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> loadGsmTools() async {
+    final res = await _api.get('/gsm-tools');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> fetchGsmService(int id) async {
+    final res = await _api.get('/gsm-tools/services/$id');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> fetchGsmOrder(int id) async {
+    final res = await _api.get('/gsm-tools/orders/$id');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> submitGsmOrder({
+    required int serviceId,
+    required Map<String, String> fields,
+    required String paymentPin,
+  }) async {
+    final res = await _api.post('/gsm-tools/orders', data: {
+      'gsm_service_id': serviceId,
+      'fields': fields,
+      'payment_pin': paymentPin,
+    });
+    await loadWallet();
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<Map<String, dynamic>> cancelGsmOrder(int id) async {
+    final res = await _api.post('/gsm-tools/orders/$id/cancel');
+    await loadWallet();
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> convertQuote({
     required String direction,
     required double amount,

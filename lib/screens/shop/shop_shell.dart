@@ -848,6 +848,19 @@ class _CategoryShortcuts extends StatelessWidget {
         },
       ),
       _Shortcut(
+        label: 'GSM Tools',
+        icon: Icons.phonelink_setup_rounded,
+        bg: const Color(0xFFEDE9FE),
+        fg: const Color(0xFF6D28D9),
+        onTap: () {
+          if (!store.isLoggedIn) {
+            context.push('/login');
+            return;
+          }
+          context.push('/gsm-tools');
+        },
+      ),
+      _Shortcut(
         label: 'In Ghana',
         icon: Icons.location_on,
         bg: const Color(0xFFD1FAE5),
@@ -870,7 +883,7 @@ class _CategoryShortcuts extends StatelessWidget {
         active: store.filterFreeShip,
         onTap: store.toggleFreeShip,
       ),
-      ...store.categories.asMap().entries.map(
+      ...store.categories.where((c) => c.slug != 'gsm-tools').toList().asMap().entries.map(
             (e) => _Shortcut(
               label: e.value.name,
               icon: _iconFor(e.value),
