@@ -10,6 +10,7 @@ import '../screens/account/notifications_screen.dart';
 import '../screens/account/payment_pin_screen.dart';
 import '../screens/account/wallet_orders_screens.dart';
 import '../screens/account/withdraw_screen.dart';
+import '../screens/account/withdrawal_status_screen.dart';
 import '../screens/wallet/china_rmb_hub_screen.dart';
 import '../screens/wallet/china_transfer_screens.dart';
 import '../screens/wallet/gsm_tools_screens.dart';
@@ -183,6 +184,17 @@ GoRouter createRouter(AppStore store) {
         ),
       ),
       GoRoute(path: '/wallet/withdraw', builder: (_, __) => const WithdrawScreen()),
+      GoRoute(
+        path: '/wallet/withdrawals/:id',
+        builder: (_, state) {
+          final id = int.tryParse(state.pathParameters['id'] ?? '') ?? 0;
+          final extra = state.extra;
+          return WithdrawalStatusScreen(
+            id: id,
+            initial: extra is WithdrawalItem ? extra : null,
+          );
+        },
+      ),
       GoRoute(path: '/wallet/china-rmb', builder: (_, __) => const ChinaRmbHubScreen()),
       GoRoute(path: '/gsm-tools', builder: (_, __) => const GsmToolsHubScreen()),
       GoRoute(

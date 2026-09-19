@@ -464,8 +464,103 @@ class _AddressesScreenState extends State<AddressesScreen> {
   }
 }
 
-class ProfileEditScreen extends StatelessWidget {
+class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
+
+  @override
+  State<ProfileEditScreen> createState() => _ProfileEditScreenState();
+}
+
+class _ProfileEditScreenState extends State<ProfileEditScreen> {
+  bool loadingDeletion = true;
+  bool deleting = false;
+  bool canDelete = false;
+  List<String> blockers = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDeletion();
+  }
+
+  Future<void> _loadDeletion() async {
+    final user = context.read<AppStore>().user;
+    if ((user?.role ?? '').toLowerCase() != 'buyer') {
+      setState(() {
+        loadingDeletion = false;
+        canDelete = false;
+        blockers = const [];
+      });
+      return;
+    }
+    try {
+      final status = await context.read<AppStore>().loadAccountDeletionStatus();
+      if (!mounted) return;
+      setState(() {
+        canDelete = status.canDelete;
+        blockers = status.blockers;
+        loadingDeletion = false;
+      });
+    } on ApiException {
+      if (!mounted) return;
+      setState(() => loadingDeletion = false);
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    if (!canDelete || blockers.isNotEmpty) return;
+    final password = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete account?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This cannot be undone. Your account and its data will be removed. Enter your password to confirm.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: password,
+                obscureText: true,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Password'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete account', style: TextStyle(color: AppColors.danger)),
+            ),
+          ],
+        );
+      },
+    );
+    final pin = password.text.trim();
+    password.dispose();
+    if (confirmed != true || !mounted) return;
+    if (pin.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter your password to delete the account.')));
+      return;
+    }
+    setState(() => deleting = true);
+    try {
+      await context.read<AppStore>().deleteBuyerAccount(password: pin);
+      if (!mounted) return;
+      context.go('/login');
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      await _loadDeletion();
+    } finally {
+      if (mounted) setState(() => deleting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -473,6 +568,7 @@ class ProfileEditScreen extends StatelessWidget {
     final name = user?.name ?? '';
     final email = user?.email ?? '';
     final mobile = user?.mobile ?? '';
+    final isBuyer = (user?.role ?? '').toLowerCase() == 'buyer';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile settings')),
@@ -521,6 +617,72 @@ class ProfileEditScreen extends StatelessWidget {
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
             ),
           ),
+          if (isBuyer) ...[
+            const SizedBox(height: 28),
+            const Text('Delete account', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+            const SizedBox(height: 4),
+            const Text(
+              'Delete your account and all of its resources',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Warning', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Please proceed with caution, this cannot be undone.',
+                    style: TextStyle(color: AppColors.danger, height: 1.35),
+                  ),
+                  if (loadingDeletion) ...[
+                    const SizedBox(height: 12),
+                    const LinearProgressIndicator(minHeight: 2),
+                  ] else if (blockers.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Finish these first:',
+                      style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF991B1B)),
+                    ),
+                    const SizedBox(height: 6),
+                    for (final reason in blockers)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('•  ', style: TextStyle(color: Color(0xFF991B1B), fontWeight: FontWeight.w800)),
+                            Expanded(
+                              child: Text(reason, style: const TextStyle(color: Color(0xFF991B1B), height: 1.35)),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: deleting || loadingDeletion || !canDelete || blockers.isNotEmpty ? null : _confirmDelete,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.danger,
+                        disabledBackgroundColor: const Color(0xFFFECACA),
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(deleting ? 'Deleting…' : 'Delete account'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

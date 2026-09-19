@@ -527,6 +527,15 @@ class _SellerOrderDetailScreenState extends State<SellerOrderDetailScreen> {
                               Text(item['product_name'] as String? ?? 'Item', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
                               const SizedBox(height: 4),
                               Text('Qty ${(item['quantity'] as num?)?.toInt() ?? 1} · ${_money.format((item['seller_amount'] as num?)?.toDouble() ?? 0)}'),
+                              ..._asMaps(item['buyer_field_values']).map(
+                                (field) => Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    '${field['label'] ?? field['key']}: ${field['value'] ?? '—'}',
+                                    style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                              ),
                               Text((item['status'] as String? ?? '').replaceAll('_', ' '), style: const TextStyle(color: AppColors.textSecondary)),
                             ],
                           ),

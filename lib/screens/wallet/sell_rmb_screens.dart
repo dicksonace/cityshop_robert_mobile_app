@@ -379,6 +379,7 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
   int? methodId;
   final values = <int, String>{};
   final files = <int, XFile>{};
+  XFile? paymentProof;
 
   @override
   void initState() {
@@ -513,7 +514,8 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
         return 'Enter at least ¥${minRmb.toStringAsFixed(0)} RMB.';
       }
       final screenshotId = _fieldId('payment_screenshot');
-      if (screenshotId == null || files[screenshotId] == null) {
+      final hasProof = paymentProof != null || (screenshotId != null && files[screenshotId] != null);
+      if (!hasProof) {
         return 'Upload your Alipay payment screenshot.';
       }
     }
@@ -543,6 +545,7 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
             receiveMethodId: methodId ?? 0,
             fields: values,
             files: files,
+            proofPath: paymentProof?.path ?? files[_fieldId('payment_screenshot') ?? -1]?.path,
           );
       if (!mounted) return;
       final transferId = switch (created['id']) {
@@ -673,7 +676,7 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
 
   Widget _stepTwo() {
     final screenshotId = _fieldId('payment_screenshot');
-    final picked = screenshotId == null ? null : files[screenshotId];
+    final picked = paymentProof ?? (screenshotId == null ? null : files[screenshotId]);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -724,13 +727,19 @@ class _SellRmbCreateScreenState extends State<SellRmbCreateScreen> {
         _SellPaymentScreenshotCard(
           file: picked,
           onPick: () async {
-            if (screenshotId == null) return;
             final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-            if (file != null) setState(() => files[screenshotId] = file);
+            if (file == null) return;
+            setState(() {
+              paymentProof = file;
+              if (screenshotId != null) files[screenshotId] = file;
+            });
           },
-          onClear: screenshotId == null || picked == null
+          onClear: picked == null
               ? null
-              : () => setState(() => files.remove(screenshotId)),
+              : () => setState(() {
+                    paymentProof = null;
+                    if (screenshotId != null) files.remove(screenshotId);
+                  }),
         ),
       ],
     );
@@ -1173,6 +1182,22 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
     return !_sellTransferIsTerminal(item['status'] as String?);
   }
 
+  Future<void> _attachProof() async {
+    final file = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (file == null || !mounted) return;
+    try {
+      final data = await context.read<AppStore>().attachSellRmbProof(id: widget.id, proofPath: file.path);
+      if (!mounted) return;
+      setState(() {
+        transfer = data;
+        error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => error = e.toString());
+    }
+  }
+
   void _openImage(String url) {
     final resolved = ApiConfig.resolveMediaUrl(url);
     if (resolved.isEmpty) return;
@@ -1533,8 +1558,13 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
     final proofs = (item['proofs'] as List? ?? [])
         .whereType<Map>()
         .map((e) => Map<String, dynamic>.from(e))
-        .where((p) => p['type'] == 'payout_sent')
         .toList();
+    final payoutProofs = proofs.where((p) => p['type'] == 'payout_sent').toList();
+    final buyerProofFromList = proofs
+        .where((p) => p['type'] == 'payment_received')
+        .map((p) => str(p['url']))
+        .firstWhere((url) => url.isNotEmpty, orElse: () => '');
+    final buyerProofUrl = str(item['payment_proof_url'], buyerProofFromList);
     final presentation = _presentation(item);
     final payout = _payoutAccount(item, fields);
     final status = str(item['status']);
@@ -1578,6 +1608,30 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
                   badgeColor: badge.$1,
                   badgeTextColor: badge.$2,
                 ),
+                if (buyerProofUrl.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  const Text('Alipay payment proof', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFF166534))),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => _openImage(buyerProofUrl),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: CachedNetworkImage(
+                        imageUrl: ApiConfig.resolveMediaUrl(buyerProofUrl),
+                        fit: BoxFit.contain,
+                        errorWidget: (_, _, _) => const Center(child: Icon(Icons.broken_image_outlined)),
+                      ),
+                    ),
+                  ),
+                ],
+                if (item['can_attach_proof'] == true) ...[
+                  const SizedBox(height: 14),
+                  OutlinedButton.icon(
+                    onPressed: _attachProof,
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: Text(buyerProofUrl.isEmpty ? 'Add payment proof' : 'Replace payment proof'),
+                  ),
+                ],
                 if ((item['rejection_reason'] as String?)?.isNotEmpty == true) ...[
                   const SizedBox(height: 14),
                   Container(
@@ -1590,11 +1644,11 @@ class _SellRmbShowScreenState extends State<SellRmbShowScreen> {
                     child: Text('${item['rejection_reason']}', style: const TextStyle(color: Color(0xFFB91C1C), height: 1.35)),
                   ),
                 ],
-                if (completed && proofs.isNotEmpty) ...[
+                if (completed && payoutProofs.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   const Text('MoMo Payment Proof', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: Color(0xFF166534))),
                   const SizedBox(height: 8),
-                  ...proofs.map((proof) {
+                  ...payoutProofs.map((proof) {
                     final url = proof['url'] as String?;
                     if (url == null || url.isEmpty) return const SizedBox.shrink();
                     return GestureDetector(

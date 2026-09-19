@@ -175,7 +175,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
     setState(() => submitting = true);
     try {
-      await store.requestWithdrawal(
+      final created = await store.requestWithdrawal(
         amount: amount,
         momoNumber: number,
         accountName: name,
@@ -185,8 +185,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       );
       if (!mounted) return;
       amountCtrl.clear();
-      if (context.canPop()) {
-        context.pop(true);
+      context.go('/wallet/withdrawals/${created.id}', extra: created);
       } else {
         context.go('/shop?tab=wallet');
       }
@@ -522,7 +521,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
             for (final item in overview.items) ...[
               _WithdrawalRow(
                 item: item,
-                onTap: () => _showWithdrawalDetails(context, item),
+                onTap: () => context.push('/wallet/withdrawals/${item.id}', extra: item),
               ),
               const SizedBox(height: 8),
             ],

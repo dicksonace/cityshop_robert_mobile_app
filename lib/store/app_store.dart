@@ -683,6 +683,25 @@ class AppStore extends ChangeNotifier {
         }
         return;
       }
+      if (key == 'buyer_fields' && value is List) {
+        if (form) {
+          for (var i = 0; i < value.length; i++) {
+            final row = value[i];
+            if (row is! Map) continue;
+            row.forEach((fieldKey, fieldValue) {
+              if (fieldValue == null) return;
+              if (fieldValue is bool) {
+                out['buyer_fields[$i][$fieldKey]'] = fieldValue ? 1 : 0;
+              } else {
+                out['buyer_fields[$i][$fieldKey]'] = fieldValue;
+              }
+            });
+          }
+        } else {
+          out['buyer_fields'] = value;
+        }
+        return;
+      }
       if (value is bool && form) {
         out[key] = value ? 1 : 0;
         return;
@@ -1141,6 +1160,19 @@ class AppStore extends ChangeNotifier {
     });
   }
 
+  Future<({bool canDelete, List<String> blockers})> loadAccountDeletionStatus() async {
+    final res = await _api.get('/profile/deletion');
+    final body = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    final raw = body['blockers'];
+    final blockers = raw is List ? raw.map((item) => item.toString()).where((item) => item.isNotEmpty).toList() : <String>[];
+    return (canDelete: body['can_delete'] == true, blockers: blockers);
+  }
+
+  Future<void> deleteBuyerAccount({required String password}) async {
+    await _api.delete('/profile', data: {'password': password});
+    await logout();
+  }
+
   Future<KycInfo> loadKyc() async {
     final res = await _api.get('/kyc');
     final body = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
@@ -1284,10 +1316,11 @@ class AppStore extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> addToCart(int productId, {int quantity = 1}) async {
+  Future<void> addToCart(int productId, {int quantity = 1, Map<String, String>? buyerFieldValues}) async {
     final res = await _api.post('/cart', data: {
       'product_id': productId,
       'quantity': quantity,
+      if (buyerFieldValues != null && buyerFieldValues.isNotEmpty) 'buyer_field_values': buyerFieldValues,
     });
     _applyCart(res.data);
     notifyListeners();
@@ -1562,6 +1595,12 @@ class AppStore extends ChangeNotifier {
     return WithdrawalOverview.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
+  Future<WithdrawalItem> loadWithdrawal(int id) async {
+    final res = await _api.get('/wallet/withdrawals/$id');
+    final body = Map<String, dynamic>.from(res.data as Map);
+    return WithdrawalItem.fromJson(Map<String, dynamic>.from(body['data'] as Map));
+  }
+
   /// Requests a MoMo or bank payout. The balance drops straight away, so refresh the
   /// wallet the screens read from.
   Future<WithdrawalItem> requestWithdrawal({
@@ -1772,6 +1811,7 @@ class AppStore extends ChangeNotifier {
     required int receiveMethodId,
     required Map<int, String> fields,
     required Map<int, dynamic> files,
+    String? proofPath,
   }) async {
     final payload = <String, dynamic>{
       'rmb_amount': rmbAmount,
@@ -1784,7 +1824,28 @@ class AppStore extends ChangeNotifier {
     files.forEach((id, file) {
       payload['files[$id]'] = '${file.path}';
     });
-    final res = await _api.postForm('/wallet/sell-rmb', payload);
+    if (proofPath != null && proofPath.isNotEmpty) {
+      payload['proof'] = proofPath;
+    }
+    final res = await _api.postForm(
+      '/wallet/sell-rmb',
+      payload,
+      fileFields: proofPath == null || proofPath.isEmpty ? null : const ['proof'],
+    );
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final data = body['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : body;
+  }
+
+  Future<Map<String, dynamic>> attachSellRmbProof({
+    required int id,
+    required String proofPath,
+  }) async {
+    final res = await _api.postForm(
+      '/wallet/sell-rmb/$id/proof',
+      {'proof': proofPath},
+      fileFields: const ['proof'],
+    );
     final body = Map<String, dynamic>.from(res.data as Map);
     final data = body['data'];
     return data is Map ? Map<String, dynamic>.from(data) : body;

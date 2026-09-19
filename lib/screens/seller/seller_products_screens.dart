@@ -513,6 +513,7 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
   final existingImages = <Map<String, dynamic>>[];
   final removeImageIds = <int>{};
   final specs = <String, String>{};
+  final buyerFields = <_BuyerFieldDraft>[];
   XFile? video;
   int? videoDuration;
   int? videoBytes;
@@ -566,7 +567,19 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
     deliveryDays.dispose();
     weight.dispose();
     lowStock.dispose();
+    for (final field in buyerFields) {
+      field.dispose();
+    }
     super.dispose();
+  }
+
+  void _replaceBuyerFields(List<Map<String, dynamic>> rows) {
+    for (final field in buyerFields) {
+      field.dispose();
+    }
+    buyerFields
+      ..clear()
+      ..addAll(rows.map(_BuyerFieldDraft.fromMap));
   }
 
   Future<void> _bootstrap() async {
@@ -616,6 +629,10 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
         specs
           ..clear()
           ..addAll({for (final e in existingSpecs.entries) e.key: '${e.value}'});
+        _replaceBuyerFields(_asMaps(product['buyer_fields']));
+      }
+      if (buyerFields.isEmpty) {
+        buyerFields.add(_BuyerFieldDraft());
       }
       if (mounted) setState(() => loading = false);
     } on ApiException catch (e) {
@@ -750,6 +767,17 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
         for (final f in specFields)
           if ((f['key'] as String?)?.isNotEmpty == true) (f['key'] as String): specs[f['key'] as String] ?? '',
       }..removeWhere((k, v) => v.trim().isEmpty),
+      'buyer_fields': [
+        for (final field in buyerFields)
+          if (field.label.text.trim().isNotEmpty)
+            {
+              'key': field.key,
+              'label': field.label.text.trim(),
+              'placeholder': field.placeholder.text.trim(),
+              'type': 'text',
+              'required': field.required,
+            },
+      ],
     };
   }
 
@@ -935,6 +963,52 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                       controller: description,
                       maxLines: 4,
                       decoration: const InputDecoration(labelText: 'Description'),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Do you want to collect any extra information?',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Buyers fill these when they order. Use for IMEI, ID number, Alipay ID, Ghana Card, and similar.',
+                      style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+                    ),
+                    const SizedBox(height: 10),
+                    for (var i = 0; i < buyerFields.length; i++) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: buyerFields[i].label,
+                              decoration: const InputDecoration(labelText: 'Name of field'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: buyerFields[i].placeholder,
+                              decoration: const InputDecoration(labelText: 'e.g ID Number'),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => setState(() {
+                              buyerFields.removeAt(i).dispose();
+                              if (buyerFields.isEmpty) {
+                                buyerFields.add(_BuyerFieldDraft());
+                              }
+                            }),
+                            icon: const Icon(Icons.close, color: Color(0xFFDC2626)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    TextButton.icon(
+                      onPressed: () => setState(() => buyerFields.add(_BuyerFieldDraft())),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add another Field'),
                     ),
                     const SizedBox(height: 12),
                     ExpansionTile(
@@ -1283,5 +1357,34 @@ class _Thumb extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       child: CachedNetworkImage(imageUrl: url!, width: 48, height: 48, fit: BoxFit.cover),
     );
+  }
+}
+
+class _BuyerFieldDraft {
+  _BuyerFieldDraft({
+    this.key,
+    String label = '',
+    String placeholder = '',
+    this.required = true,
+  })  : label = TextEditingController(text: label),
+        placeholder = TextEditingController(text: placeholder);
+
+  factory _BuyerFieldDraft.fromMap(Map<String, dynamic> row) {
+    return _BuyerFieldDraft(
+      key: row['key'] as String?,
+      label: row['label'] as String? ?? row['name'] as String? ?? '',
+      placeholder: row['placeholder'] as String? ?? '',
+      required: row['required'] != false,
+    );
+  }
+
+  final String? key;
+  final TextEditingController label;
+  final TextEditingController placeholder;
+  final bool required;
+
+  void dispose() {
+    label.dispose();
+    placeholder.dispose();
   }
 }

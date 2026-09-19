@@ -48,6 +48,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   bool adding = false;
   bool wishBusy = false;
   int qty = 1;
+  final buyerFieldValues = <String, String>{};
   bool showAddedToast = false;
   Timer? _addedToastTimer;
 
@@ -120,9 +121,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       context.push('/login');
       return;
     }
+    for (final field in p.buyerFields) {
+      if (field.required && (buyerFieldValues[field.key] ?? '').trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Enter ${field.label}.')),
+        );
+        return;
+      }
+    }
     setState(() => adding = true);
     try {
-      await store.addToCart(p.id, quantity: qty);
+      await store.addToCart(
+        p.id,
+        quantity: qty,
+        buyerFieldValues: buyerFieldValues.isEmpty ? null : Map<String, String>.from(buyerFieldValues),
+      );
       if (!mounted) return;
       // Drop any leftover system snackbars that can stick around after rebuilds.
       ScaffoldMessenger.of(context).clearSnackBars();
@@ -376,6 +389,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         onVideoPlay: _recordVideoPlay,
                         onMessage: _messageSeller,
                         onReviewPosted: _load,
+                        buyerFieldValues: buyerFieldValues,
+                        onBuyerFieldChanged: (key, value) => setState(() => buyerFieldValues[key] = value),
                       ),
           ),
           if (showAddedToast)
@@ -463,6 +478,8 @@ class _Body extends StatelessWidget {
     required this.onVideoPlay,
     required this.onMessage,
     required this.onReviewPosted,
+    required this.buyerFieldValues,
+    required this.onBuyerFieldChanged,
   });
 
   final Product product;
@@ -478,6 +495,8 @@ class _Body extends StatelessWidget {
   final VoidCallback onVideoPlay;
   final VoidCallback onMessage;
   final Future<void> Function() onReviewPosted;
+  final Map<String, String> buyerFieldValues;
+  final void Function(String key, String value) onBuyerFieldChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -612,6 +631,26 @@ class _Body extends StatelessWidget {
               if (product.condition != null && product.condition!.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text('Condition: ${product.condition}', style: const TextStyle(color: AppColors.textSecondary)),
+              ],
+              if (product.buyerFields.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                const Text('Information for this order', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                const SizedBox(height: 8),
+                ...product.buyerFields.map(
+                  (field) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: TextField(
+                      onChanged: (value) => onBuyerFieldChanged(field.key, value),
+                      keyboardType: field.type == 'number' || field.type == 'phone'
+                          ? TextInputType.number
+                          : TextInputType.text,
+                      decoration: InputDecoration(
+                        labelText: field.required ? '${field.label} *' : field.label,
+                        hintText: field.placeholder.isEmpty ? null : field.placeholder,
+                      ),
+                    ),
+                  ),
+                ),
               ],
               if (product.specifications.isNotEmpty) ...[
                 const SizedBox(height: 18),

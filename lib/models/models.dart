@@ -26,6 +26,41 @@ class ShopCategory {
   }
 }
 
+class ProductBuyerField {
+  const ProductBuyerField({
+    required this.key,
+    required this.label,
+    this.placeholder = '',
+    this.type = 'text',
+    this.required = true,
+  });
+
+  final String key;
+  final String label;
+  final String placeholder;
+  final String type;
+  final bool required;
+
+  factory ProductBuyerField.fromJson(Map<String, dynamic> json) {
+    return ProductBuyerField(
+      key: json['key'] as String? ?? json['name'] as String? ?? '',
+      label: json['label'] as String? ?? json['name'] as String? ?? '',
+      placeholder: json['placeholder'] as String? ?? '',
+      type: json['type'] as String? ?? 'text',
+      required: json['required'] != false,
+    );
+  }
+
+  static List<ProductBuyerField> listFrom(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => ProductBuyerField.fromJson(Map<String, dynamic>.from(e)))
+        .where((field) => field.key.isNotEmpty || field.label.isNotEmpty)
+        .toList();
+  }
+}
+
 class ProductImage {
   const ProductImage({required this.id, required this.url, this.isPrimary = false});
 
@@ -108,6 +143,7 @@ class Product {
     this.shipsNationwide = false,
     this.isNegotiable = false,
     this.specifications = const {},
+    this.buyerFields = const [],
     this.videoUrl,
     this.videoDuration,
     this.images = const [],
@@ -148,6 +184,7 @@ class Product {
   final bool shipsNationwide;
   final bool isNegotiable;
   final Map<String, dynamic> specifications;
+  final List<ProductBuyerField> buyerFields;
   final String? videoUrl;
   final int? videoDuration;
   final List<ProductImage> images;
@@ -217,6 +254,7 @@ class Product {
       shipsNationwide: json['ships_nationwide'] as bool? ?? false,
       isNegotiable: json['is_negotiable'] as bool? ?? false,
       specifications: specMap,
+      buyerFields: ProductBuyerField.listFrom(json['buyer_fields']),
       videoUrl: json['video_url'] as String?,
       videoDuration: (json['video_duration'] as num?)?.toInt(),
       quantity: (json['quantity'] as num?)?.toInt() ?? 0,
@@ -797,6 +835,7 @@ class WithdrawalItem {
     this.proofUrl,
     this.createdAt,
     this.processedAt,
+    this.statusPresentation,
   });
 
   final int id;
@@ -819,6 +858,7 @@ class WithdrawalItem {
   final String? proofUrl;
   final String? createdAt;
   final String? processedAt;
+  final Map<String, dynamic>? statusPresentation;
 
   bool get isOpen => status == 'pending' || status == 'processing';
   bool get isPaid => status == 'paid';
@@ -848,6 +888,9 @@ class WithdrawalItem {
       proofUrl: json['proof_url'] as String?,
       createdAt: json['created_at'] as String?,
       processedAt: json['processed_at'] as String?,
+      statusPresentation: json['status_presentation'] is Map
+          ? Map<String, dynamic>.from(json['status_presentation'] as Map)
+          : null,
     );
   }
 }
