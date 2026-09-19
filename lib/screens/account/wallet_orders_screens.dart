@@ -272,7 +272,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
           const SizedBox(height: 8),
           Text(
             kyc.isPending
-                ? 'The system is reviewing your Ghana Card. You can still buy items with Paystack.'
+                ? 'The system is reviewing your Ghana Card. You can still buy items with online checkout.'
                 : 'The system must approve your Ghana Card before you can transact with the CityShop wallet.',
             style: const TextStyle(color: AppColors.textSecondary, height: 1.4),
           ),

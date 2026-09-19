@@ -255,7 +255,7 @@ class _StatusBanner extends StatelessWidget {
           const Color(0xFFB45309),
           const Color(0xFFFFFBEB),
           'Waiting for approval',
-          'The system is reviewing your Ghana Card. You can still buy items with Paystack.',
+          'The system is reviewing your Ghana Card. You can still buy items with online checkout.',
         ),
       'needs_improvement' => (
           const Color(0xFFB45309),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -154,7 +156,15 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                         subtitle: Text('${order['reference']}'),
                         trailing: Text(
                           '${order['status_label']}',
-                          style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary, fontSize: 12),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            color: order['status'] == 'processing'
+                                ? const Color(0xFF1D4ED8)
+                                : order['status'] == 'completed'
+                                    ? const Color(0xFF047857)
+                                    : AppColors.primary,
+                          ),
                         ),
                         onTap: () => context.push('/gsm-tools/orders/${order['id']}'),
                       );
@@ -377,6 +387,7 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
   bool loading = true;
   Map<String, dynamic>? order;
   String? error;
+  Timer? _poll;
 
   @override
   void initState() {
@@ -384,22 +395,55 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      loading = true;
-      error = null;
-    });
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  void _syncPoll() {
+    _poll?.cancel();
+    final status = '${order?['status'] ?? ''}';
+    if (status == 'pending' || status == 'processing') {
+      _poll = Timer.periodic(const Duration(seconds: 8), (_) => _load(silent: true));
+    }
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        loading = true;
+        error = null;
+      });
+    }
     try {
       final data = await context.read<AppStore>().fetchGsmOrder(widget.id);
+      if (!mounted) return;
       setState(() {
         order = Map<String, dynamic>.from(data['order'] as Map);
         loading = false;
       });
+      _syncPoll();
     } catch (_) {
+      if (!mounted) return;
       setState(() {
         loading = false;
-        error = 'Could not load order.';
+        if (!silent) error = 'Could not load order.';
       });
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'processing':
+        return const Color(0xFF1D4ED8);
+      case 'completed':
+        return const Color(0xFF047857);
+      case 'failed':
+      case 'cancelled':
+        return const Color(0xFFB91C1C);
+      default:
+        return const Color(0xFFB45309);
     }
   }
 
@@ -419,6 +463,7 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
     try {
       final data = await context.read<AppStore>().cancelGsmOrder(widget.id);
       setState(() => order = Map<String, dynamic>.from(data['order'] as Map));
+      _syncPoll();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cancelled. Wallet refunded.')));
       }
@@ -432,7 +477,10 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
   @override
   Widget build(BuildContext context) {
     final fields = (order?['fields'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final replies = (order?['replies'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
     final price = (order?['price_ghs'] as num?)?.toDouble() ?? 0;
+    final status = '${order?['status'] ?? ''}';
+    final resultNote = '${order?['admin_result_note'] ?? ''}';
 
     return Scaffold(
       appBar: AppBar(
@@ -444,37 +492,104 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
-                Text('${order?['service_name']}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                const SizedBox(height: 6),
-                Text('${order?['status_label']}', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary)),
-                Text('Paid GH₵${price.toStringAsFixed(2)}'),
-                const SizedBox(height: 16),
-                ...fields.map((f) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('${f['label']}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
-                          Text('${f['value'] ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                        ],
+          : RefreshIndicator(
+              onRefresh: () => _load(),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text('${order?['service_name']}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
                       ),
-                    )),
-                if ((order?['admin_result_note'] ?? '').toString().isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.only(top: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(12)),
-                    child: Text('${order!['admin_result_note']}'),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _statusColor(status).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${order?['status_label'] ?? status}'.toUpperCase(),
+                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: _statusColor(status)),
+                        ),
+                      ),
+                    ],
                   ),
-                if (order?['can_cancel'] == true) ...[
+                  const SizedBox(height: 6),
+                  Text('Paid GH₵${price.toStringAsFixed(2)}'),
+                  if (status == 'processing')
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text('Processing — the admin reply will appear below.', style: TextStyle(color: Color(0xFF1D4ED8))),
+                    ),
+                  if (status == 'pending')
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text('Pending — waiting for admin to start Processing.', style: TextStyle(color: Color(0xFFB45309))),
+                    ),
                   const SizedBox(height: 16),
-                  OutlinedButton(onPressed: _cancel, child: const Text('Cancel & refund')),
+                  ...fields.map((f) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${f['label']}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
+                            Text('${f['value'] ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      )),
+                  const SizedBox(height: 8),
+                  const Text('Admin reply', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 8),
+                  if (replies.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Text(
+                        resultNote.isNotEmpty
+                            ? resultNote
+                            : 'No reply yet. Status will move to Processing, then Completed.',
+                      ),
+                    )
+                  else
+                    ...replies.map(
+                      (reply) => Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(12)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${reply['body'] ?? ''}'),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${reply['admin'] ?? 'Admin'}',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF047857), fontWeight: FontWeight.w700),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if ((order?['failure_reason'] ?? '').toString().isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(12)),
+                      child: Text('${order!['failure_reason']}'),
+                    ),
+                  if (order?['can_cancel'] == true) ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton(onPressed: _cancel, child: const Text('Cancel & refund')),
+                  ],
                 ],
-              ],
+              ),
             ),
     );
   }

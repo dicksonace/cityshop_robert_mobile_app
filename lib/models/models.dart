@@ -2215,6 +2215,13 @@ class AppNotificationItem {
     return int.tryParse('$v');
   }
 
+  int? get gsmOrderId {
+    final v = data?['gsm_order_id'];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse('$v');
+  }
+
   factory AppNotificationItem.fromJson(Map<String, dynamic> json) {
     final data = json['data'];
     return AppNotificationItem(

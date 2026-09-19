@@ -425,6 +425,7 @@ class _ChatScreenState extends State<ChatScreen> {
   ChatCallService? _call;
   bool _bootstrapped = false;
   final Map<String, Future<ChatMessage> Function()> _pendingUploads = {};
+  final Set<String> _cancelledUploads = {};
   int _localSeq = 0;
 
   @override
@@ -757,6 +758,25 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _deleteMessage(ChatMessage message) async {
+    if (message.isLocalPending || message.id <= 0) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(message.isVideo ? 'Delete video?' : 'Delete unsent message?'),
+          content: const Text('This was not sent. It will be removed from this chat only.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Keep')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (ok == true && mounted) await _discardLocalMessage(message);
+      return;
+    }
     const deletable = {'text', 'image', 'video', 'voice', 'product'};
     if (!message.canDelete && !(message.mine && !message.isDeleted && deletable.contains(message.type))) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -802,6 +822,21 @@ class _ChatScreenState extends State<ChatScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
+  }
+
+  Future<void> _discardLocalMessage(ChatMessage message) async {
+    final clientId = message.clientId;
+    if (clientId != null) {
+      _pendingUploads.remove(clientId);
+      _cancelledUploads.add(clientId);
+    }
+    if (!mounted) return;
+    setState(() {
+      messages = [
+        for (final m in messages)
+          if (m.clientId != clientId && m.id != message.id) m,
+      ];
+    });
   }
 
   Future<void> _send([String? preset]) async {
@@ -975,10 +1010,12 @@ class _ChatScreenState extends State<ChatScreen> {
     const deletable = {'text', 'image', 'video', 'voice', 'product'};
     const forwardable = {'text', 'image', 'video', 'voice', 'product', 'file'};
     final myId = context.read<AppStore>().user?.id;
-    final canReply = !message.isEvent && conversation?.blocked != true;
-    final canDelete = message.canDelete ||
+    final canReply = !message.isLocalPending && !message.isEvent && conversation?.blocked != true;
+    final canDelete = message.isLocalPending ||
+        message.canDelete ||
         (message.mine && !message.isDeleted && deletable.contains(message.type));
-    final canForwardMessage = !message.isEvent &&
+    final canForwardMessage = !message.isLocalPending &&
+        !message.isEvent &&
         !message.isSignalling &&
         !message.isTransfer &&
         !message.viewOnce &&
@@ -988,12 +1025,14 @@ class _ChatScreenState extends State<ChatScreen> {
         (conversation?.participants.any((p) => p.id != myId) ?? false);
     final canForwardFromDirect = conversation?.isGroup != true && canForwardMessage;
     final canForward = canForwardInGroup || canForwardFromDirect;
-    final canCopy = !message.isDeleted &&
+    final canCopy = !message.isLocalPending &&
+        !message.isDeleted &&
         !message.isEvent &&
         !message.isSignalling &&
         message.body.trim().isNotEmpty;
-    final canEdit = message.stillEditable;
-    final canReact = !message.isDeleted &&
+    final canEdit = !message.isLocalPending && message.stillEditable;
+    final canReact = !message.isLocalPending &&
+        !message.isDeleted &&
         !message.isEvent &&
         !message.isSignalling &&
         !message.viewOnce;
@@ -1076,7 +1115,10 @@ class _ChatScreenState extends State<ChatScreen> {
               if (canDelete)
                 ListTile(
                   leading: const Icon(Icons.delete_outline, color: AppColors.danger),
-                  title: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w700)),
+                  title: Text(
+                    message.isLocalPending ? 'Delete unsent' : 'Delete',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   onTap: () => Navigator.pop(ctx, 'delete'),
                 ),
             ],
@@ -1373,6 +1415,16 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final msg = await _sendWithNetworkWait(send);
       _pendingUploads.remove(clientId);
+      if (_cancelledUploads.remove(clientId)) {
+        if (msg.id > 0) {
+          unawaited(() async {
+            try {
+              await context.read<AppStore>().deleteMessage(widget.conversationId, msg.id);
+            } catch (_) {}
+          }());
+        }
+        return;
+      }
       if (!mounted) return;
       final localPath = messages
           .where((m) => m.clientId == clientId)
@@ -1390,7 +1442,8 @@ class _ChatScreenState extends State<ChatScreen> {
         ];
       });
     } on ApiException catch (e) {
-      if (!mounted) return;
+      _pendingUploads.remove(clientId);
+      if (_cancelledUploads.remove(clientId) || !mounted) return;
       setState(() {
         messages = [
           for (final m in messages)
@@ -1400,25 +1453,25 @@ class _ChatScreenState extends State<ChatScreen> {
               m,
         ];
       });
-      // Soft tip — bubble stays so they can tap Retry.
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             e.isNetwork
-                ? 'Waiting for a better connection. Tap the message to retry.'
+                ? 'Could not send. Tap retry, or hold to delete.'
                 : e.message,
           ),
         ),
       );
     } catch (_) {
-      if (!mounted) return;
+      _pendingUploads.remove(clientId);
+      if (_cancelledUploads.remove(clientId) || !mounted) return;
       setState(() {
         messages = [
           for (final m in messages)
             if (m.clientId == clientId)
               m.copyWith(
                 sendStatus: ChatSendStatus.failed,
-                sendError: 'Could not send. Tap to retry.',
+                sendError: 'Could not send. Tap retry, or hold to delete.',
               )
             else
               m,
@@ -1431,10 +1484,16 @@ class _ChatScreenState extends State<ChatScreen> {
     const maxAttempts = 8;
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await send();
+        return await send().timeout(const Duration(seconds: 90));
+      } on TimeoutException {
+        throw ApiException(
+          'Could not send. Tap retry, or hold to delete.',
+          isNetwork: true,
+        );
       } on ApiException catch (e) {
-        if (!e.isNetwork || attempt == maxAttempts) rethrow;
-        // Keep waiting — bubble stays in chat while network recovers.
+        if (e.message.contains('Could not send. Tap retry') || !e.isNetwork || attempt == maxAttempts) {
+          rethrow;
+        }
         final waitSecs = (attempt * 2).clamp(2, 16);
         await Future<void>.delayed(Duration(seconds: waitSecs));
       }
@@ -2276,7 +2335,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ),
                                     child: GestureDetector(
                                       onTap: m.isFailedSend ? () => unawaited(_retryFailedSend(m)) : null,
-                                      onLongPress: m.isDeleted || m.isLocalPending
+                                      onLongPress: m.isDeleted
                                           ? null
                                           : () => _openMessageActions(m),
                                       child: Padding(
@@ -2341,9 +2400,19 @@ class _ChatScreenState extends State<ChatScreen> {
                                           else if (m.isFile)
                                             _ChatFileCard(message: m)
                                           else if (m.isViewOnceMedia)
-                                            _ChatViewOnce(
-                                              message: m,
-                                              onOpen: () => unawaited(_openViewOnce(m)),
+                                            _OutgoingMediaWrap(
+                                              sending: m.isSending,
+                                              failed: m.isFailedSend,
+                                              onRetry: m.isFailedSend
+                                                  ? () => unawaited(_retryFailedSend(m))
+                                                  : null,
+                                              onDelete: m.isLocalPending
+                                                  ? () => unawaited(_deleteMessage(m))
+                                                  : null,
+                                              child: _ChatViewOnce(
+                                                message: m,
+                                                onOpen: () => unawaited(_openViewOnce(m)),
+                                              ),
                                             )
                                           else if (m.isPhoto) ...[
                                             _OutgoingMediaWrap(
@@ -2351,6 +2420,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                               failed: m.isFailedSend,
                                               onRetry: m.isFailedSend
                                                   ? () => unawaited(_retryFailedSend(m))
+                                                  : null,
+                                              onDelete: m.isLocalPending
+                                                  ? () => unawaited(_deleteMessage(m))
                                                   : null,
                                               child: _ChatPhoto(
                                                 url: (m.imageUrl ?? m.localPath)!,
@@ -2382,6 +2454,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                               failed: m.isFailedSend,
                                               onRetry: m.isFailedSend
                                                   ? () => unawaited(_retryFailedSend(m))
+                                                  : null,
+                                              onDelete: m.isLocalPending
+                                                  ? () => unawaited(_deleteMessage(m))
                                                   : null,
                                               child: _ChatVideo(
                                                 url: (m.videoUrl ?? m.localPath)!,
@@ -2415,6 +2490,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                               failed: m.isFailedSend,
                                               onRetry: m.isFailedSend
                                                   ? () => unawaited(_retryFailedSend(m))
+                                                  : null,
+                                              onDelete: m.isLocalPending
+                                                  ? () => unawaited(_deleteMessage(m))
                                                   : null,
                                               child: _ChatVoice(
                                                 url: m.voiceUrl ?? m.localPath ?? '',
@@ -3786,12 +3864,14 @@ class _OutgoingMediaWrap extends StatelessWidget {
     required this.sending,
     required this.failed,
     this.onRetry,
+    this.onDelete,
   });
 
   final Widget child;
   final bool sending;
   final bool failed;
   final VoidCallback? onRetry;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -3815,16 +3895,55 @@ class _OutgoingMediaWrap extends StatelessWidget {
             ),
           ),
         if (failed)
-          Material(
-            color: Colors.black.withValues(alpha: 0.55),
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: onRetry,
-              child: const SizedBox(
-                width: 48,
-                height: 48,
-                child: Icon(Icons.refresh_rounded, color: Colors.white, size: 26),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Material(
+                color: Colors.black.withValues(alpha: 0.55),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: onRetry,
+                  child: const SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Icon(Icons.refresh_rounded, color: Colors.white, size: 26),
+                  ),
+                ),
+              ),
+              if (onDelete != null) ...[
+                const SizedBox(width: 10),
+                Material(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: onDelete,
+                    child: const SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Icon(Icons.delete_outline_rounded, color: Colors.white, size: 26),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        if (sending && onDelete != null)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Material(
+              color: Colors.black.withValues(alpha: 0.55),
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onDelete,
+                child: const SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                ),
               ),
             ),
           ),

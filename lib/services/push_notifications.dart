@@ -336,8 +336,13 @@ class PushNotifications {
   void _openFromData(Map<String, dynamic> data) {
     final conversationId = data['conversation_id']?.toString();
     final orderId = data['order_id']?.toString();
+    final gsmOrderId = data['gsm_order_id']?.toString();
     if (conversationId != null && conversationId.isNotEmpty) {
       _onOpenRoute?.call('/messages/$conversationId');
+      return;
+    }
+    if (gsmOrderId != null && gsmOrderId.isNotEmpty) {
+      _onOpenRoute?.call('/gsm-tools/orders/$gsmOrderId');
       return;
     }
     if (orderId != null && orderId.isNotEmpty) {
@@ -353,6 +358,7 @@ class PushNotifications {
       'type': item.type,
       if (item.conversationId != null) 'conversation_id': '${item.conversationId}',
       if (item.orderId != null) 'order_id': '${item.orderId}',
+      if (item.gsmOrderId != null) 'gsm_order_id': '${item.gsmOrderId}',
     };
     return Uri(queryParameters: params).query;
   }

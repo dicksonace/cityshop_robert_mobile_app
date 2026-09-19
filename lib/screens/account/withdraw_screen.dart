@@ -940,7 +940,7 @@ Future<void> _showWithdrawalDetails(BuildContext context, WithdrawalItem item) {
   final channel = (item.payoutChannelLabel ?? '').trim().isNotEmpty
       ? item.payoutChannelLabel!
       : (isBank ? 'Bank transfer' : 'Mobile Money');
-  final reference = (item.reference ?? '').trim().isNotEmpty ? item.reference! : 'WD-${item.id}';
+  final reference = (item.reference ?? '').trim().isNotEmpty ? item.reference! : 'WITHDRAWAL-${item.id}';
   final proof = ApiConfig.resolveMediaUrl(item.proofUrl);
 
   return showAppSheet(

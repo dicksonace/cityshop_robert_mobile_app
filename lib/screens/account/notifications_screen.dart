@@ -61,8 +61,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'seller_activation_due':
       case 'seller_activation_paid':
         return Icons.workspace_premium_outlined;
-      case 'product_out_of_stock':
-        return Icons.warning_amber_outlined;
+      case 'gsm_tools':
+        return Icons.phonelink_setup_outlined;
       default:
         return Icons.notifications_outlined;
     }
@@ -99,6 +99,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     if (n.orderId != null) {
       context.push('/orders/${n.orderId}');
+      return;
+    }
+    if (n.gsmOrderId != null) {
+      context.push('/gsm-tools/orders/${n.gsmOrderId}');
       return;
     }
     if (n.type == 'payment' || n.type == 'wallet' || n.type == 'qr_payment') {
