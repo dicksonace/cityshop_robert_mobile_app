@@ -420,6 +420,18 @@ class _OverviewTab extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 12),
+                Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  child: ListTile(
+                    leading: const Icon(Icons.privacy_tip_outlined, color: AppColors.accent),
+                    title: const Text('Account, privacy & delete', style: TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: const Text('Privacy policy, support, and account deletion'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/profile/edit'),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 _WalletHero(
                   available: _asDouble(stats['available_balance']),
                   pending: _asDouble(stats['pending_balance']),

@@ -1613,6 +1613,8 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
       (Icons.badge_outlined, 'Ghana Card verification', 'Required before CityShop wallet', '/kyc'),
       (Icons.pin_outlined, 'Payment PIN', '4-digit code for wallet & transfers', '/profile/payment-pin'),
       (Icons.lock_outline, 'Change password', 'Account security', '/profile/password'),
+      (Icons.privacy_tip_outlined, 'Privacy policy', 'Data we collect and who we share it with', '__privacy__'),
+      (Icons.support_agent_outlined, 'Contact support', 'We reply within 24 hours', '__contact__'),
       (Icons.shopping_cart_outlined, 'My cart', 'Review items before checkout', '/cart'),
     ];
 
@@ -1728,6 +1730,13 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
                     }
                     if (item.$4 == '__seller_dashboard__') {
                       context.go('/seller');
+                      return;
+                    }
+                    if (item.$4 == '__privacy__' || item.$4 == '__contact__') {
+                      final uri = Uri.parse(
+                        item.$4 == '__privacy__' ? 'https://cityunlock.net/privacy' : 'https://cityunlock.net/contact',
+                      );
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
                       return;
                     }
                     if (item.$4 == '__admin_dashboard__') {

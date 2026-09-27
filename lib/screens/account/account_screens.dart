@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
 import '../../api/api_config.dart';
@@ -484,8 +485,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   }
 
   Future<void> _loadDeletion() async {
-    final user = context.read<AppStore>().user;
-    if ((user?.role ?? '').toLowerCase() != 'buyer') {
+    final role = (context.read<AppStore>().user?.role ?? '').toLowerCase();
+    if (role != 'buyer' && role != 'seller') {
       setState(() {
         loadingDeletion = false;
         canDelete = false;
@@ -568,7 +569,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final name = user?.name ?? '';
     final email = user?.email ?? '';
     final mobile = user?.mobile ?? '';
-    final isBuyer = (user?.role ?? '').toLowerCase() == 'buyer';
+    final role = (user?.role ?? '').toLowerCase();
+    final canCloseAccount = role == 'buyer' || role == 'seller';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile settings')),
@@ -613,11 +615,28 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               border: Border.all(color: const Color(0xFFFED7AA)),
             ),
             child: const Text(
-              'Name, email, and mobile are locked so someone who opens your phone cannot change your account details. Contact CityShop support if you need them updated.',
+              'Name, email, and mobile are locked so someone who opens your phone cannot change your account details. Contact support at cityunlock.net/contact if you need them updated.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
             ),
           ),
-          if (isBuyer) ...[
+          const SizedBox(height: 16),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.privacy_tip_outlined),
+            title: const Text('Privacy policy', style: TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: const Text('How CityUnlock collects and uses your data'),
+            trailing: const Icon(Icons.open_in_new, size: 18),
+            onTap: () => launchUrl(Uri.parse('https://cityunlock.net/privacy'), mode: LaunchMode.externalApplication),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.support_agent_outlined),
+            title: const Text('Contact support', style: TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: const Text('Report a problem. We reply within 24 hours.'),
+            trailing: const Icon(Icons.open_in_new, size: 18),
+            onTap: () => launchUrl(Uri.parse('https://cityunlock.net/contact'), mode: LaunchMode.externalApplication),
+          ),
+          if (canCloseAccount) ...[
             const SizedBox(height: 28),
             const Text('Delete account', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
             const SizedBox(height: 4),

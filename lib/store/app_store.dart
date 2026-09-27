@@ -1699,13 +1699,29 @@ class AppStore extends ChangeNotifier {
   Future<Map<String, dynamic>> submitGsmOrder({
     required int serviceId,
     required Map<String, String> fields,
+    Map<String, String> files = const {},
     required String paymentPin,
   }) async {
-    final res = await _api.post('/gsm-tools/orders', data: {
+    final data = <String, dynamic>{
       'gsm_service_id': serviceId,
-      'fields': fields,
       'payment_pin': paymentPin,
-    });
+    };
+    for (final entry in fields.entries) {
+      data['fields[${entry.key}]'] = entry.value;
+    }
+    final fileKeys = <String>[];
+    for (final entry in files.entries) {
+      final key = 'fields[${entry.key}]';
+      data[key] = entry.value;
+      fileKeys.add(key);
+    }
+    final res = fileKeys.isEmpty
+        ? await _api.post('/gsm-tools/orders', data: {
+            'gsm_service_id': serviceId,
+            'fields': fields,
+            'payment_pin': paymentPin,
+          })
+        : await _api.postForm('/gsm-tools/orders', data, fileFields: fileKeys);
     await loadWallet();
     return Map<String, dynamic>.from(res.data as Map);
   }
@@ -2536,6 +2552,20 @@ class AppStore extends ChangeNotifier {
       'reason': reason,
       if (details != null && details.trim().isNotEmpty) 'details': details.trim(),
       if (productId != null) 'product_id': productId,
+    });
+  }
+
+  Future<void> reportContent({
+    required String targetType,
+    required int targetId,
+    required String reason,
+    String? details,
+  }) async {
+    await _api.post('/reports', data: {
+      'target_type': targetType,
+      'target_id': targetId,
+      'reason': reason,
+      if (details != null && details.trim().isNotEmpty) 'details': details.trim(),
     });
   }
 

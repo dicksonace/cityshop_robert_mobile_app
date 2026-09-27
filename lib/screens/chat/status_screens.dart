@@ -15,6 +15,7 @@ import '../../services/video_overlay.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/product_video_limits.dart';
+import '../../widgets/report_content_sheet.dart';
 import 'image_draw_screen.dart';
 import 'media_text_screen.dart';
 import 'video_trim_screen.dart';
@@ -1281,6 +1282,19 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
                               IconButton(
                                 onPressed: busy ? null : _delete,
                                 icon: const Icon(Icons.delete_outline, color: Colors.white),
+                              )
+                            else
+                              IconButton(
+                                tooltip: 'Report',
+                                onPressed: busy
+                                    ? null
+                                    : () => showReportContentSheet(
+                                          context,
+                                          targetType: 'status',
+                                          targetId: item.id,
+                                          title: 'Report this status',
+                                        ),
+                                icon: const Icon(Icons.flag_outlined, color: Colors.white),
                               ),
                           ],
                         ),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../store/app_store.dart';
@@ -21,6 +22,26 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
   List<Map<String, dynamic>> services = [];
   List<Map<String, dynamic>> orders = [];
   double balance = 0;
+  String query = '';
+  String serviceType = 'all';
+
+  static const _types = <(String, String)>[
+    ('all', 'All services'),
+    ('imei', 'IMEI Service'),
+    ('server', 'Server Service'),
+    ('remote', 'Remote Service'),
+    ('file', 'File Service'),
+  ];
+
+  List<Map<String, dynamic>> get _visible {
+    final needle = query.trim().toLowerCase();
+    return services.where((service) {
+      final type = '${service['service_type'] ?? 'imei'}';
+      final typeOk = serviceType == 'all' || type == serviceType;
+      final text = '${service['name']} ${service['description'] ?? ''}'.toLowerCase();
+      return typeOk && (needle.isEmpty || text.contains(needle));
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -91,7 +112,31 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                     style: TextStyle(color: AppColors.textSecondary, height: 1.35),
                   ),
                   const SizedBox(height: 16),
-                  ...services.map((service) {
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search services',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onChanged: (value) => setState(() => query = value),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: serviceType,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    items: _types
+                        .map((type) => DropdownMenuItem(value: type.$1, child: Text(type.$2)))
+                        .toList(),
+                    onChanged: (value) => setState(() => serviceType = value ?? 'all'),
+                  ),
+                  const SizedBox(height: 14),
+                  ..._visible.map((service) {
                     final price = (service['price_ghs'] as num?)?.toDouble() ?? 0;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -117,6 +162,10 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                                         '${service['name']}',
                                         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                                       ),
+                                      Text(
+                                        '${service['service_type_label'] ?? 'IMEI Service'}',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                                      ),
                                       if ((service['description'] ?? '').toString().isNotEmpty) ...[
                                         const SizedBox(height: 4),
                                         Text(
@@ -140,7 +189,7 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                       ),
                     );
                   }),
-                  if (services.isEmpty)
+                  if (_visible.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Text('No GSM services available yet.', textAlign: TextAlign.center),
@@ -193,6 +242,7 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
   double balance = 0;
   bool hasPin = false;
   final Map<String, TextEditingController> fieldControllers = {};
+  final Map<String, String> imagePaths = {};
 
   @override
   void initState() {
@@ -220,6 +270,7 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
       for (final f in fields) {
+        if (f['type'] == 'image') continue;
         fieldControllers['${f['name']}'] = TextEditingController();
       }
       final wallet = data['wallet'];
@@ -257,6 +308,13 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
     for (final entry in fieldControllers.entries) {
       fields[entry.key] = entry.value.text.trim();
     }
+    final defs = (service!['fields'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map));
+    for (final field in defs) {
+      if (field['type'] == 'image' && field['required'] == true && (imagePaths['${field['name']}'] ?? '').isEmpty) {
+        setState(() => error = 'Add ${field['label']}.');
+        return;
+      }
+    }
     final pin = await promptPaymentPin(
       context,
       title: 'Confirm GSM order',
@@ -271,6 +329,7 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
       final created = await store.submitGsmOrder(
             serviceId: widget.serviceId,
             fields: fields,
+            files: imagePaths,
             paymentPin: pin,
           );
       final order = created['order'];
@@ -335,14 +394,35 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                 const SizedBox(height: 16),
                 ...fields.map((field) {
                   final name = '${field['name']}';
+                  final label = '${field['label']}${field['required'] == true ? '*' : ''}';
+                  if (field['type'] == 'image') {
+                    final path = imagePaths[name];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+                          if (picked == null) return;
+                          setState(() => imagePaths[name] = picked.path);
+                        },
+                        icon: const Icon(Icons.photo_outlined),
+                        label: Text(path == null ? label : '$label added'),
+                      ),
+                    );
+                  }
                   final controller = fieldControllers[name]!;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: TextField(
                       controller: controller,
+                      keyboardType: field['type'] == 'number'
+                          ? const TextInputType.numberWithOptions(decimal: true)
+                          : field['type'] == 'phone'
+                              ? TextInputType.phone
+                              : TextInputType.text,
                       maxLines: field['type'] == 'textarea' ? 3 : 1,
                       decoration: InputDecoration(
-                        labelText: '${field['label']}${field['required'] == true ? '*' : ''}',
+                        labelText: label,
                         hintText: field['placeholder']?.toString(),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       ),
@@ -459,7 +539,7 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
     try {
       final data = await context.read<AppStore>().cancelGsmOrder(widget.id);
       setState(() => order = Map<String, dynamic>.from(data['order'] as Map));
@@ -530,16 +610,29 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
                       child: Text('Pending — waiting for admin to start Processing.', style: TextStyle(color: Color(0xFFB45309))),
                     ),
                   const SizedBox(height: 16),
-                  ...fields.map((f) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('${f['label']}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
-                            Text('${f['value'] ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      )),
+                  ...fields.map((f) {
+                    final value = '${f['value'] ?? ''}';
+                    final image = f['type'] == 'image' && value.startsWith('http');
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${f['label']}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
+                          if (image)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(value, height: 180, fit: BoxFit.cover),
+                              ),
+                            )
+                          else
+                            Text(value.isEmpty ? '—' : value, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    );
+                  }),
                   const SizedBox(height: 8),
                   const Text('Admin reply', style: TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 8),

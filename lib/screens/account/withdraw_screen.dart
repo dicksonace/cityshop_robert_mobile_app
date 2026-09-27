@@ -186,9 +186,6 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       if (!mounted) return;
       amountCtrl.clear();
       context.go('/wallet/withdrawals/${created.id}', extra: created);
-      } else {
-        context.go('/shop?tab=wallet');
-      }
     } on ApiException catch (e) {
       if (mounted) _toast(e.message);
     } catch (e) {

@@ -29,6 +29,7 @@ import '../../theme/chat_theme.dart';
 import '../../utils/chat_emojis.dart';
 import '../../utils/chat_text_links.dart';
 import '../../widgets/app_sheet.dart';
+import '../../widgets/report_content_sheet.dart';
 import '../../widgets/chat_call_overlay.dart';
 import '../../widgets/chat_emoji_picker.dart';
 import '../../widgets/chat_link_text.dart';
@@ -1036,7 +1037,13 @@ class _ChatScreenState extends State<ChatScreen> {
         !message.isEvent &&
         !message.isSignalling &&
         !message.viewOnce;
-    if (!canReply && !canDelete && !canForwardMessage && !canCopy && !canEdit && !canReact) return;
+    final canReport = !message.mine &&
+        !message.isLocalPending &&
+        !message.isDeleted &&
+        !message.isEvent &&
+        !message.isSignalling &&
+        message.id > 0;
+    if (!canReply && !canDelete && !canForwardMessage && !canCopy && !canEdit && !canReact && !canReport) return;
 
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -1112,6 +1119,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   title: const Text('Edit', style: TextStyle(fontWeight: FontWeight.w700)),
                   onTap: () => Navigator.pop(ctx, 'edit'),
                 ),
+              if (canReport)
+                ListTile(
+                  leading: const Icon(Icons.flag_outlined, color: AppColors.danger),
+                  title: const Text('Report', style: TextStyle(fontWeight: FontWeight.w700)),
+                  onTap: () => Navigator.pop(ctx, 'report'),
+                ),
               if (canDelete)
                 ListTile(
                   leading: const Icon(Icons.delete_outline, color: AppColors.danger),
@@ -1158,6 +1171,13 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     } else if (action == 'delete') {
       await _deleteMessage(message);
+    } else if (action == 'report') {
+      await showReportContentSheet(
+        context,
+        targetType: 'message',
+        targetId: message.id,
+        title: 'Report this message',
+      );
     }
   }
 

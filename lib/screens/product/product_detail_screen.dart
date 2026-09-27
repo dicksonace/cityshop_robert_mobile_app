@@ -17,6 +17,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/video_playback.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
+import '../../widgets/report_content_sheet.dart';
 
 final _money = NumberFormat.currency(symbol: 'GH₵', decimalDigits: 2);
 
@@ -324,6 +325,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 await _copyProductLink();
               } else if (value == 'follow') {
                 await _toggleFollowSeller();
+              } else if (value == 'report') {
+                final product = this.product;
+                if (product == null) return;
+                await showReportContentSheet(
+                  context,
+                  targetType: 'product',
+                  targetId: product.id,
+                  title: 'Report this listing',
+                );
               }
             },
             itemBuilder: (context) {
@@ -353,6 +363,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(following ? Icons.person_remove_alt_1_outlined : Icons.person_add_alt_1_outlined),
                       title: Text(following ? 'Unfollow this seller' : 'Follow this seller'),
+                    ),
+                  ),
+                if (sellerId != null && sellerId != store.user?.id)
+                  const PopupMenuItem(
+                    value: 'report',
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.flag_outlined),
+                      title: Text('Report this listing'),
                     ),
                   ),
               ];
