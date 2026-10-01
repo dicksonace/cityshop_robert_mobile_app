@@ -544,27 +544,6 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                   Center(child: GsmServiceLogo(url: '${service!['image_url']}', size: 88)),
                   const SizedBox(height: 14),
                 ],
-                if ((service?['overview'] ?? service?['description'] ?? '').toString().isNotEmpty) ...[
-                  const Text('Overview', style: TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 6),
-                  Text('${service!['overview'] ?? service!['description']}', style: const TextStyle(height: 1.4, color: AppColors.textSecondary)),
-                  const SizedBox(height: 12),
-                ],
-                if (((service?['features'] as List?) ?? []).isNotEmpty) ...[
-                  const Text('Key Features', style: TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 6),
-                  ...((service!['features'] as List).map((item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text('• $item'),
-                      ))),
-                  const SizedBox(height: 12),
-                ],
-                if ((service?['what_to_send'] ?? '').toString().isNotEmpty) ...[
-                  const Text('What You Need To Send', style: TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 6),
-                  Text('${service!['what_to_send']}'),
-                  const SizedBox(height: 12),
-                ],
                 Text(
                   'Total GH₵${price.toStringAsFixed(2)} — deducted from your wallet.',
                   style: const TextStyle(fontWeight: FontWeight.w800),
@@ -686,6 +665,27 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                   ),
                   child: Text(submitting ? 'Placing…' : 'Place Order', style: const TextStyle(fontWeight: FontWeight.w800)),
                 ),
+                if ((service?['overview'] ?? service?['description'] ?? '').toString().isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  const Text('Overview', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 6),
+                  Text('${service!['overview'] ?? service!['description']}', style: const TextStyle(height: 1.4, color: AppColors.textSecondary)),
+                ],
+                if (((service?['features'] as List?) ?? []).isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('Key Features', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 6),
+                  ...((service!['features'] as List).map((item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text('• $item'),
+                      ))),
+                ],
+                if ((service?['what_to_send'] ?? '').toString().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('What You Need To Send', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 6),
+                  Text('${service!['what_to_send']}'),
+                ],
               ],
             ),
     );
@@ -935,7 +935,7 @@ class GsmServiceLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolved = ApiConfig.resolveMediaUrl(url.isEmpty ? '/images/gsm/gmt-logo.jpg' : url);
+    final resolved = ApiConfig.resolveMediaUrl(url);
     return Container(
       width: size,
       height: size,

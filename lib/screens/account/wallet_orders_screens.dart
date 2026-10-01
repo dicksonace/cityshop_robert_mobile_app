@@ -895,7 +895,8 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 Positioned(
                   top: 0,
                   right: 0,
-                  child: GestureDetector(
+                  child: store.user?.canUseRmbWallet == true
+                      ? GestureDetector(
                     onTap: () => context.push('/wallet/china-rmb'),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -912,7 +913,8 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                         ),
                       ),
                     ),
-                  ),
+                  )
+                      : const SizedBox.shrink(),
                 ),
               ],
             ),

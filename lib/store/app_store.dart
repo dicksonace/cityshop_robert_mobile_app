@@ -1264,23 +1264,7 @@ class AppStore extends ChangeNotifier {
     final data = body['data'] is Map ? Map<String, dynamic>.from(body['data'] as Map) : body;
     final info = KycInfo.fromJson(data);
     if (user != null) {
-      user = AppUser(
-        id: user!.id,
-        name: user!.name,
-        email: user!.email,
-        mobile: user!.mobile,
-        country: user!.country,
-        role: user!.role,
-        region: user!.region,
-        city: user!.city,
-        avatar: user!.avatar,
-        hasPaymentPin: user!.hasPaymentPin,
-        kyc: info,
-        sellerStoreName: user!.sellerStoreName,
-        sellerSlug: user!.sellerSlug,
-        sellerStatus: user!.sellerStatus,
-        sellerStoreSetupComplete: user!.sellerStoreSetupComplete,
-      );
+      user = user!.copyWith(kyc: info);
       notifyListeners();
     }
     return info;
@@ -1586,6 +1570,9 @@ class AppStore extends ChangeNotifier {
     final data = res.data is Map ? res.data['data'] : null;
     if (data is Map) {
       wallet = WalletInfo.fromJson(Map<String, dynamic>.from(data));
+      if (user != null && data.containsKey('can_use_rmb_wallet')) {
+        user = user!.copyWith(canUseRmbWallet: data['can_use_rmb_wallet'] == true);
+      }
     }
     notifyListeners();
   }

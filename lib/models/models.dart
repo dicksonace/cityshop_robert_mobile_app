@@ -499,6 +499,7 @@ class AppUser {
     this.sellerSlug,
     this.sellerStatus,
     this.sellerStoreSetupComplete = false,
+    this.canUseRmbWallet = false,
   });
 
   final int id;
@@ -516,6 +517,7 @@ class AppUser {
   final String? sellerSlug;
   final String? sellerStatus;
   final bool sellerStoreSetupComplete;
+  final bool canUseRmbWallet;
 
   bool get isSeller => (role ?? '').toLowerCase() == 'seller';
   bool get isBuyer => (role ?? '').toLowerCase() == 'buyer';
@@ -539,6 +541,31 @@ class AppUser {
       sellerSlug: seller?['slug'] as String?,
       sellerStatus: seller?['status'] as String?,
       sellerStoreSetupComplete: seller?['store_setup_complete'] == true,
+      canUseRmbWallet: json['can_use_rmb_wallet'] == true,
+    );
+  }
+
+  AppUser copyWith({
+    KycInfo? kyc,
+    bool? canUseRmbWallet,
+  }) {
+    return AppUser(
+      id: id,
+      name: name,
+      email: email,
+      mobile: mobile,
+      country: country,
+      role: role,
+      region: region,
+      city: city,
+      avatar: avatar,
+      hasPaymentPin: hasPaymentPin,
+      kyc: kyc ?? this.kyc,
+      sellerStoreName: sellerStoreName,
+      sellerSlug: sellerSlug,
+      sellerStatus: sellerStatus,
+      sellerStoreSetupComplete: sellerStoreSetupComplete,
+      canUseRmbWallet: canUseRmbWallet ?? this.canUseRmbWallet,
     );
   }
 }

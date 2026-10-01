@@ -72,6 +72,9 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
     try {
       final store = context.read<AppStore>();
       await store.loadWallet();
+      if (store.user?.canUseRmbWallet != true) {
+        throw ApiException('China / RMB is not available for this account.', statusCode: 403);
+      }
       final buy = await store.loadChinaTransfers();
       final sell = await store.loadSellRmb();
       if (!mounted) return;
