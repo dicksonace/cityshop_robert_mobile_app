@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/payment_pin_sheet.dart';
@@ -188,30 +190,79 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                     child: const Text('Reset'),
                   ),
                   const SizedBox(height: 14),
-                  for (final group in _visibleGroups) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6, top: 8),
-                      child: Text('${group['name']}', style: const TextStyle(fontWeight: FontWeight.w900)),
-                    ),
-                    for (final service in (group['services'] as List).cast<Map<String, dynamic>>())
-                      _GsmServiceRow(
-                        service: service,
-                        imageUrl: '${service['image_url'] ?? group['image_url'] ?? ''}',
-                        onTap: () => context.push('/gsm-tools/services/${service['id']}'),
+                  for (final group in _visibleGroups)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x0F0F172A), blurRadius: 8, offset: Offset(0, 2)),
+                        ],
                       ),
-                  ],
-                  if (_ungrouped.isNotEmpty) ...[
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 6, top: 8),
-                      child: Text('Other services', style: TextStyle(fontWeight: FontWeight.w900)),
-                    ),
-                    for (final service in _ungrouped)
-                      _GsmServiceRow(
-                        service: service,
-                        imageUrl: '${service['image_url'] ?? ''}',
-                        onTap: () => context.push('/gsm-tools/services/${service['id']}'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+                            child: Text(
+                              '${group['name']}',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF6B7280)),
+                            ),
+                          ),
+                          const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 2),
+                            child: Column(
+                              children: [
+                                for (final service in (group['services'] as List).cast<Map<String, dynamic>>())
+                                  _GsmServiceRow(
+                                    service: service,
+                                    imageUrl: '${service['image_url'] ?? group['image_url'] ?? ''}',
+                                    onTap: () => context.push('/gsm-tools/services/${service['id']}'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                  ],
+                    ),
+                  if (_ungrouped.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 14, 16, 12),
+                            child: Text(
+                              'Other services',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF6B7280)),
+                            ),
+                          ),
+                          const Divider(height: 1, color: Color(0xFFF3F4F6)),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 2),
+                            child: Column(
+                              children: [
+                                for (final service in _ungrouped)
+                                  _GsmServiceRow(
+                                    service: service,
+                                    imageUrl: '${service['image_url'] ?? ''}',
+                                    onTap: () => context.push('/gsm-tools/services/${service['id']}'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   if (_visibleGroups.every((g) => (g['services'] as List).isEmpty) && _ungrouped.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
@@ -224,6 +275,7 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                     ...orders.map((order) {
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
+                        leading: GsmServiceLogo(url: '${order['image_url'] ?? ''}', size: 40),
                         title: Text('${order['service_name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
                         subtitle: Text('${order['reference']}'),
                         trailing: Text(
@@ -256,47 +308,74 @@ class _GsmServiceRow extends StatelessWidget {
   final String imageUrl;
   final VoidCallback onTap;
 
+  String get _typeChip {
+    final type = '${service['service_type'] ?? ''}'.toLowerCase();
+    if (type == 'credit') return 'CREDIT';
+    if (type.isEmpty) return 'GSM';
+    return type.toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     final price = (service['price_ghs'] as num?)?.toDouble() ?? 0;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Material(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFE5E7EB)),
+        ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: imageUrl.startsWith('http')
-                      ? Image.network(imageUrl, width: 44, height: 44, fit: BoxFit.cover)
-                      : Container(
-                          width: 44,
-                          height: 44,
-                          color: const Color(0xFFFFF7ED),
-                          alignment: Alignment.center,
-                          child: const Text('GSM', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: AppColors.primary)),
-                        ),
-                ),
-                const SizedBox(width: 10),
+                GsmServiceLogo(url: imageUrl, size: 52),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${service['name']}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
                       Text(
-                        '${service['eta_label'] ?? 'INSTANT'}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF059669)),
+                        '${service['name']}',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, height: 1.25, color: Color(0xFF111827)),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFECFDF5),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'GH₵${price.toStringAsFixed(price.truncateToDouble() == price ? 0 : 2)}',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF065F46)),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF7ED),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _typeChip,
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.3, color: Color(0xFFF97316)),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-                Text('GH₵${price.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900)),
               ],
             ),
           ),
@@ -457,6 +536,14 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
               children: [
+                if (error != null) ...[
+                  Text(error!, style: const TextStyle(color: Colors.red)),
+                  const SizedBox(height: 10),
+                ],
+                if ((service?['image_url'] ?? '').toString().isNotEmpty) ...[
+                  Center(child: GsmServiceLogo(url: '${service!['image_url']}', size: 88)),
+                  const SizedBox(height: 14),
+                ],
                 if ((service?['overview'] ?? service?['description'] ?? '').toString().isNotEmpty) ...[
                   const Text('Overview', style: TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 6),
@@ -499,19 +586,22 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                   Text(error!, style: const TextStyle(color: Colors.red)),
                 ],
                 const SizedBox(height: 16),
-                if (service?['allow_quantity'] != false)
+                if (service?['allow_quantity'] == true)
                   Row(
                     children: [
                       const Text('Quantity *', style: TextStyle(fontWeight: FontWeight.w700)),
                       const Spacer(),
                       IconButton(
-                        onPressed: () => setState(() => quantity = quantity > 1 ? quantity - 1 : 1),
+                        onPressed: () {
+                          final min = (service?['min_qty'] as num?)?.toInt() ?? 1;
+                          setState(() => quantity = quantity > min ? quantity - 1 : min);
+                        },
                         icon: const Icon(Icons.remove_circle_outline),
                       ),
                       Text('$quantity', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
                       IconButton(
                         onPressed: () {
-                          final max = (service?['max_qty'] as num?)?.toInt() ?? 1000;
+                          final max = (service?['max_qty'] as num?)?.toInt() ?? 10;
                           setState(() => quantity = quantity < max ? quantity + 1 : max);
                         },
                         icon: const Icon(Icons.add_circle_outline),
@@ -728,6 +818,8 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      GsmServiceLogo(url: '${order?['image_url'] ?? ''}', size: 52),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Text('${order?['service_name']}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
                       ),
@@ -829,6 +921,52 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
                     OutlinedButton(onPressed: _cancel, child: const Text('Cancel & refund')),
                   ],
                 ],
+              ),
+            ),
+    );
+  }
+}
+
+class GsmServiceLogo extends StatelessWidget {
+  const GsmServiceLogo({required this.url, this.size = 48});
+
+  final String url;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = ApiConfig.resolveMediaUrl(url.isEmpty ? '/images/gsm/gmt-logo.jpg' : url);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(size * 0.22),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: resolved.isEmpty
+          ? Center(
+              child: Text(
+                'GSM',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: size * 0.22,
+                  color: AppColors.primary,
+                ),
+              ),
+            )
+          : CachedNetworkImage(
+              imageUrl: resolved,
+              fit: BoxFit.contain,
+              errorWidget: (_, _, _) => Center(
+                child: Text(
+                  'GSM',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: size * 0.22,
+                    color: AppColors.primary,
+                  ),
+                ),
               ),
             ),
     );
