@@ -88,6 +88,11 @@ void main() {
     await _pumpWallet(tester, _FakeApiClient());
 
     expect(find.text('Transaction History'), findsOneWidget);
+    expect(find.text('Statement'), findsOneWidget);
+    expect(
+      tester.getCenter(find.text('Statement')).dy,
+      lessThan(tester.getCenter(find.text('Funds Added')).dy),
+    );
 
     expect(find.text('Funds Added'), findsOneWidget);
     expect(find.text('Order Payment'), findsOneWidget);
