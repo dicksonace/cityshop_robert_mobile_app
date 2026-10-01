@@ -702,6 +702,7 @@ class GsmToolShowScreen extends StatefulWidget {
 
 class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
   bool loading = true;
+  bool refreshing = false;
   Map<String, dynamic>? order;
   String? error;
   Timer? _poll;
@@ -722,7 +723,7 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
     _poll?.cancel();
     final status = '${order?['status'] ?? ''}';
     if (status == 'pending' || status == 'processing') {
-      _poll = Timer.periodic(const Duration(seconds: 8), (_) => _load(silent: true));
+      _poll = Timer.periodic(const Duration(seconds: 4), (_) => _load(silent: true));
     }
   }
 
@@ -732,6 +733,8 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
         loading = true;
         error = null;
       });
+    } else if (mounted) {
+      setState(() => refreshing = true);
     }
     try {
       final data = await context.read<AppStore>().fetchGsmOrder(widget.id);
@@ -739,12 +742,14 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
       setState(() {
         order = Map<String, dynamic>.from(data['order'] as Map);
         loading = false;
+        refreshing = false;
       });
       _syncPoll();
     } catch (_) {
       if (!mounted) return;
       setState(() {
         loading = false;
+        refreshing = false;
         if (!silent) error = 'Could not load order.';
       });
     }
@@ -796,133 +801,423 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
     final fields = (order?['fields'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
     final replies = (order?['replies'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
     final price = (order?['price_ghs'] as num?)?.toDouble() ?? 0;
-    final status = '${order?['status'] ?? ''}';
+    final rawStatus = '${order?['status'] ?? ''}';
+    final status = rawStatus == 'pending' ? 'processing' : rawStatus;
+    final statusLabel = status == 'processing' ? 'PROCESSING' : '${order?['status_label'] ?? status}'.toUpperCase();
     final resultNote = '${order?['admin_result_note'] ?? ''}';
+    final email = '${order?['contact_email'] ?? ''}';
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(order?['reference']?.toString() ?? 'GSM order', style: const TextStyle(fontWeight: FontWeight.w900)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.canPop() ? context.pop() : context.go('/gsm-tools'),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: refreshing ? null : () => _load(silent: true),
+            icon: refreshing
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.refresh_rounded),
+          ),
+        ],
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: () => _load(),
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                 children: [
-                  if (error != null) Text(error!, style: const TextStyle(color: Colors.red)),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GsmServiceLogo(url: '${order?['image_url'] ?? ''}', size: 52),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text('${order?['service_name']}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _statusColor(status).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '${order?['status_label'] ?? status}'.toUpperCase(),
-                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, color: _statusColor(status)),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text('Paid GH₵${price.toStringAsFixed(2)}'),
-                  if (status == 'processing')
-                    const Padding(
-                      padding: EdgeInsets.only(top: 6),
-                      child: Text('Processing — the admin reply will appear below.', style: TextStyle(color: Color(0xFF1D4ED8))),
+                  if (error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(error!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
                     ),
-                  if (status == 'pending')
-                    const Padding(
-                      padding: EdgeInsets.only(top: 6),
-                      child: Text('Pending — waiting for admin to start Processing.', style: TextStyle(color: Color(0xFFB45309))),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: const [BoxShadow(color: Color(0x0F0F172A), blurRadius: 14, offset: Offset(0, 6))],
                     ),
-                  const SizedBox(height: 16),
-                  ...fields.map((f) {
-                    final value = '${f['value'] ?? ''}';
-                    final image = f['type'] == 'image' && value.startsWith('http');
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('${f['label']}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
-                          if (image)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(value, height: 180, fit: BoxFit.cover),
-                              ),
-                            )
-                          else
-                            Text(value.isEmpty ? '—' : value, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                  const Text('Admin reply', style: TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 8),
-                  if (replies.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                      ),
-                      child: Text(
-                        resultNote.isNotEmpty
-                            ? resultNote
-                            : 'No reply yet. Status will move to Processing, then Completed.',
-                      ),
-                    )
-                  else
-                    ...replies.map(
-                      (reply) => Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: const Color(0xFFECFDF5), borderRadius: BorderRadius.circular(12)),
-                        child: Column(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('${reply['body'] ?? ''}'),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${reply['admin'] ?? 'Admin'}',
-                              style: const TextStyle(fontSize: 11, color: Color(0xFF047857), fontWeight: FontWeight.w700),
+                            GsmServiceLogo(url: '${order?['image_url'] ?? ''}', size: 58),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${order?['service_name'] ?? 'GSM service'}',
+                                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, height: 1.2),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: _statusColor(status).withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      statusLabel,
+                                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.4, color: _statusColor(status)),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                      ),
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF7ED),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('PAID FROM WALLET', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Color(0xFFC2410C), letterSpacing: 0.6)),
+                              const SizedBox(height: 4),
+                              Text('GH₵${price.toStringAsFixed(2)}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF9A3412))),
+                              if (status == 'processing')
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 6),
+                                  child: Text('Processing now. Watch System Reply below.', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF9A3412), fontSize: 13)),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Your details', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+                        const SizedBox(height: 12),
+                        if (email.isNotEmpty)
+                          _OrderDetailRow(label: 'Email', value: email),
+                        ...fields.map((f) {
+                          final value = '${f['value'] ?? ''}';
+                          final image = f['type'] == 'image' && value.startsWith('http');
+                          if (image) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('${f['label']}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 6),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(value, height: 180, width: double.infinity, fit: BoxFit.cover),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          return _OrderDetailRow(label: '${f['label']}', value: value.isEmpty ? '—' : value);
+                        }),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _SystemReplyCard(
+                    replies: replies,
+                    resultNote: resultNote,
+                    refreshing: refreshing,
+                    waiting: status == 'processing' || rawStatus == 'pending',
+                    onRefresh: () => _load(silent: true),
+                  ),
                   if ((order?['failure_reason'] ?? '').toString().isNotEmpty)
                     Container(
-                      margin: const EdgeInsets.only(top: 8),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(12)),
-                      child: Text('${order!['failure_reason']}'),
+                      margin: const EdgeInsets.only(top: 14),
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFFECACA)),
+                      ),
+                      child: Text('${order!['failure_reason']}', style: const TextStyle(color: Color(0xFFB91C1C), fontWeight: FontWeight.w700)),
                     ),
                   if (order?['can_cancel'] == true) ...[
                     const SizedBox(height: 16),
-                    OutlinedButton(onPressed: _cancel, child: const Text('Cancel & refund')),
+                    OutlinedButton(
+                      onPressed: _cancel,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        foregroundColor: const Color(0xFFB91C1C),
+                        side: const BorderSide(color: Color(0xFFFECACA)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: const Text('Cancel & refund', style: TextStyle(fontWeight: FontWeight.w800)),
+                    ),
                   ],
                 ],
               ),
             ),
+    );
+  }
+}
+
+class _OrderDetailRow extends StatelessWidget {
+  const _OrderDetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label.toUpperCase(), style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
+          const SizedBox(height: 4),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SystemReplyCard extends StatelessWidget {
+  const _SystemReplyCard({
+    required this.replies,
+    required this.resultNote,
+    required this.refreshing,
+    required this.waiting,
+    required this.onRefresh,
+  });
+
+  final List<Map<String, dynamic>> replies;
+  final String resultNote;
+  final bool refreshing;
+  final bool waiting;
+  final VoidCallback onRefresh;
+
+  String _when(String? iso) {
+    if (iso == null || iso.isEmpty) return '';
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return '';
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(dt.day)}/${two(dt.month)}/${dt.year}  ${two(dt.hour)}:${two(dt.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasReplies = replies.isNotEmpty;
+    final hasNote = resultNote.trim().isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(color: Color(0x140F172A), blurRadius: 16, offset: Offset(0, 6)),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            color: const Color(0xFF0F172A),
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEA580C),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.support_agent_rounded, color: Colors.white, size: 18),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'System Reply',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
+                      ),
+                      Text(
+                        'Updates automatically',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                if (waiting)
+                  Container(
+                    margin: const EdgeInsets.only(right: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0x1A34D399),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      children: [
+                        if (refreshing)
+                          const SizedBox(
+                            width: 10,
+                            height: 10,
+                            child: CircularProgressIndicator(strokeWidth: 1.6, color: Color(0xFF34D399)),
+                          )
+                        else
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(color: Color(0xFF34D399), shape: BoxShape.circle),
+                          ),
+                        const SizedBox(width: 6),
+                        Text(
+                          refreshing ? 'Refreshing' : 'Live',
+                          style: const TextStyle(
+                            color: Color(0xFF6EE7B7),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                IconButton(
+                  tooltip: 'Refresh',
+                  onPressed: onRefresh,
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    color: refreshing ? const Color(0xFF34D399) : Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 16, 14, 16),
+            child: !hasReplies && !hasNote
+                ? Column(
+                    children: [
+                      SizedBox(
+                        height: 36,
+                        width: 36,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          color: waiting ? AppColors.primary : AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        waiting ? 'Waiting for a system reply…' : 'No system reply on this order.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: AppColors.textPrimary),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        waiting
+                            ? 'We check every few seconds. Pull down or tap refresh anytime.'
+                            : 'There is nothing more from the system.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
+                      ),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      if (hasNote && !hasReplies)
+                        _SystemReplyBubble(
+                          body: resultNote,
+                          author: 'System',
+                          when: '',
+                        ),
+                      for (final reply in replies)
+                        _SystemReplyBubble(
+                          body: '${reply['body'] ?? ''}',
+                          author: '${reply['admin'] ?? 'System'}',
+                          when: _when('${reply['created_at'] ?? ''}'),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SystemReplyBubble extends StatelessWidget {
+  const _SystemReplyBubble({required this.body, required this.author, required this.when});
+
+  final String body;
+  final String author;
+  final String when;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFF7ED), Color(0xFFFFEDD5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFDBA74)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            body,
+            style: const TextStyle(color: Color(0xFF9A3412), fontWeight: FontWeight.w700, height: 1.4, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            when.isEmpty ? author : '$author · $when',
+            style: const TextStyle(fontSize: 11, color: Color(0xFFC2410C), fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
     );
   }
 }
