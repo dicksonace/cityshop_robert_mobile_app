@@ -198,6 +198,7 @@ GoRouter createRouter(AppStore store) {
       ),
       GoRoute(path: '/wallet/china-rmb', builder: (_, __) => const ChinaRmbHubScreen()),
       GoRoute(path: '/gsm-tools', builder: (_, __) => const GsmToolsHubScreen()),
+      GoRoute(path: '/gsm-tools/history', builder: (_, __) => const GsmToolsHistoryScreen()),
       GoRoute(
         path: '/gsm-tools/services/:id',
         builder: (_, state) => GsmToolOrderScreen(

@@ -1758,6 +1758,14 @@ class AppStore extends ChangeNotifier {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
+  Future<Map<String, dynamic>> loadGsmOrderHistory({int page = 1, int perPage = 20}) async {
+    final res = await _api.get('/gsm-tools/orders', query: {
+      'page': page,
+      'per_page': perPage,
+    });
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
   Future<Map<String, dynamic>> fetchGsmService(int id) async {
     final res = await _api.get('/gsm-tools/services/$id');
     return Map<String, dynamic>.from(res.data as Map);

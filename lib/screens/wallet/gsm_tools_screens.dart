@@ -23,7 +23,6 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
   String? error;
   List<Map<String, dynamic>> services = [];
   List<Map<String, dynamic>> groups = [];
-  List<Map<String, dynamic>> orders = [];
   List<Map<String, dynamic>> serviceTypes = [];
   double balance = 0;
   String query = '';
@@ -76,7 +75,6 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
       final svc = data['services'];
       final grp = data['groups'];
       final types = data['service_types'];
-      final ord = data['orders'];
       final wallet = data['wallet'];
       setState(() {
         services = svc is List
@@ -87,9 +85,6 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
             : [];
         serviceTypes = types is List
             ? types.map((e) => Map<String, dynamic>.from(e as Map)).toList()
-            : [];
-        orders = ord is List
-            ? ord.map((e) => Map<String, dynamic>.from(e as Map)).toList()
             : [];
         balance = (wallet is Map ? (wallet['available_balance'] as num?)?.toDouble() : null) ?? 0;
         loading = false;
@@ -113,6 +108,15 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.canPop() ? context.pop() : context.go('/'),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => context.push('/gsm-tools/history'),
+            child: const Text(
+              'Order History',
+              style: TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFEA580C)),
+            ),
+          ),
+        ],
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
@@ -287,74 +291,216 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Text('No GSM services available yet.', textAlign: TextAlign.center),
                     ),
-                  if (orders.isNotEmpty) ...[
-                    const SizedBox(height: 18),
-                    const Text('My orders', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                    const SizedBox(height: 10),
-                    ...orders.map((order) {
-                      final raw = '${order['status'] ?? ''}';
-                      final status = raw == 'pending' ? 'processing' : raw;
-                      final label = status == 'processing' ? 'PROCESSING' : '${order['status_label'] ?? status}'.toUpperCase();
-                      final color = status == 'processing'
-                          ? const Color(0xFF1D4ED8)
-                          : status == 'completed'
-                              ? const Color(0xFF047857)
-                              : status == 'failed' || status == 'cancelled'
-                                  ? const Color(0xFFB91C1C)
-                                  : AppColors.primary;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Material(
-                          color: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: const BorderSide(color: Color(0xFFE5E7EB)),
-                          ),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(16),
-                            onTap: () => context.push('/gsm-tools/orders/${order['id']}'),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Row(
-                                children: [
-                                  GsmServiceLogo(url: '${order['image_url'] ?? ''}', size: 44),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('${order['service_name']}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-                                        const SizedBox(height: 2),
-                                        Text('${order['reference']}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                                        if ('${order['eta_label'] ?? ''}'.isNotEmpty) ...[
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '${order['eta_label']}',
-                                            style: const TextStyle(color: Color(0xFF1D4ED8), fontSize: 11, fontWeight: FontWeight.w800),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: color.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Text(label, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: color)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
                 ],
               ),
             ),
+    );
+  }
+}
+
+class GsmToolsHistoryScreen extends StatefulWidget {
+  const GsmToolsHistoryScreen({super.key});
+
+  @override
+  State<GsmToolsHistoryScreen> createState() => _GsmToolsHistoryScreenState();
+}
+
+class _GsmToolsHistoryScreenState extends State<GsmToolsHistoryScreen> {
+  bool loading = true;
+  bool loadingMore = false;
+  String? error;
+  List<Map<String, dynamic>> orders = [];
+  int page = 1;
+  int lastPage = 1;
+
+  List<Map<String, dynamic>> _asMaps(dynamic raw) {
+    if (raw is! List) return [];
+    return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Map<String, dynamic> _asMap(dynamic raw) {
+    return raw is Map ? Map<String, dynamic>.from(raw) : {};
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      final data = await context.read<AppStore>().loadGsmOrderHistory(page: 1);
+      if (!mounted) return;
+      final meta = _asMap(data['meta']);
+      setState(() {
+        orders = _asMaps(data['data']);
+        page = (meta['current_page'] as num?)?.toInt() ?? 1;
+        lastPage = (meta['last_page'] as num?)?.toInt() ?? 1;
+        loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        loading = false;
+        error = 'Could not load order history.';
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (loadingMore || page >= lastPage) return;
+    setState(() => loadingMore = true);
+    try {
+      final data = await context.read<AppStore>().loadGsmOrderHistory(page: page + 1);
+      if (!mounted) return;
+      final meta = _asMap(data['meta']);
+      setState(() {
+        orders = [...orders, ..._asMaps(data['data'])];
+        page = (meta['current_page'] as num?)?.toInt() ?? page + 1;
+        lastPage = (meta['last_page'] as num?)?.toInt() ?? lastPage;
+        loadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => loadingMore = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text('Order History', style: TextStyle(fontWeight: FontWeight.w900)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/gsm-tools'),
+        ),
+      ),
+      body: loading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: error != null
+                  ? ListView(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    )
+                  : orders.isEmpty
+                      ? ListView(
+                          children: const [
+                            SizedBox(height: 80),
+                            Icon(Icons.receipt_long_outlined, size: 48, color: AppColors.textMuted),
+                            SizedBox(height: 12),
+                            Text(
+                              'No orders yet.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: AppColors.textSecondary),
+                            ),
+                          ],
+                        )
+                      : NotificationListener<ScrollNotification>(
+                          onNotification: (n) {
+                            if (n.metrics.pixels > n.metrics.maxScrollExtent - 240) {
+                              _loadMore();
+                            }
+                            return false;
+                          },
+                          child: ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                            itemCount: orders.length + (loadingMore ? 1 : 0),
+                            itemBuilder: (context, i) {
+                              if (i >= orders.length) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Center(child: CircularProgressIndicator()),
+                                );
+                              }
+                              return _GsmOrderHistoryRow(
+                                order: orders[i],
+                                onTap: () => context.push('/gsm-tools/orders/${orders[i]['id']}'),
+                              );
+                            },
+                          ),
+                        ),
+            ),
+    );
+  }
+}
+
+class _GsmOrderHistoryRow extends StatelessWidget {
+  const _GsmOrderHistoryRow({required this.order, required this.onTap});
+
+  final Map<String, dynamic> order;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = '${order['status'] ?? ''}';
+    final status = raw == 'pending' ? 'processing' : raw;
+    final label = status == 'processing' ? 'PROCESSING' : '${order['status_label'] ?? status}'.toUpperCase();
+    final color = status == 'processing'
+        ? const Color(0xFF1D4ED8)
+        : status == 'completed'
+            ? const Color(0xFF047857)
+            : status == 'failed' || status == 'cancelled'
+                ? const Color(0xFFB91C1C)
+                : AppColors.primary;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFE5E7EB)),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                GsmServiceLogo(url: '${order['image_url'] ?? ''}', size: 44),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${order['service_name']}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                      const SizedBox(height: 2),
+                      Text('${order['reference']}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      if ('${order['eta_label'] ?? ''}'.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${order['eta_label']}',
+                          style: const TextStyle(color: Color(0xFF1D4ED8), fontSize: 11, fontWeight: FontWeight.w800),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(label, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: color)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
