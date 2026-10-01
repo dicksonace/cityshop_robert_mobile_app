@@ -249,8 +249,6 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
   }
 }
 
-}
-
 class _GsmServiceRow extends StatelessWidget {
   const _GsmServiceRow({required this.service, required this.imageUrl, required this.onTap});
 
