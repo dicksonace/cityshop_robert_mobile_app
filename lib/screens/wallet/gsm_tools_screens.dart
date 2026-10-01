@@ -806,6 +806,11 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
     final statusLabel = status == 'processing' ? 'PROCESSING' : '${order?['status_label'] ?? status}'.toUpperCase();
     final resultNote = '${order?['admin_result_note'] ?? ''}';
     final email = '${order?['contact_email'] ?? ''}';
+    final hasEmailField = fields.any((f) {
+      final name = '${f['name']}'.toLowerCase();
+      final label = '${f['label']}'.toLowerCase();
+      return f['type'] == 'email' || name == 'email' || label == 'email';
+    });
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -916,7 +921,7 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
                       children: [
                         const Text('Your details', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
                         const SizedBox(height: 12),
-                        if (email.isNotEmpty)
+                        if (email.isNotEmpty && !hasEmailField)
                           _OrderDetailRow(label: 'Email', value: email),
                         ...fields.map((f) {
                           final value = '${f['value'] ?? ''}';
