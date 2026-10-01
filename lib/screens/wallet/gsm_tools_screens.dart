@@ -126,14 +126,33 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text(error!, style: const TextStyle(color: Colors.red)),
                     ),
-                  Text(
-                    'Balance GH₵${balance.toStringAsFixed(2)}',
-                    style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.emerald),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Instantly place orders using your wallet balance.',
-                    style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFEA580C), Color(0xFFF97316)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      boxShadow: const [BoxShadow(color: Color(0x33EA580C), blurRadius: 16, offset: Offset(0, 8))],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('WALLET BALANCE', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.7)),
+                        const SizedBox(height: 4),
+                        Text(
+                          'GH₵${balance.toStringAsFixed(2)}',
+                          style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Place orders instantly from your wallet.',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
@@ -270,27 +289,66 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                     ),
                   if (orders.isNotEmpty) ...[
                     const SizedBox(height: 18),
-                    const Text('My orders', style: TextStyle(fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 8),
+                    const Text('My orders', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                    const SizedBox(height: 10),
                     ...orders.map((order) {
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: GsmServiceLogo(url: '${order['image_url'] ?? ''}', size: 40),
-                        title: Text('${order['service_name']}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                        subtitle: Text('${order['reference']}'),
-                        trailing: Text(
-                          '${order['status_label']}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                            color: order['status'] == 'processing'
-                                ? const Color(0xFF1D4ED8)
-                                : order['status'] == 'completed'
-                                    ? const Color(0xFF047857)
-                                    : AppColors.primary,
+                      final raw = '${order['status'] ?? ''}';
+                      final status = raw == 'pending' ? 'processing' : raw;
+                      final label = status == 'processing' ? 'PROCESSING' : '${order['status_label'] ?? status}'.toUpperCase();
+                      final color = status == 'processing'
+                          ? const Color(0xFF1D4ED8)
+                          : status == 'completed'
+                              ? const Color(0xFF047857)
+                              : status == 'failed' || status == 'cancelled'
+                                  ? const Color(0xFFB91C1C)
+                                  : AppColors.primary;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Material(
+                          color: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: const BorderSide(color: Color(0xFFE5E7EB)),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () => context.push('/gsm-tools/orders/${order['id']}'),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  GsmServiceLogo(url: '${order['image_url'] ?? ''}', size: 44),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('${order['service_name']}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                                        const SizedBox(height: 2),
+                                        Text('${order['reference']}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                        if ('${order['eta_label'] ?? ''}'.isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '${order['eta_label']}',
+                                            style: const TextStyle(color: Color(0xFF1D4ED8), fontSize: 11, fontWeight: FontWeight.w800),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: color.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(label, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: color)),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                        onTap: () => context.push('/gsm-tools/orders/${order['id']}'),
                       );
                     }),
                   ],
@@ -318,6 +376,7 @@ class _GsmServiceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final price = (service['price_ghs'] as num?)?.toDouble() ?? 0;
+    final eta = '${service['eta_label'] ?? 'INSTANT'}'.trim();
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
@@ -371,6 +430,18 @@ class _GsmServiceRow extends StatelessWidget {
                               style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.3, color: Color(0xFFF97316)),
                             ),
                           ),
+                          if (eta.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                eta.toUpperCase(),
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.3, color: Color(0xFF1D4ED8)),
+                              ),
+                            ),
                         ],
                       ),
                     ],
