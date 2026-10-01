@@ -649,7 +649,45 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           ),
-          const Spacer(),
+          Expanded(
+            child: Center(
+              child: Tooltip(
+                message: 'GSM Tools',
+                child: InkWell(
+                  onTap: () {
+                    if (user == null) {
+                      context.push('/login');
+                      return;
+                    }
+                    context.push('/gsm-tools');
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEDE9FE),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.phonelink_setup_rounded, size: 18, color: Color(0xFF6D28D9)),
+                        SizedBox(width: 6),
+                        Text(
+                          'GSM Tools',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            color: Color(0xFF6D28D9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
           if (user != null)
             IconButton(
               tooltip: 'Notifications',
@@ -1612,6 +1650,7 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
       (Icons.storefront_outlined, 'Following', 'Sellers you follow', '/following'),
       (Icons.badge_outlined, 'Ghana Card verification', 'Required before CityShop wallet', '/kyc'),
       (Icons.pin_outlined, 'Payment PIN', '4-digit code for wallet & transfers', '/profile/payment-pin'),
+      (Icons.verified_user_outlined, 'Security', 'Email codes and authenticator QR', '/profile/security'),
       (Icons.lock_outline, 'Change password', 'Account security', '/profile/password'),
       (Icons.privacy_tip_outlined, 'Privacy policy', 'Data we collect and who we share it with', '__privacy__'),
       (Icons.support_agent_outlined, 'Contact support', 'We reply within 24 hours', '__contact__'),

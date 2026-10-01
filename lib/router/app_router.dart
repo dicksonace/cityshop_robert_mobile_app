@@ -8,6 +8,7 @@ import '../screens/account/manual_deposit_screen.dart';
 import '../screens/account/manual_deposit_status_screen.dart';
 import '../screens/account/notifications_screen.dart';
 import '../screens/account/payment_pin_screen.dart';
+import '../screens/account/security_screen.dart';
 import '../screens/account/wallet_orders_screens.dart';
 import '../screens/account/withdraw_screen.dart';
 import '../screens/account/withdrawal_status_screen.dart';
@@ -286,6 +287,7 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/profile/edit', builder: (_, __) => const ProfileEditScreen()),
       GoRoute(path: '/profile/password', builder: (_, __) => const ChangePasswordScreen()),
       GoRoute(path: '/profile/payment-pin', builder: (_, __) => const PaymentPinScreen()),
+      GoRoute(path: '/profile/security', builder: (_, __) => const SecurityScreen()),
       GoRoute(path: '/kyc', builder: (_, __) => const KycVerificationScreen()),
       GoRoute(
         path: '/products/:slug',

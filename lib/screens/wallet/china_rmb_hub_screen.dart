@@ -292,7 +292,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                         const SizedBox(height: 8),
                         Text(
                           buyRmbPerGhs != null
-                              ? '1 GHS → ¥${_formatBuyRate(buyRmbPerGhs)} RMB'
+                              ? '1 GHS → ${_formatBuyRate(buyRmbPerGhs)} RMB'
                               : 'Rate not published',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18),
                         ),

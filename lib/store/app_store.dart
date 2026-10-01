@@ -12,6 +12,14 @@ import '../services/recent_views.dart';
 import '../widgets/ghana_location_fields.dart';
 import '../widgets/product_image_limits.dart';
 
+class PendingMfa {
+  const PendingMfa({required this.token, required this.methods, this.emailHint});
+
+  final String token;
+  final List<String> methods;
+  final String? emailHint;
+}
+
 class AppStore extends ChangeNotifier {
   AppStore(this._api);
 
@@ -418,7 +426,7 @@ class AppStore extends ChangeNotifier {
     );
   }
 
-  Future<void> login({
+  Future<PendingMfa?> login({
     required String login,
     required String password,
     String portal = 'buyer',
@@ -429,12 +437,21 @@ class AppStore extends ChangeNotifier {
       'portal': portal,
       'device_name': ApiConfig.deviceName,
     });
-    final token = res.data['token'] as String?;
+    final body = Map<String, dynamic>.from(res.data as Map);
+    if (body['mfa_required'] == true) {
+      final methods = (body['methods'] as List? ?? []).map((item) => '$item').toList();
+      return PendingMfa(
+        token: '${body['mfa_token']}',
+        methods: methods.isEmpty ? const ['email'] : methods,
+        emailHint: body['email_hint']?.toString(),
+      );
+    }
+    final token = body['token'] as String?;
     if (token == null || token.isEmpty) {
       throw ApiException('Login succeeded but no token returned.');
     }
     await _api.saveToken(token);
-    final userJson = res.data['user'];
+    final userJson = body['user'];
     if (userJson is Map) {
       await _setUserFromJson(Map<String, dynamic>.from(userJson));
     } else {
@@ -446,6 +463,74 @@ class AppStore extends ChangeNotifier {
       await Future.wait([loadCart(), loadWishlist(), loadFollowing(), refreshNotificationCounts()]);
     }
     notifyListeners();
+    return null;
+  }
+
+  Future<void> completeMfa({
+    required String token,
+    required String method,
+    required String code,
+  }) async {
+    final res = await _api.post('/auth/login/mfa', data: {
+      'mfa_token': token,
+      'method': method,
+      'code': code,
+      'device_name': ApiConfig.deviceName,
+    });
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final authToken = body['token'] as String?;
+    if (authToken == null || authToken.isEmpty) {
+      throw ApiException('Login succeeded but no token returned.');
+    }
+    await _api.saveToken(authToken);
+    final userJson = body['user'];
+    if (userJson is Map) {
+      await _setUserFromJson(Map<String, dynamic>.from(userJson));
+    } else {
+      await refreshMe();
+    }
+    if (isSeller) {
+      await refreshNotificationCounts();
+    } else {
+      await Future.wait([loadCart(), loadWishlist(), loadFollowing(), refreshNotificationCounts()]);
+    }
+    notifyListeners();
+  }
+
+  Future<void> resendMfaEmail(String token) async {
+    await _api.post('/auth/login/mfa/email', data: {'mfa_token': token});
+  }
+
+  Future<Map<String, dynamic>> loadMfa() async {
+    final res = await _api.get('/mfa');
+    final body = Map<String, dynamic>.from(res.data as Map);
+    final mfa = body['mfa'];
+    return mfa is Map ? Map<String, dynamic>.from(mfa) : body;
+  }
+
+  Future<void> sendMfaEmail(String password) async {
+    await _api.post('/mfa/email', data: {'password': password});
+  }
+
+  Future<void> confirmMfaEmail(String code) async {
+    await _api.post('/mfa/email/confirm', data: {'code': code});
+  }
+
+  Future<void> disableMfaEmail(String password) async {
+    await _api.delete('/mfa/email', data: {'password': password});
+  }
+
+  Future<Map<String, dynamic>> startMfaTotp(String password) async {
+    final res = await _api.post('/mfa/totp', data: {'password': password});
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  Future<void> confirmMfaTotp(String code) async {
+    await _api.post('/mfa/totp/confirm', data: {'code': code});
+  }
+
+  Future<void> disableMfaTotp(String password) async {
+    await _api.delete('/mfa/totp', data: {'password': password});
   }
 
   Future<Map<String, dynamic>> loadSellerDashboard() async {
@@ -1701,10 +1786,14 @@ class AppStore extends ChangeNotifier {
     required Map<String, String> fields,
     Map<String, String> files = const {},
     required String paymentPin,
+    int quantity = 1,
+    String? email,
   }) async {
     final data = <String, dynamic>{
       'gsm_service_id': serviceId,
       'payment_pin': paymentPin,
+      'quantity': quantity,
+      if (email != null && email.isNotEmpty) 'email': email,
     };
     for (final entry in fields.entries) {
       data['fields[${entry.key}]'] = entry.value;
@@ -1720,6 +1809,8 @@ class AppStore extends ChangeNotifier {
             'gsm_service_id': serviceId,
             'fields': fields,
             'payment_pin': paymentPin,
+            'quantity': quantity,
+            if (email != null && email.isNotEmpty) 'email': email,
           })
         : await _api.postForm('/gsm-tools/orders', data, fileFields: fileKeys);
     await loadWallet();

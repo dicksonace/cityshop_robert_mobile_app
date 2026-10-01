@@ -20,24 +20,38 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
   bool loading = true;
   String? error;
   List<Map<String, dynamic>> services = [];
+  List<Map<String, dynamic>> groups = [];
   List<Map<String, dynamic>> orders = [];
+  List<Map<String, dynamic>> serviceTypes = [];
   double balance = 0;
   String query = '';
-  String serviceType = 'all';
+  String serviceType = '';
+  String categoryId = '';
 
-  static const _types = <(String, String)>[
-    ('all', 'All services'),
-    ('imei', 'IMEI Service'),
-    ('server', 'Server Service'),
-    ('remote', 'Remote Service'),
-    ('file', 'File Service'),
-  ];
+  List<Map<String, dynamic>> get _categories {
+    if (serviceType.isEmpty) return groups;
+    return groups.where((group) => '${group['service_type']}' == serviceType).toList();
+  }
 
-  List<Map<String, dynamic>> get _visible {
+  List<Map<String, dynamic>> get _visibleGroups {
+    final needle = query.trim().toLowerCase();
+    return _categories.where((group) => categoryId.isEmpty || '${group['id']}' == categoryId).map((group) {
+      final items = ((group['services'] as List?) ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .where((service) {
+            final text = '${service['name']} ${service['description'] ?? ''} ${group['name']}'.toLowerCase();
+            return needle.isEmpty || text.contains(needle);
+          })
+          .toList();
+      return {...group, 'services': items};
+    }).where((group) => (group['services'] as List).isNotEmpty).toList();
+  }
+
+  List<Map<String, dynamic>> get _ungrouped {
     final needle = query.trim().toLowerCase();
     return services.where((service) {
-      final type = '${service['service_type'] ?? 'imei'}';
-      final typeOk = serviceType == 'all' || type == serviceType;
+      if (service['group_id'] != null) return false;
+      final typeOk = serviceType.isEmpty || '${service['service_type']}' == serviceType;
       final text = '${service['name']} ${service['description'] ?? ''}'.toLowerCase();
       return typeOk && (needle.isEmpty || text.contains(needle));
     }).toList();
@@ -58,11 +72,19 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
       final data = await context.read<AppStore>().loadGsmTools();
       if (!mounted) return;
       final svc = data['services'];
+      final grp = data['groups'];
+      final types = data['service_types'];
       final ord = data['orders'];
       final wallet = data['wallet'];
       setState(() {
         services = svc is List
             ? svc.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+            : [];
+        groups = grp is List
+            ? grp.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+            : [];
+        serviceTypes = types is List
+            ? types.map((e) => Map<String, dynamic>.from(e as Map)).toList()
             : [];
         orders = ord is List
             ? ord.map((e) => Map<String, dynamic>.from(e as Map)).toList()
@@ -84,7 +106,7 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('GSM Tools', style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text('Place order', style: TextStyle(fontWeight: FontWeight.w900)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.canPop() ? context.pop() : context.go('/'),
@@ -108,14 +130,48 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Unlock & device services — paid from your wallet.',
+                    'Instantly place orders using your wallet balance.',
                     style: TextStyle(color: AppColors.textSecondary, height: 1.35),
                   ),
                   const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: serviceType.isEmpty ? '' : serviceType,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('Select Type')),
+                      ...serviceTypes.map(
+                        (type) => DropdownMenuItem(value: '${type['value']}', child: Text('${type['label']}')),
+                      ),
+                    ],
+                    onChanged: (value) => setState(() {
+                      serviceType = value ?? '';
+                      categoryId = '';
+                    }),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: categoryId.isEmpty ? '' : categoryId,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('All categories')),
+                      ..._categories.map(
+                        (group) => DropdownMenuItem(value: '${group['id']}', child: Text('${group['name']}')),
+                      ),
+                    ],
+                    onChanged: (value) => setState(() => categoryId = value ?? ''),
+                  ),
+                  const SizedBox(height: 10),
                   TextField(
                     decoration: InputDecoration(
-                      hintText: 'Search services',
-                      prefixIcon: const Icon(Icons.search),
+                      hintText: 'Search services...',
                       filled: true,
                       fillColor: Colors.white,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -123,73 +179,40 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                     onChanged: (value) => setState(() => query = value),
                   ),
                   const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: serviceType,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    items: _types
-                        .map((type) => DropdownMenuItem(value: type.$1, child: Text(type.$2)))
-                        .toList(),
-                    onChanged: (value) => setState(() => serviceType = value ?? 'all'),
+                  OutlinedButton(
+                    onPressed: () => setState(() {
+                      query = '';
+                      serviceType = '';
+                      categoryId = '';
+                    }),
+                    child: const Text('Reset'),
                   ),
                   const SizedBox(height: 14),
-                  ..._visible.map((service) {
-                    final price = (service['price_ghs'] as num?)?.toDouble() ?? 0;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Material(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () => context.push('/gsm-tools/services/${service['id']}'),
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFFFDBA74)),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${service['name']}',
-                                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-                                      ),
-                                      Text(
-                                        '${service['service_type_label'] ?? 'IMEI Service'}',
-                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
-                                      ),
-                                      if ((service['description'] ?? '').toString().isNotEmpty) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '${service['description']}',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                Text(
-                                  'GH₵${price.toStringAsFixed(2)}',
-                                  style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.primary),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                  for (final group in _visibleGroups) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6, top: 8),
+                      child: Text('${group['name']}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                    ),
+                    for (final service in (group['services'] as List).cast<Map<String, dynamic>>())
+                      _GsmServiceRow(
+                        service: service,
+                        imageUrl: '${service['image_url'] ?? group['image_url'] ?? ''}',
+                        onTap: () => context.push('/gsm-tools/services/${service['id']}'),
                       ),
-                    );
-                  }),
-                  if (_visible.isEmpty)
+                  ],
+                  if (_ungrouped.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 6, top: 8),
+                      child: Text('Other services', style: TextStyle(fontWeight: FontWeight.w900)),
+                    ),
+                    for (final service in _ungrouped)
+                      _GsmServiceRow(
+                        service: service,
+                        imageUrl: '${service['image_url'] ?? ''}',
+                        onTap: () => context.push('/gsm-tools/services/${service['id']}'),
+                      ),
+                  ],
+                  if (_visibleGroups.every((g) => (g['services'] as List).isEmpty) && _ungrouped.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Text('No GSM services available yet.', textAlign: TextAlign.center),
@@ -226,6 +249,65 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
   }
 }
 
+}
+
+class _GsmServiceRow extends StatelessWidget {
+  const _GsmServiceRow({required this.service, required this.imageUrl, required this.onTap});
+
+  final Map<String, dynamic> service;
+  final String imageUrl;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final price = (service['price_ghs'] as num?)?.toDouble() ?? 0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: imageUrl.startsWith('http')
+                      ? Image.network(imageUrl, width: 44, height: 44, fit: BoxFit.cover)
+                      : Container(
+                          width: 44,
+                          height: 44,
+                          color: const Color(0xFFFFF7ED),
+                          alignment: Alignment.center,
+                          child: const Text('GSM', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: AppColors.primary)),
+                        ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${service['name']}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                      Text(
+                        '${service['eta_label'] ?? 'INSTANT'}',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF059669)),
+                      ),
+                    ],
+                  ),
+                ),
+                Text('GH₵${price.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class GsmToolOrderScreen extends StatefulWidget {
   const GsmToolOrderScreen({super.key, required this.serviceId});
   final int serviceId;
@@ -243,6 +325,8 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
   bool hasPin = false;
   final Map<String, TextEditingController> fieldControllers = {};
   final Map<String, String> imagePaths = {};
+  final email = TextEditingController();
+  int quantity = 1;
 
   @override
   void initState() {
@@ -255,6 +339,7 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
     for (final c in fieldControllers.values) {
       c.dispose();
     }
+    email.dispose();
     super.dispose();
   }
 
@@ -278,6 +363,8 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
         service = svc;
         balance = (wallet is Map ? (wallet['available_balance'] as num?)?.toDouble() : null) ?? 0;
         hasPin = data['has_payment_pin'] == true;
+        quantity = (svc['min_qty'] as num?)?.toInt() ?? 1;
+        email.text = '${data['contact_email'] ?? context.read<AppStore>().user?.email ?? ''}';
         loading = false;
       });
     } catch (_) {
@@ -291,7 +378,8 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
   Future<void> _submit() async {
     if (service == null || submitting) return;
     final store = context.read<AppStore>();
-    final price = (service!['price_ghs'] as num?)?.toDouble() ?? 0;
+    final unit = (service!['price_ghs'] as num?)?.toDouble() ?? 0;
+    final price = unit * quantity;
     if (!(store.user?.canStoreWalletFunds ?? false)) {
       setState(() => error = 'Approve your Ghana Card (KYC) before placing GSM orders.');
       return;
@@ -331,6 +419,8 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
             fields: fields,
             files: imagePaths,
             paymentPin: pin,
+            quantity: quantity,
+            email: email.text.trim(),
           );
       final order = created['order'];
       final id = order is Map ? order['id'] : null;
@@ -351,7 +441,8 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final price = (service?['price_ghs'] as num?)?.toDouble() ?? 0;
+    final unit = (service?['price_ghs'] as num?)?.toDouble() ?? 0;
+    final price = unit * quantity;
     final fields = (service?['fields'] as List? ?? [])
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
@@ -368,9 +459,27 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
               children: [
-                if ((service?['description'] ?? '').toString().isNotEmpty)
-                  Text('${service!['description']}', style: const TextStyle(height: 1.4, color: AppColors.textSecondary)),
-                const SizedBox(height: 12),
+                if ((service?['overview'] ?? service?['description'] ?? '').toString().isNotEmpty) ...[
+                  const Text('Overview', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 6),
+                  Text('${service!['overview'] ?? service!['description']}', style: const TextStyle(height: 1.4, color: AppColors.textSecondary)),
+                  const SizedBox(height: 12),
+                ],
+                if (((service?['features'] as List?) ?? []).isNotEmpty) ...[
+                  const Text('Key Features', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 6),
+                  ...((service!['features'] as List).map((item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text('• $item'),
+                      ))),
+                  const SizedBox(height: 12),
+                ],
+                if ((service?['what_to_send'] ?? '').toString().isNotEmpty) ...[
+                  const Text('What You Need To Send', style: TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 6),
+                  Text('${service!['what_to_send']}'),
+                  const SizedBox(height: 12),
+                ],
                 Text(
                   'Total GH₵${price.toStringAsFixed(2)} — deducted from your wallet.',
                   style: const TextStyle(fontWeight: FontWeight.w800),
@@ -392,6 +501,25 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                   Text(error!, style: const TextStyle(color: Colors.red)),
                 ],
                 const SizedBox(height: 16),
+                if (service?['allow_quantity'] != false)
+                  Row(
+                    children: [
+                      const Text('Quantity *', style: TextStyle(fontWeight: FontWeight.w700)),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => setState(() => quantity = quantity > 1 ? quantity - 1 : 1),
+                        icon: const Icon(Icons.remove_circle_outline),
+                      ),
+                      Text('$quantity', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                      IconButton(
+                        onPressed: () {
+                          final max = (service?['max_qty'] as num?)?.toInt() ?? 1000;
+                          setState(() => quantity = quantity < max ? quantity + 1 : max);
+                        },
+                        icon: const Icon(Icons.add_circle_outline),
+                      ),
+                    ],
+                  ),
                 ...fields.map((field) {
                   final name = '${field['name']}';
                   final label = '${field['label']}${field['required'] == true ? '*' : ''}';
@@ -411,16 +539,21 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                     );
                   }
                   final controller = fieldControllers[name]!;
+                  final isEmail = field['type'] == 'email' || name.toLowerCase() == 'email' || '${field['label']}'.toLowerCase() == 'email';
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: TextField(
                       controller: controller,
+                      obscureText: field['type'] == 'password',
                       keyboardType: field['type'] == 'number'
                           ? const TextInputType.numberWithOptions(decimal: true)
                           : field['type'] == 'phone'
                               ? TextInputType.phone
-                              : TextInputType.text,
+                              : isEmail
+                                  ? TextInputType.emailAddress
+                                  : TextInputType.text,
                       maxLines: field['type'] == 'textarea' ? 3 : 1,
+                      onChanged: isEmail ? (value) => email.text = value : null,
                       decoration: InputDecoration(
                         labelText: label,
                         hintText: field['placeholder']?.toString(),
@@ -429,6 +562,22 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                     ),
                   );
                 }),
+                if (!fields.any((field) {
+                  final name = '${field['name']}'.toLowerCase();
+                  final label = '${field['label']}'.toLowerCase();
+                  return field['type'] == 'email' || name == 'email' || label == 'email';
+                }))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TextField(
+                      controller: email,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: 'Email*',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
                 if (!kycOk)
                   TextButton(
                     onPressed: () => context.push('/kyc'),
