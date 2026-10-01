@@ -758,71 +758,38 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                   const SizedBox(height: 14),
                 ],
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(16),
                     gradient: const LinearGradient(
                       colors: [Color(0xFFEA580C), Color(0xFFF97316)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    boxShadow: const [BoxShadow(color: Color(0x33EA580C), blurRadius: 16, offset: Offset(0, 8))],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'PAY FROM WALLET',
-                        style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.7),
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'PAY FROM WALLET',
+                              style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.6),
+                            ),
+                          ),
+                          Text(
+                            'GH₵${price.toStringAsFixed(2)}',
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'GH₵${price.toStringAsFixed(2)}',
-                        style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, height: 1.05),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Deducted from your wallet when you place this order.',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      const SizedBox(height: 14),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                const Text('Wallet balance', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-                                const Spacer(),
-                                Text(
-                                  'GH₵${balance.toStringAsFixed(2)}',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Text(
-                                  enough ? 'After this order' : 'Short by',
-                                  style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 13),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  enough
-                                      ? 'GH₵${(balance - price).toStringAsFixed(2)}'
-                                      : 'GH₵${(price - balance).toStringAsFixed(2)}',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                        enough
+                            ? 'Balance GH₵${balance.toStringAsFixed(2)} · Left GH₵${(balance - price).toStringAsFixed(2)}'
+                            : 'Balance GH₵${balance.toStringAsFixed(2)} · Short GH₵${(price - balance).toStringAsFixed(2)}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
                       ),
                     ],
                   ),
