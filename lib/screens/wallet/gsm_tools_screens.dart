@@ -619,7 +619,6 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
   bool hasPin = false;
   final Map<String, TextEditingController> fieldControllers = {};
   final Map<String, String> imagePaths = {};
-  final email = TextEditingController();
   int quantity = 1;
 
   @override
@@ -633,7 +632,6 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
     for (final c in fieldControllers.values) {
       c.dispose();
     }
-    email.dispose();
     super.dispose();
   }
 
@@ -658,7 +656,6 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
         balance = (wallet is Map ? (wallet['available_balance'] as num?)?.toDouble() : null) ?? 0;
         hasPin = data['has_payment_pin'] == true;
         quantity = (svc['min_qty'] as num?)?.toInt() ?? 1;
-        email.text = '${data['contact_email'] ?? context.read<AppStore>().user?.email ?? ''}';
         loading = false;
       });
     } catch (_) {
@@ -714,7 +711,6 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
             files: imagePaths,
             paymentPin: pin,
             quantity: quantity,
-            email: email.text.trim(),
           );
       final order = created['order'];
       final id = order is Map ? order['id'] : null;
@@ -761,11 +757,76 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                   Center(child: GsmServiceLogo(url: '${service!['image_url']}', size: 88)),
                   const SizedBox(height: 14),
                 ],
-                Text(
-                  'Total GH₵${price.toStringAsFixed(2)} — deducted from your wallet.',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEA580C), Color(0xFFF97316)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: const [BoxShadow(color: Color(0x33EA580C), blurRadius: 16, offset: Offset(0, 8))],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'PAY FROM WALLET',
+                        style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.7),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'GH₵${price.toStringAsFixed(2)}',
+                        style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, height: 1.05),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Deducted from your wallet when you place this order.',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                const Text('Wallet balance', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                                const Spacer(),
+                                Text(
+                                  'GH₵${balance.toStringAsFixed(2)}',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Text(
+                                  enough ? 'After this order' : 'Short by',
+                                  style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  enough
+                                      ? 'GH₵${(balance - price).toStringAsFixed(2)}'
+                                      : 'GH₵${(price - balance).toStringAsFixed(2)}',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                Text('Balance GH₵${balance.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.textSecondary)),
                 if (!enough)
                   Container(
                     margin: const EdgeInsets.only(top: 10),
@@ -823,7 +884,6 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                     );
                   }
                   final controller = fieldControllers[name]!;
-                  final isEmail = field['type'] == 'email' || name.toLowerCase() == 'email' || '${field['label']}'.toLowerCase() == 'email';
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: TextField(
@@ -833,11 +893,10 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                           ? const TextInputType.numberWithOptions(decimal: true)
                           : field['type'] == 'phone'
                               ? TextInputType.phone
-                              : isEmail
+                              : field['type'] == 'email'
                                   ? TextInputType.emailAddress
                                   : TextInputType.text,
                       maxLines: field['type'] == 'textarea' ? 3 : 1,
-                      onChanged: isEmail ? (value) => email.text = value : null,
                       decoration: InputDecoration(
                         labelText: label,
                         hintText: field['placeholder']?.toString(),
@@ -846,22 +905,6 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                     ),
                   );
                 }),
-                if (!fields.any((field) {
-                  final name = '${field['name']}'.toLowerCase();
-                  final label = '${field['label']}'.toLowerCase();
-                  return field['type'] == 'email' || name == 'email' || label == 'email';
-                }))
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: TextField(
-                      controller: email,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        labelText: 'Email*',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                  ),
                 if (!kycOk)
                   TextButton(
                     onPressed: () => context.push('/kyc'),
@@ -1022,12 +1065,6 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
     final status = rawStatus == 'pending' ? 'processing' : rawStatus;
     final statusLabel = status == 'processing' ? 'PROCESSING' : '${order?['status_label'] ?? status}'.toUpperCase();
     final resultNote = '${order?['admin_result_note'] ?? ''}';
-    final email = '${order?['contact_email'] ?? ''}';
-    final hasEmailField = fields.any((f) {
-      final name = '${f['name']}'.toLowerCase();
-      final label = '${f['label']}'.toLowerCase();
-      return f['type'] == 'email' || name == 'email' || label == 'email';
-    });
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -1138,8 +1175,6 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
                       children: [
                         const Text('Your details', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
                         const SizedBox(height: 12),
-                        if (email.isNotEmpty && !hasEmailField)
-                          _OrderDetailRow(label: 'Email', value: email),
                         ...fields.map((f) {
                           final value = '${f['value'] ?? ''}';
                           final image = f['type'] == 'image' && value.startsWith('http');
