@@ -202,6 +202,14 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
     );
   }
 
+  Future<void> _copyAppLink() async {
+    await Clipboard.setData(ClipboardData(text: _storeLink));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('App link copied')),
+    );
+  }
+
   void _openSellerProfile() {
     final s = store;
     if (s == null) return;
@@ -311,39 +319,65 @@ class _SellerStoreScreenState extends State<SellerStoreScreen> {
                                           mainAxisAlignment: MainAxisAlignment.end,
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Wrap(
-                                              spacing: 8,
-                                              runSpacing: 6,
-                                              crossAxisAlignment: WrapCrossAlignment.center,
+                                            Row(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                Text(
-                                                  s?.storeName ?? 'Store',
-                                                  maxLines: 2,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.w900,
-                                                    fontSize: 22,
-                                                    height: 1.15,
+                                                Expanded(
+                                                  child: Wrap(
+                                                    spacing: 8,
+                                                    runSpacing: 6,
+                                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                                    children: [
+                                                      Text(
+                                                        s?.storeName ?? 'Store',
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight: FontWeight.w900,
+                                                          fontSize: 22,
+                                                          height: 1.15,
+                                                        ),
+                                                      ),
+                                                      if (ApiConfig.livestreamEnabled && s?.isLive == true)
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFFDC2626),
+                                                            borderRadius: BorderRadius.circular(999),
+                                                          ),
+                                                          child: const Text(
+                                                            'LIVE',
+                                                            style: TextStyle(
+                                                              color: Colors.white,
+                                                              fontWeight: FontWeight.w900,
+                                                              fontSize: 11,
+                                                              letterSpacing: 0.5,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                    ],
                                                   ),
                                                 ),
-                                                if (ApiConfig.livestreamEnabled && s?.isLive == true)
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(0xFFDC2626),
+                                                const SizedBox(width: 8),
+                                                TextButton(
+                                                  onPressed: _copyAppLink,
+                                                  style: TextButton.styleFrom(
+                                                    foregroundColor: Colors.white,
+                                                    backgroundColor: Colors.white.withValues(alpha: 0.16),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                    minimumSize: const Size(0, 30),
+                                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                    shape: RoundedRectangleBorder(
                                                       borderRadius: BorderRadius.circular(999),
-                                                    ),
-                                                    child: const Text(
-                                                      'LIVE',
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight: FontWeight.w900,
-                                                        fontSize: 11,
-                                                        letterSpacing: 0.5,
-                                                      ),
+                                                      side: const BorderSide(color: Colors.white),
                                                     ),
                                                   ),
+                                                  child: const Text(
+                                                    'App link',
+                                                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                                                  ),
+                                                ),
                                               ],
                                             ),
                                             const SizedBox(height: 6),
