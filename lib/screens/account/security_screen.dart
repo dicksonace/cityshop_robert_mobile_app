@@ -9,7 +9,9 @@ import '../../theme/app_theme.dart';
 import '../../widgets/otp_code_boxes.dart';
 
 class SecurityScreen extends StatefulWidget {
-  const SecurityScreen({super.key});
+  const SecurityScreen({super.key, this.initialTab = 0});
+
+  final int initialTab;
 
   @override
   State<SecurityScreen> createState() => _SecurityScreenState();
@@ -27,7 +29,7 @@ class _SecurityScreenState extends State<SecurityScreen> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
+    _tabs = TabController(length: 2, vsync: this, initialIndex: widget.initialTab.clamp(0, 1));
     _load();
   }
 
@@ -80,7 +82,7 @@ class _SecurityScreenState extends State<SecurityScreen> with SingleTickerProvid
         title: const Text('Security', style: TextStyle(fontWeight: FontWeight.w900)),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [Tab(text: 'Email / Gmail'), Tab(text: 'Authenticator')],
+          tabs: const [Tab(text: 'Email / Gmail'), Tab(text: 'Google Authenticator')],
         ),
       ),
       body: _loading

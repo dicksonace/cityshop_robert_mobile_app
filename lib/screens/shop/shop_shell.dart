@@ -1650,7 +1650,7 @@ class _AccountSettingsTabState extends State<AccountSettingsTab> with AutoRefres
       (Icons.storefront_outlined, 'Following', 'Sellers you follow', '/following'),
       (Icons.badge_outlined, 'Ghana Card verification', 'Required before CityShop wallet', '/kyc'),
       (Icons.pin_outlined, 'Payment PIN', '4-digit code for wallet & transfers', '/profile/payment-pin'),
-      (Icons.verified_user_outlined, 'Security', 'Email codes and authenticator QR', '/profile/security'),
+      (Icons.verified_user_outlined, 'Google Authenticator', 'Email codes and authenticator QR', '/profile/security'),
       (Icons.lock_outline, 'Change password', 'Account security', '/profile/password'),
       (Icons.privacy_tip_outlined, 'Privacy policy', 'Data we collect and who we share it with', '__privacy__'),
       (Icons.support_agent_outlined, 'Contact support', 'We reply within 24 hours', '__contact__'),

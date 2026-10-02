@@ -315,7 +315,12 @@ GoRouter createRouter(AppStore store) {
       GoRoute(path: '/profile/edit', builder: (_, __) => const ProfileEditScreen()),
       GoRoute(path: '/profile/password', builder: (_, __) => const ChangePasswordScreen()),
       GoRoute(path: '/profile/payment-pin', builder: (_, __) => const PaymentPinScreen()),
-      GoRoute(path: '/profile/security', builder: (_, __) => const SecurityScreen()),
+      GoRoute(
+        path: '/profile/security',
+        builder: (_, state) => SecurityScreen(
+          initialTab: state.uri.queryParameters['tab'] == 'authenticator' ? 1 : 0,
+        ),
+      ),
       GoRoute(path: '/kyc', builder: (_, __) => const KycVerificationScreen()),
       GoRoute(
         path: '/products/:slug',

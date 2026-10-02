@@ -200,6 +200,8 @@ class _SellerShellScreenState extends State<SellerShellScreen> with AutoRefreshT
                         context.push('/seller/activation');
                       case 'order_sms':
                         context.push('/seller/order-sms');
+                      case 'security':
+                        context.push('/profile/security?tab=authenticator');
                     }
                   },
                   itemBuilder: (ctx) => const [
@@ -212,6 +214,7 @@ class _SellerShellScreenState extends State<SellerShellScreen> with AutoRefreshT
                     PopupMenuItem(value: 'refunds', child: Text('Refunds')),
                     PopupMenuItem(value: 'activation', child: Text('Seller fee')),
                     PopupMenuItem(value: 'order_sms', child: Text('Order SMS')),
+                    PopupMenuItem(value: 'security', child: Text('Google Authenticator')),
                   ],
                 ),
                 IconButton(
@@ -419,6 +422,18 @@ class _OverviewTab extends StatelessWidget {
                     ),
                   ),
                 ],
+                const SizedBox(height: 12),
+                Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  child: ListTile(
+                    leading: const Icon(Icons.verified_user_outlined, color: AppColors.accent),
+                    title: const Text('Google Authenticator', style: TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: const Text('Email codes and authenticator QR'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/profile/security?tab=authenticator'),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Material(
                   color: Colors.white,
