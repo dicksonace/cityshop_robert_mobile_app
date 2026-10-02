@@ -519,11 +519,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       setState(() {
         conversation = result.conversation;
-        final pendingLocals = messages.where((m) => m.isLocalPending).toList();
-        messages = [
-          ...result.messages,
-          ...pendingLocals,
-        ];
+        messages = _mergeThread(result.messages, messages);
         loading = false;
         offline = false;
       });
@@ -2076,6 +2072,26 @@ class _ChatScreenState extends State<ChatScreen> {
   /// Call setup rows come down the same endpoint; they are not chat messages.
   List<ChatMessage> get thread => messages.where((m) => !m.isSignalling).toList();
 
+  /// Keep every transfer the user already saw. A reload must not fold two
+  /// sends (for example two GH₵5.00 receipts) into a single card.
+  List<ChatMessage> _mergeThread(List<ChatMessage> incoming, List<ChatMessage> current) {
+    final byId = <int, ChatMessage>{};
+    void take(ChatMessage message) {
+      if (message.id <= 0) return;
+      byId[message.id] = message;
+    }
+
+    for (final message in current) {
+      take(message);
+    }
+    for (final message in incoming) {
+      take(message);
+    }
+    final merged = byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+    final pending = current.where((m) => m.isLocalPending).toList();
+    return [...merged, ...pending];
+  }
+
   String? _time(String? iso) => iso == null ? null : _timeLabel(iso);
 
   @override
@@ -2318,6 +2334,11 @@ class _ChatScreenState extends State<ChatScreen> {
                                 !m.isViewOnceMedia;
                             final wrapBubbleTight = compactMediaBubble || shrinkWrapBubble;
                             return Column(
+                              key: ValueKey(
+                                m.isLocalPending
+                                    ? 'local-${m.clientId}'
+                                    : 'msg-${m.id}-${m.transferReference ?? ''}',
+                              ),
                               children: [
                                 if (showDay && m.createdAt != null)
                                   Padding(
@@ -3553,12 +3574,13 @@ class _ChatTransferCard extends StatelessWidget {
     if (ref.isNotEmpty) {
       try {
         final tx = await context.read<AppStore>().fetchWalletTransactionByReference(ref);
-        if (tx != null && context.mounted) {
+        final sameReceipt = tx != null && (tx.reference ?? '').trim() == ref;
+        if (sameReceipt && context.mounted) {
           await showWalletReceiptSheet(context, tx: tx);
           return;
         }
       } catch (_) {
-        // Fall through to the chat transfer receipt.
+        // Fall through to this message's own receipt.
       }
     }
 

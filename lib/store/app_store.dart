@@ -2233,11 +2233,16 @@ class AppStore extends ChangeNotifier {
     } else {
       await loadWallet();
     }
-    final msg = res.data['message'];
-    return ChatMessage.fromJson(
-      Map<String, dynamic>.from(msg as Map),
-      myUserId: user?.id ?? 0,
-    );
+    final raw = Map<String, dynamic>.from(res.data['message'] as Map);
+    final myId = user?.id ?? 0;
+    if (myId > 0) {
+      await ChatThreadCache.appendMessage(
+        userId: myId,
+        conversationId: conversationId,
+        message: raw,
+      );
+    }
+    return ChatMessage.fromJson(raw, myUserId: myId);
   }
 
   Future<

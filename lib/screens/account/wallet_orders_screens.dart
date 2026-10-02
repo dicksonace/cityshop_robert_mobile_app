@@ -1037,7 +1037,8 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
                 ] else ...[
-                  for (final tx in transactions) _WalletTransactionRow(tx: tx),
+                  for (final tx in transactions)
+                    _WalletTransactionRow(key: ValueKey('wallet-tx-${tx.id}-${tx.reference ?? ''}'), tx: tx),
                   if (transactionsPage < transactionsLastPage)
                     TextButton(
                       onPressed: loadingMore ? null : () => _loadTransactions(),
@@ -1054,7 +1055,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
 }
 
 class _WalletTransactionRow extends StatelessWidget {
-  const _WalletTransactionRow({required this.tx});
+  const _WalletTransactionRow({super.key, required this.tx});
 
   final WalletTransactionItem tx;
 
