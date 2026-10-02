@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -1373,12 +1374,22 @@ class _SystemReplyBubble extends StatelessWidget {
   final String author;
   final String when;
 
+  Future<void> _copy(BuildContext context) async {
+    final text = body.trim();
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Reply copied')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      padding: const EdgeInsets.fromLTRB(14, 8, 4, 12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFFFFF7ED), Color(0xFFFFEDD5)],
@@ -1391,14 +1402,32 @@ class _SystemReplyBubble extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            body,
-            style: const TextStyle(color: Color(0xFF9A3412), fontWeight: FontWeight.w700, height: 1.4, fontSize: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: SelectableText(
+                    body,
+                    style: const TextStyle(color: Color(0xFF9A3412), fontWeight: FontWeight.w700, height: 1.4, fontSize: 14),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Copy',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _copy(context),
+                icon: const Icon(Icons.copy_rounded, size: 18, color: Color(0xFFC2410C)),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            when.isEmpty ? author : '$author · $when',
-            style: const TextStyle(fontSize: 11, color: Color(0xFFC2410C), fontWeight: FontWeight.w800),
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: Text(
+              when.isEmpty ? author : '$author · $when',
+              style: const TextStyle(fontSize: 11, color: Color(0xFFC2410C), fontWeight: FontWeight.w800),
+            ),
           ),
         ],
       ),
