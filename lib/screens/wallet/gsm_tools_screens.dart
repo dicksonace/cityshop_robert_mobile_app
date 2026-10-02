@@ -996,33 +996,6 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
     }
   }
 
-  Future<void> _cancel() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel order?'),
-        content: const Text('Funds will return to your wallet.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Yes, cancel')),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    try {
-      final data = await context.read<AppStore>().cancelGsmOrder(widget.id);
-      setState(() => order = Map<String, dynamic>.from(data['order'] as Map));
-      _syncPoll();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cancelled. Wallet refunded.')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final fields = (order?['fields'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -1186,19 +1159,6 @@ class _GsmToolShowScreenState extends State<GsmToolShowScreen> {
                       ),
                       child: Text('${order!['failure_reason']}', style: const TextStyle(color: Color(0xFFB91C1C), fontWeight: FontWeight.w700)),
                     ),
-                  if (order?['can_cancel'] == true) ...[
-                    const SizedBox(height: 16),
-                    OutlinedButton(
-                      onPressed: _cancel,
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        foregroundColor: const Color(0xFFB91C1C),
-                        side: const BorderSide(color: Color(0xFFFECACA)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      child: const Text('Cancel & refund', style: TextStyle(fontWeight: FontWeight.w800)),
-                    ),
-                  ],
                 ],
               ),
             ),
