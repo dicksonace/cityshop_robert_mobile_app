@@ -106,7 +106,7 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
         title: const Text('Place order', style: TextStyle(fontWeight: FontWeight.w900)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/'),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/shop'),
         ),
         actions: [
           TextButton(

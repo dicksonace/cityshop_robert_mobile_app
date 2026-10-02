@@ -120,9 +120,36 @@ String _locationWithQuery(GoRouterState state) {
 GoRouter createRouter(AppStore store) {
   String? pendingAfterBoot;
 
-  return GoRouter(
+    return GoRouter(
     initialLocation: '/splash',
     refreshListenable: store,
+    errorBuilder: (context, state) => Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Couldn’t open that page.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Check your connection, then go back to the shop.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => context.go('/shop'),
+                child: const Text('Home'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
     routes: [
       GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
       GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
@@ -378,6 +405,10 @@ GoRouter createRouter(AppStore store) {
 
       final loc = state.matchedLocation;
       final path = rewritten ?? uri.path;
+
+      if (path == '/' || path.isEmpty) {
+        return store.booting ? '/splash' : store.homePath;
+      }
 
       // Keep product/store deep links alive while splash boots — but never trap
       // the user on splash if they already skipped (finishBoot clears this).
