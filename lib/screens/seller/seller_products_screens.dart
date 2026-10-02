@@ -47,6 +47,7 @@ String _categoryEmoji(Map<String, dynamic> category) {
   if (key.contains('auto') || key.contains('part')) return '🔧';
   if (key.contains('tool') || key.contains('hardware')) return '🛠️';
   if (key.contains('pet')) return '🐾';
+  if (key.contains('general')) return '📦';
   return '📦';
 }
 

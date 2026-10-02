@@ -618,7 +618,7 @@ class _ChatScreenState extends State<ChatScreen> {
       myUserId: myId,
       onMessage: (msg) {
         if (!mounted) return;
-        if (_upsertMessage(msg)) return;
+        if (_upsertMessage(msg) || _alreadyInThread(msg)) return;
         if (msg.isSignalling) {
           unawaited(_call?.handleMessage(msg) ?? Future<void>.value());
         }
@@ -684,7 +684,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
       final fresh = <ChatMessage>[];
       for (final msg in polled.messages) {
-        if (existing.containsKey(msg.id)) continue;
+        if (existing.containsKey(msg.id) || _alreadyInThread(msg)) continue;
         fresh.add(msg);
       }
       // Handle signals in order and await the drain so offer → ICE stays serial.
@@ -2020,6 +2020,10 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
     if (!mounted || msg == null) return;
+    if (_alreadyInThread(msg)) {
+      _jumpToEnd();
+      return;
+    }
     setState(() => messages = [...messages, msg]);
     _jumpToEnd();
   }
@@ -2070,7 +2074,28 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   /// Call setup rows come down the same endpoint; they are not chat messages.
-  List<ChatMessage> get thread => messages.where((m) => !m.isSignalling).toList();
+  /// A send can arrive from the poll and again when the transfer screen closes.
+  /// Show that receipt once.
+  List<ChatMessage> get thread {
+    final seenIds = <int>{};
+    final seenRefs = <String>{};
+    final visible = <ChatMessage>[];
+    for (final message in messages) {
+      if (message.isSignalling) continue;
+      if (message.id > 0 && !seenIds.add(message.id)) continue;
+      final ref = (message.transferReference ?? '').trim();
+      if (message.isTransfer && ref.isNotEmpty && !seenRefs.add(ref)) continue;
+      visible.add(message);
+    }
+    return visible;
+  }
+
+  bool _alreadyInThread(ChatMessage msg) {
+    if (msg.id > 0 && messages.any((m) => m.id == msg.id)) return true;
+    final ref = (msg.transferReference ?? '').trim();
+    if (!msg.isTransfer || ref.isEmpty) return false;
+    return messages.any((m) => (m.transferReference ?? '').trim() == ref);
+  }
 
   /// Keep every transfer the user already saw. A reload must not fold two
   /// sends (for example two GH₵5.00 receipts) into a single card.
