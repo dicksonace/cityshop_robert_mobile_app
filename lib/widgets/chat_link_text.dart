@@ -13,11 +13,13 @@ class ChatLinkText extends StatefulWidget {
     required this.text,
     required this.mine,
     this.style,
+    this.linkColor,
   });
 
   final String text;
   final bool mine;
   final TextStyle? style;
+  final Color? linkColor;
 
   @override
   State<ChatLinkText> createState() => _ChatLinkTextState();
@@ -54,7 +56,7 @@ class _ChatLinkTextState extends State<ChatLinkText> {
       return;
     }
     var value = raw.trim();
-    if (value.startsWith('www.')) {
+    if (!value.contains('://')) {
       value = 'https://$value';
     }
     final uri = Uri.tryParse(value);
@@ -78,7 +80,7 @@ class _ChatLinkTextState extends State<ChatLinkText> {
           color: ChatColors.bubbleText,
           height: 1.35,
         );
-    final linkColor = ChatColors.link;
+    final linkColor = widget.linkColor ?? ChatColors.link;
     final segments = parseChatText(widget.text);
     if (segments.isEmpty) {
       return Text(widget.text, style: base);

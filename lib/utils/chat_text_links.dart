@@ -25,6 +25,12 @@ final _urlPattern = RegExp(
   caseSensitive: false,
 );
 
+/// Bare sites such as shellmrdm.com/downloads, with no http or www.
+final _domainPattern = RegExp(
+  r'(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|co|shop|app|info|biz|me|tv|cc|gh|store|online|site|xyz|download|tools|pro|dev)(?:\/[^\s<>"\]]*)?',
+  caseSensitive: false,
+);
+
 final _phonePattern = RegExp(
   r'(?:\+233|233|0)[\s-]*\d(?:[\s-]*\d){8}',
 );
@@ -44,7 +50,7 @@ bool _isCityShopHost(String host) {
 /// Turns a pasted CityShop URL into an in-app path, or null if it is not ours.
 CityShopDeepLink? parseCityShopDeepLink(String raw) {
   var value = raw.trim();
-  if (value.startsWith('www.')) {
+  if (!value.contains('://')) {
     value = 'https://$value';
   }
 
@@ -108,12 +114,23 @@ List<ChatTextSegment> parseChatText(String text) {
   final occupied = <_Range>[];
   final found = <_Marked>[];
 
-  for (final match in _urlPattern.allMatches(text)) {
-    final raw = match.group(0)!;
+  void addUrl(int start, String raw) {
     final trimmed = _trimTrailingPunctuation(raw);
-    final end = match.start + trimmed.length;
-    occupied.add(_Range(match.start, end));
-    found.add(_Marked(match.start, end, ChatTextKind.url));
+    final end = start + trimmed.length;
+    if (occupied.any((r) => r.overlaps(start, end))) return;
+    occupied.add(_Range(start, end));
+    found.add(_Marked(start, end, ChatTextKind.url));
+  }
+
+  for (final match in _urlPattern.allMatches(text)) {
+    addUrl(match.start, match.group(0)!);
+  }
+
+  for (final match in _domainPattern.allMatches(text)) {
+    if (match.start > 0 && RegExp(r'[\w@.]').hasMatch(text[match.start - 1])) {
+      continue;
+    }
+    addUrl(match.start, match.group(0)!);
   }
 
   for (final match in _phonePattern.allMatches(text)) {

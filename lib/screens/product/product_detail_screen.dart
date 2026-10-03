@@ -15,6 +15,7 @@ import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/video_playback.dart';
+import '../../widgets/chat_link_text.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 import '../../widgets/report_content_sheet.dart';
@@ -1703,18 +1704,25 @@ class _DeliveryPickupCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  (description != null && description.isNotEmpty)
-                      ? description
-                      : 'No description provided.',
-                  style: TextStyle(
-                    height: 1.45,
-                    fontSize: 15,
-                    color: (description != null && description.isNotEmpty)
-                        ? const Color(0xFF334155)
-                        : AppColors.textMuted,
-                  ),
-                ),
+                (description != null && description.isNotEmpty)
+                    ? ChatLinkText(
+                        text: description,
+                        mine: false,
+                        linkColor: const Color(0xFF16A34A),
+                        style: const TextStyle(
+                          height: 1.45,
+                          fontSize: 15,
+                          color: Color(0xFF334155),
+                        ),
+                      )
+                    : const Text(
+                        'No description provided.',
+                        style: TextStyle(
+                          height: 1.45,
+                          fontSize: 15,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,

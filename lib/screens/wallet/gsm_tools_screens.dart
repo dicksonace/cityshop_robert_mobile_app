@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/chat_link_text.dart';
 import '../../widgets/payment_pin_sheet.dart';
 
 class GsmToolsHubScreen extends StatefulWidget {
@@ -897,7 +898,12 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                   const SizedBox(height: 24),
                   const Text('Overview', style: TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 6),
-                  Text('${service!['overview'] ?? service!['description']}', style: const TextStyle(height: 1.4, color: AppColors.textSecondary)),
+                  ChatLinkText(
+                    text: '${service!['overview'] ?? service!['description']}',
+                    mine: false,
+                    linkColor: const Color(0xFF16A34A),
+                    style: const TextStyle(height: 1.4, color: AppColors.textSecondary),
+                  ),
                 ],
                 if (((service?['features'] as List?) ?? []).isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -905,14 +911,24 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                   const SizedBox(height: 6),
                   ...((service!['features'] as List).map((item) => Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: Text('• $item'),
+                        child: ChatLinkText(
+                          text: '• $item',
+                          mine: false,
+                          linkColor: const Color(0xFF16A34A),
+                          style: const TextStyle(height: 1.4, color: AppColors.textSecondary),
+                        ),
                       ))),
                 ],
                 if ((service?['what_to_send'] ?? '').toString().isNotEmpty) ...[
                   const SizedBox(height: 12),
                   const Text('What You Need To Send', style: TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 6),
-                  Text('${service!['what_to_send']}'),
+                  ChatLinkText(
+                    text: '${service!['what_to_send']}',
+                    mine: false,
+                    linkColor: const Color(0xFF16A34A),
+                    style: const TextStyle(height: 1.4, color: AppColors.textSecondary),
+                  ),
                 ],
               ],
             ),

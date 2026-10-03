@@ -36,6 +36,15 @@ void main() {
     );
   });
 
+  test('turns a bare website in a description into a link', () {
+    final segments = parseChatText(
+      'Get the software from the official download page: shellmrdm.com/downloads before you order.',
+    );
+    expect(segments.where((s) => s.kind == ChatTextKind.url).map((s) => s.text), [
+      'shellmrdm.com/downloads',
+    ]);
+  });
+
   test('does not treat a price as a phone number', () {
     final segments = parseChatText('Total GH₵120,000.00 today');
     expect(segments.where((s) => s.kind == ChatTextKind.phone), isEmpty);
