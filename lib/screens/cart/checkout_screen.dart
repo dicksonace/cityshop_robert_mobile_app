@@ -146,14 +146,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               title: Text('Choose payment gateway', style: TextStyle(fontWeight: FontWeight.w800)),
             ),
             ListTile(
-              leading: const Icon(Icons.credit_card),
-              title: const Text('Paystack'),
-              onTap: () => Navigator.pop(ctx, 'paystack'),
-            ),
-            ListTile(
               leading: const Icon(Icons.payments_outlined),
               title: const Text('Flutterwave'),
               onTap: () => Navigator.pop(ctx, 'flutterwave'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.credit_card),
+              title: const Text('Paystack'),
+              onTap: () => Navigator.pop(ctx, 'paystack'),
             ),
             const SizedBox(height: 8),
           ],

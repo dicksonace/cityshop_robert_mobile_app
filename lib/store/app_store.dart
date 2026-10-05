@@ -13,11 +13,12 @@ import '../widgets/ghana_location_fields.dart';
 import '../widgets/product_image_limits.dart';
 
 class PendingMfa {
-  const PendingMfa({required this.token, required this.methods, this.emailHint});
+  const PendingMfa({required this.token, required this.methods, this.emailHint, this.codeChannel = 'sms'});
 
   final String token;
   final List<String> methods;
   final String? emailHint;
+  final String codeChannel;
 }
 
 class AppStore extends ChangeNotifier {
@@ -444,6 +445,7 @@ class AppStore extends ChangeNotifier {
         token: '${body['mfa_token']}',
         methods: methods.isEmpty ? const ['email'] : methods,
         emailHint: body['email_hint']?.toString(),
+        codeChannel: body['code_channel']?.toString() ?? 'sms',
       );
     }
     final token = body['token'] as String?;
@@ -1610,6 +1612,49 @@ class AppStore extends ChangeNotifier {
       'amount': amount,
       'payment_pin': paymentPin,
       if (note != null && note.isNotEmpty) 'note': note,
+    });
+    final body = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    final walletJson = body['wallet'];
+    if (walletJson is Map && wallet != null) {
+      wallet = wallet!.copyWith(
+        availableBalance: (walletJson['available_balance'] as num?)?.toDouble(),
+        pendingBalance: (walletJson['pending_balance'] as num?)?.toDouble(),
+      );
+    } else {
+      await loadWallet();
+    }
+    notifyListeners();
+    final data = body['data'];
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    return body;
+  }
+
+  Future<Map<String, dynamic>> initializeQrGatewayPay({
+    required String payload,
+    required double amount,
+    required String method,
+    required String gateway,
+    String? note,
+  }) async {
+    final res = await _api.post('/wallet/qr/pay/gateway', data: {
+      'payload': payload,
+      'amount': amount,
+      'method': method,
+      'gateway': gateway,
+      if (note != null && note.isNotEmpty) 'note': note,
+    });
+    return res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> verifyQrGatewayPay({
+    required String reference,
+    required String gateway,
+  }) async {
+    final res = await _api.post('/wallet/qr/pay/gateway/verify', data: {
+      'reference': reference,
+      'gateway': gateway,
     });
     final body = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
     final walletJson = body['wallet'];

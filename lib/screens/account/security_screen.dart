@@ -82,7 +82,10 @@ class _SecurityScreenState extends State<SecurityScreen> with SingleTickerProvid
         title: const Text('Security', style: TextStyle(fontWeight: FontWeight.w900)),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [Tab(text: 'Email / Gmail'), Tab(text: 'Google Authenticator')],
+          tabs: [
+            Tab(text: _codeTab),
+            const Tab(text: 'Google Authenticator'),
+          ],
         ),
       ),
       body: _loading
@@ -94,21 +97,39 @@ class _SecurityScreenState extends State<SecurityScreen> with SingleTickerProvid
     );
   }
 
+  String get _channel => '${_mfa['code_channel'] ?? 'sms'}';
+  bool get _viaSms => _channel != 'email';
+  String get _codeTab => _channel == 'email' ? 'Email / Gmail' : _channel == 'both' ? 'SMS or email' : 'SMS';
+
+  bool get _codeReady {
+    final hasMobile = _mfa['has_mobile'] == true;
+    final hasEmail = _mfa['has_email'] == true;
+    if (_channel == 'both') return hasMobile || hasEmail;
+    return _viaSms ? hasMobile : hasEmail;
+  }
+
+  String get _where {
+    if (_channel == 'both') return '${_mfa['mobile'] ?? 'your phone'} and ${_mfa['email'] ?? 'your email'}';
+    return _viaSms ? '${_mfa['mobile'] ?? 'your phone'}' : '${_mfa['email'] ?? 'your email'}';
+  }
+
   Widget _emailTab() {
     final enabled = _mfa['email_enabled'] == true;
-    final hasEmail = _mfa['has_email'] == true;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
         Text(
-          hasEmail
-              ? 'Codes are emailed to ${_mfa['email']}. Gmail and other inboxes both work.'
-              : 'Add an email on your profile first.',
+          _codeReady
+              ? 'Codes go to $_where.'
+              : (_viaSms ? 'Add a phone number on your profile first.' : 'Add an email on your profile first.'),
         ),
         if (enabled) ...[
           const SizedBox(height: 8),
-          const Text('Email codes are on.', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF047857))),
+          Text(
+            _channel == 'email' ? 'Email codes are on.' : 'SMS codes are on.',
+            style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF047857)),
+          ),
         ],
         const SizedBox(height: 12),
         TextField(
@@ -117,25 +138,28 @@ class _SecurityScreenState extends State<SecurityScreen> with SingleTickerProvid
           decoration: const InputDecoration(labelText: 'Current password', border: OutlineInputBorder()),
         ),
         const SizedBox(height: 12),
-        if (!enabled && hasEmail) ...[
+        if (!enabled && _codeReady) ...[
           FilledButton(
             onPressed: () => _run(() => context.read<AppStore>().sendMfaEmail(_password.text)),
-            child: const Text('Email me a code'),
+            child: Text(_channel == 'both' ? 'Send me a code' : _viaSms ? 'Text me a code' : 'Email me a code'),
           ),
           const SizedBox(height: 12),
-          const Text('Code from the email', style: TextStyle(fontWeight: FontWeight.w700)),
+          Text(
+            _channel == 'email' ? 'Code from the email' : 'Code from the text',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
           OtpCodeBoxes(controller: _code),
           const SizedBox(height: 12),
           FilledButton(
             onPressed: () => _run(() => context.read<AppStore>().confirmMfaEmail(_code.text.trim())),
-            child: const Text('Turn on email codes'),
+            child: Text(_channel == 'email' ? 'Turn on email codes' : 'Turn on SMS codes'),
           ),
         ],
         if (enabled)
           OutlinedButton(
             onPressed: () => _run(() => context.read<AppStore>().disableMfaEmail(_password.text)),
-            child: const Text('Turn off email codes'),
+            child: Text(_channel == 'email' ? 'Turn off email codes' : 'Turn off SMS codes'),
           ),
       ],
     );

@@ -5,8 +5,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../api/api_client.dart';
 import '../api/api_config.dart';
+import '../screens/cart/paystack_payment_screen.dart';
 import '../store/app_store.dart';
+import 'payment_success_screen.dart';
 
 final _money = NumberFormat.currency(locale: 'en_GH', symbol: 'GH₵', decimalDigits: 2);
 
@@ -22,6 +25,7 @@ class WalletTransferPad extends StatefulWidget {
     this.initialNote,
     this.actionLabel = 'Transfer',
     this.onBack,
+    this.qrPayload,
   });
 
   final String recipientName;
@@ -34,6 +38,10 @@ class WalletTransferPad extends StatefulWidget {
   final String actionLabel;
   final VoidCallback? onBack;
   final Future<void> Function(double amount, String? note) onSubmit;
+
+  /// When set, a short wallet balance opens Mobile Money / card and sends
+  /// that payment to this QR instead of only topping up the payer.
+  final String? qrPayload;
 
   @override
   State<WalletTransferPad> createState() => _WalletTransferPadState();
@@ -84,6 +92,11 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
 
     final available = context.read<AppStore>().wallet?.availableBalance ?? 0;
     if (parsed > available) {
+      final payload = widget.qrPayload;
+      if (payload != null && payload.isNotEmpty) {
+        await _openDirectPay(parsed);
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -102,6 +115,87 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
       );
     } finally {
       if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Future<void> _openDirectPay(double amount) async {
+    final payload = widget.qrPayload;
+    if (payload == null || payload.isEmpty) return;
+    if (amount < 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mobile Money and card start at GH₵5.00')),
+      );
+      return;
+    }
+
+    final wallet = context.read<AppStore>().wallet;
+    final paystack = wallet?.paystackConfigured == true;
+    final flutterwave = wallet?.flutterwaveConfigured == true;
+    if (!paystack && !flutterwave) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Card and Mobile Money are not available right now')),
+      );
+      return;
+    }
+
+    final available = wallet?.availableBalance ?? 0;
+    final choice = await showModalBottomSheet<_DirectPayChoice>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      builder: (ctx) => _DirectPaySheet(
+        recipientName: widget.recipientName,
+        amount: amount,
+        available: available,
+        paystack: paystack,
+        flutterwave: flutterwave,
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    final note = showNote && _note.text.trim().isNotEmpty ? _note.text.trim() : null;
+    final store = context.read<AppStore>();
+    try {
+      final started = await store.initializeQrGatewayPay(
+        payload: payload,
+        amount: amount,
+        method: choice.method,
+        gateway: choice.gateway,
+        note: note,
+      );
+      if (!mounted) return;
+      final url = started['authorization_url'] as String? ?? '';
+      final reference = started['reference'] as String? ?? '';
+      if (url.isEmpty || reference.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not start payment')),
+        );
+        return;
+      }
+
+      final paid = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => PaystackPaymentScreen(
+            authorizationUrl: url,
+            reference: reference,
+            onVerify: (ref) => store.verifyQrGatewayPay(reference: ref, gateway: choice.gateway),
+          ),
+        ),
+      );
+      if (!mounted || paid != true) return;
+      await showPaymentSuccess(
+        context,
+        amount: amount,
+        recipientName: widget.recipientName,
+        reference: reference,
+        note: note,
+      );
+      if (!mounted) return;
+      context.go('/shop?tab=wallet');
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -179,6 +273,7 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
     final wallet = context.watch<AppStore>().wallet;
     final available = wallet?.availableBalance ?? 0;
     final canSend = (_parsedAmount ?? 0) >= 1 && !sending;
+    final canPayDirect = widget.qrPayload != null && widget.qrPayload!.isNotEmpty;
     final amount = _parsedAmount ?? 0;
     final balanceCovers = amount >= 1 && amount <= available;
     final bottomPad = MediaQuery.paddingOf(context).bottom;
@@ -338,7 +433,13 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
                     _PaymentMethodRow(
                       available: available,
                       amount: amount,
-                      onTopUp: () => context.go('/shop?tab=wallet'),
+                      onTopUp: () {
+                        if (canPayDirect && amount >= 1) {
+                          _openDirectPay(amount);
+                        } else {
+                          context.go('/shop?tab=wallet');
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -402,11 +503,11 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
                             child: Padding(
                               padding: const EdgeInsets.all(0.4),
                               child: Material(
-                                color: canSend && balanceCovers
+                                color: canSend && (balanceCovers || canPayDirect)
                                     ? const Color(0xFF07C160)
                                     : const Color(0xFF07C160).withValues(alpha: 0.35),
                                 child: InkWell(
-                                  onTap: canSend && balanceCovers ? _send : null,
+                                  onTap: canSend && (balanceCovers || canPayDirect) ? _send : null,
                                   child: Center(
                                     child: sending
                                         ? const SizedBox(
@@ -529,6 +630,142 @@ class _PaymentMethodRow extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _DirectPayChoice {
+  const _DirectPayChoice({required this.gateway, required this.method});
+
+  final String gateway;
+  final String method;
+}
+
+class _DirectPaySheet extends StatefulWidget {
+  const _DirectPaySheet({
+    required this.recipientName,
+    required this.amount,
+    required this.available,
+    required this.paystack,
+    required this.flutterwave,
+  });
+
+  final String recipientName;
+  final double amount;
+  final double available;
+  final bool paystack;
+  final bool flutterwave;
+
+  @override
+  State<_DirectPaySheet> createState() => _DirectPaySheetState();
+}
+
+class _DirectPaySheetState extends State<_DirectPaySheet> {
+  late String _gateway = widget.flutterwave ? 'flutterwave' : 'paystack';
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE5E7EB),
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Column(
+                children: [
+                  Text(
+                    widget.recipientName,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _money.format(widget.amount),
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Goes to ${widget.recipientName}',
+                    style: const TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+            if (widget.paystack && widget.flutterwave)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'flutterwave', label: Text('Flutterwave')),
+                    ButtonSegment(value: 'paystack', label: Text('Paystack')),
+                  ],
+                  selected: {_gateway},
+                  onSelectionChanged: (value) => setState(() => _gateway = value.first),
+                ),
+              ),
+            _option(
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'Balance',
+              subtitle: 'Insufficient · ${_money.format(widget.available)} available',
+              enabled: false,
+              onTap: null,
+            ),
+            _option(
+              icon: Icons.phone_android_rounded,
+              title: 'Mobile Money',
+              subtitle: 'Pay ${_money.format(widget.amount)} to ${widget.recipientName}',
+              enabled: true,
+              onTap: () => Navigator.pop(context, _DirectPayChoice(gateway: _gateway, method: 'momo')),
+            ),
+            _option(
+              icon: Icons.credit_card_rounded,
+              title: 'Card',
+              subtitle: 'Pay ${_money.format(widget.amount)} to ${widget.recipientName}',
+              enabled: true,
+              onTap: () => Navigator.pop(context, _DirectPayChoice(gateway: _gateway, method: 'card')),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _option({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool enabled,
+    required VoidCallback? onTap,
+  }) {
+    return ListTile(
+      enabled: enabled,
+      leading: Icon(icon, color: enabled ? const Color(0xFF111111) : const Color(0xFF9CA3AF)),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+          color: enabled ? const Color(0xFF111111) : const Color(0xFF9CA3AF),
+        ),
+      ),
+      subtitle: Text(subtitle),
+      onTap: onTap,
     );
   }
 }

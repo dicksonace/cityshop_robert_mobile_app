@@ -748,84 +748,95 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _HeroBanner extends StatelessWidget {
+class _HeroBanner extends StatefulWidget {
   const _HeroBanner();
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFEA580C), Color(0xFFC2410C)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: const Text(
-              "Ghana's Trusted Marketplace",
-              style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            "Shop Ghana's Best Deals",
-            style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800, height: 1.15),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Electronics, fashion, and more — delivered to your doorstep.',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.88), fontSize: 13, height: 1.35),
-          ),
-          const SizedBox(height: 14),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: const [
-                _TrustChip(icon: Icons.verified_user_outlined, label: 'Verified Sellers'),
-                SizedBox(width: 8),
-                _TrustChip(icon: Icons.local_shipping_outlined, label: 'Fast Delivery'),
-                SizedBox(width: 8),
-                _TrustChip(icon: Icons.shield_outlined, label: 'Buyer Protection'),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  State<_HeroBanner> createState() => _HeroBannerState();
 }
 
-class _TrustChip extends StatelessWidget {
-  const _TrustChip({required this.icon, required this.label});
-  final IconData icon;
-  final String label;
+class _HeroBannerState extends State<_HeroBanner> {
+  static const _slides = [
+    'assets/slider/hero-2.jpg',
+    'assets/slider/hero-4.jpg',
+    'assets/slider/hero-6.jpg',
+    'assets/slider/rail-1.png',
+    'assets/slider/tile-2.png',
+    'assets/slider/tile-3.png',
+    'assets/slider/tile-4.png',
+    'assets/slider/tile-6.png',
+  ];
+
+  final _page = PageController();
+  Timer? _timer;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 4500), (_) {
+      if (!mounted || !_page.hasClients) return;
+      final next = (_index + 1) % _slides.length;
+      _page.animateToPage(next, duration: const Duration(milliseconds: 450), curve: Curves.easeOut);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _page.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: Colors.white),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-        ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      child: AspectRatio(
+        aspectRatio: 16 / 7,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              PageView.builder(
+                controller: _page,
+                itemCount: _slides.length,
+                onPageChanged: (index) => setState(() => _index = index),
+                itemBuilder: (context, index) {
+                  return GestureDetector(
+                    onTap: () => context.push('/gsm-tools'),
+                    child: ColoredBox(
+                      color: const Color(0xFF0F172A),
+                      child: Image.asset(_slides[index], fit: BoxFit.contain),
+                    ),
+                  );
+                },
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 8,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(_slides.length, (index) {
+                    final active = index == _index;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      height: 6,
+                      width: active ? 18 : 6,
+                      decoration: BoxDecoration(
+                        color: active ? Colors.white : Colors.white54,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

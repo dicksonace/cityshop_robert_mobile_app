@@ -1678,6 +1678,7 @@ class QrPayScreen extends StatelessWidget {
       lockedAmount: lockedAmount,
       initialNote: reason.isEmpty ? null : reason,
       actionLabel: 'Transfer',
+      qrPayload: payload,
       onBack: () => context.pop(),
       onSubmit: (amount, note) async {
         final store = context.read<AppStore>();

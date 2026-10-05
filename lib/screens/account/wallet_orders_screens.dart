@@ -324,52 +324,6 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
               style: TextStyle(color: AppColors.textSecondary, height: 1.35),
             ),
             const SizedBox(height: 16),
-            if (paystackConfigured) ...[
-              Material(
-                color: const Color(0xFFFFF7ED),
-                borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: () => Navigator.pop(ctx, 'paystack'),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFFDBA74)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.smartphone, color: Colors.white, size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Paystack', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                              SizedBox(height: 2),
-                              Text(
-                                'Instant MoMo or card',
-                                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
             if (flutterwaveConfigured) ...[
               Material(
                 color: const Color(0xFFEEF2FF),
@@ -401,6 +355,52 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Flutterwave', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                              SizedBox(height: 2),
+                              Text(
+                                'Instant MoMo or card',
+                                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (paystackConfigured) ...[
+              Material(
+                color: const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => Navigator.pop(ctx, 'paystack'),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFFDBA74)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.smartphone, color: Colors.white, size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Paystack', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                               SizedBox(height: 2),
                               Text(
                                 'Instant MoMo or card',

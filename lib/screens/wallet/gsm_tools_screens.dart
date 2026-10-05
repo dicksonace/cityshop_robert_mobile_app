@@ -7,11 +7,13 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../api/api_client.dart';
 import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/chat_link_text.dart';
 import '../../widgets/payment_pin_sheet.dart';
+import '../cart/paystack_payment_screen.dart';
 
 class GsmToolsHubScreen extends StatefulWidget {
   const GsmToolsHubScreen({super.key});
@@ -100,6 +102,78 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
     }
   }
 
+  Future<void> _openRecharge() async {
+    final store = context.read<AppStore>();
+    try {
+      await store.loadKyc();
+    } on ApiException catch (_) {}
+    if (!mounted) return;
+    if (!(store.user?.canStoreWalletFunds ?? false)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Approve your Ghana Card before you can recharge.')),
+      );
+      context.push('/kyc');
+      return;
+    }
+
+    await store.loadWallet();
+    if (!mounted) return;
+    final wallet = store.wallet;
+    final paystack = wallet?.paystackConfigured == true;
+    final flutterwave = wallet?.flutterwaveConfigured == true;
+    if (!paystack && !flutterwave) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Card and Mobile Money are not available right now')),
+      );
+      return;
+    }
+
+    final choice = await showModalBottomSheet<_GsmRechargeChoice>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => _GsmRechargeSheet(paystack: paystack, flutterwave: flutterwave),
+    );
+    if (choice == null || !mounted) return;
+
+    try {
+      final started = choice.gateway == 'flutterwave'
+          ? await store.initializeWalletFlutterwave(amount: choice.amount, method: choice.method)
+          : await store.initializeWalletPaystack(amount: choice.amount, method: choice.method);
+      if (!mounted) return;
+      final url = started['authorization_url'] as String? ?? '';
+      final reference = started['reference'] as String? ?? '';
+      if (url.isEmpty || reference.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not start payment')));
+        return;
+      }
+      final paid = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => PaystackPaymentScreen(
+            authorizationUrl: url,
+            reference: reference,
+            onVerify: (ref) async {
+              if (choice.gateway == 'flutterwave') {
+                await store.verifyWalletFlutterwave(ref);
+              } else {
+                await store.verifyWalletPaystack(ref);
+              }
+            },
+          ),
+        ),
+      );
+      if (!mounted) return;
+      if (paid == true) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wallet recharged')));
+      }
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -135,27 +209,37 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
+                      color: const Color(0xFFEA580C),
                       borderRadius: BorderRadius.circular(20),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFEA580C), Color(0xFFF97316)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      boxShadow: const [BoxShadow(color: Color(0x33EA580C), blurRadius: 16, offset: Offset(0, 8))],
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        const Text('WALLET BALANCE', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.7)),
-                        const SizedBox(height: 4),
-                        Text(
-                          'GH₵${balance.toStringAsFixed(2)}',
-                          style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'WALLET BALANCE',
+                                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.7),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'GH₵${balance.toStringAsFixed(2)}',
+                                style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Place orders instantly from your wallet.',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                        const SizedBox(width: 12),
+                        FilledButton(
+                          onPressed: _openRecharge,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFFEA580C),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Recharge', style: TextStyle(fontWeight: FontWeight.w900)),
                         ),
                       ],
                     ),
@@ -1493,6 +1577,152 @@ class GsmServiceLogo extends StatelessWidget {
                 ),
               ),
             ),
+    );
+  }
+}
+
+class _GsmRechargeChoice {
+  const _GsmRechargeChoice({required this.amount, required this.gateway, required this.method});
+
+  final double amount;
+  final String gateway;
+  final String method;
+}
+
+class _GsmRechargeSheet extends StatefulWidget {
+  const _GsmRechargeSheet({required this.paystack, required this.flutterwave});
+
+  final bool paystack;
+  final bool flutterwave;
+
+  @override
+  State<_GsmRechargeSheet> createState() => _GsmRechargeSheetState();
+}
+
+class _GsmRechargeSheetState extends State<_GsmRechargeSheet> {
+  final _amount = TextEditingController();
+  late String _gateway;
+
+  @override
+  void initState() {
+    super.initState();
+    _gateway = widget.flutterwave ? 'flutterwave' : 'paystack';
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    super.dispose();
+  }
+
+  void _pay(String method) {
+    final amount = double.tryParse(_amount.text.trim());
+    if (amount == null || amount < 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter at least GH₵5.00')),
+      );
+      return;
+    }
+    Navigator.pop(context, _GsmRechargeChoice(amount: amount, gateway: _gateway, method: method));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(99)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text('Recharge', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          const Text(
+            'Add money to your wallet, then place the order.',
+            style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _amount,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+            decoration: InputDecoration(
+              prefixText: 'GH₵ ',
+              prefixStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
+              hintText: '0.00',
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+            ),
+          ),
+          if (widget.paystack && widget.flutterwave) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _gatewayChip('flutterwave', 'Flutterwave')),
+                const SizedBox(width: 8),
+                Expanded(child: _gatewayChip('paystack', 'Paystack')),
+              ],
+            ),
+          ],
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: () => _pay('momo'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFEA580C),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            icon: const Icon(Icons.phone_android),
+            label: const Text('Mobile Money', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: () => _pay('card'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            icon: const Icon(Icons.credit_card),
+            label: const Text('Card', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _gatewayChip(String value, String label) {
+    final selected = _gateway == value;
+    return Material(
+      color: selected ? const Color(0xFFEA580C) : const Color(0xFFF1F5F9),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => setState(() => _gateway = value),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: selected ? Colors.white : const Color(0xFF0F172A),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
