@@ -11,9 +11,22 @@ import '../../api/api_client.dart';
 import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_sheet.dart';
 import '../../widgets/chat_link_text.dart';
 import '../../widgets/payment_pin_sheet.dart';
 import '../cart/paystack_payment_screen.dart';
+
+Map<String, double> _gsmRechargeQuote(double credit, {double percent = 1.95, double flat = 0}) {
+  final amount = credit <= 0 ? 0.0 : credit;
+  final rate = percent / 100;
+  final charge = amount <= 0
+      ? 0.0
+      : rate >= 1
+          ? amount + flat
+          : (amount + flat) / (1 - rate);
+  final chargeR = (charge * 100).round() / 100;
+  return {'credit': (amount * 100).round() / 100, 'charge': chargeR};
+}
 
 class GsmToolsHubScreen extends StatefulWidget {
   const GsmToolsHubScreen({super.key});
@@ -121,57 +134,265 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
     final wallet = store.wallet;
     final paystack = wallet?.paystackConfigured == true;
     final flutterwave = wallet?.flutterwaveConfigured == true;
-    if (!paystack && !flutterwave) {
+    final manual = wallet?.manualTopUpEnabled == true;
+    if (!paystack && !flutterwave && !manual) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Card and Mobile Money are not available right now')),
+        const SnackBar(content: Text('Recharge is unavailable right now.')),
       );
       return;
     }
 
-    final choice = await showModalBottomSheet<_GsmRechargeChoice>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => _GsmRechargeSheet(paystack: paystack, flutterwave: flutterwave),
-    );
-    if (choice == null || !mounted) return;
+    if (paystack && !flutterwave && !manual) {
+      await _onlineRecharge('paystack');
+      return;
+    }
+    if (!paystack && flutterwave && !manual) {
+      await _onlineRecharge('flutterwave');
+      return;
+    }
+    if (!paystack && !flutterwave && manual) {
+      await context.push('/wallet/manual-deposit');
+      if (mounted) await _load();
+      return;
+    }
 
-    try {
-      final started = choice.gateway == 'flutterwave'
-          ? await store.initializeWalletFlutterwave(amount: choice.amount, method: choice.method)
-          : await store.initializeWalletPaystack(amount: choice.amount, method: choice.method);
-      if (!mounted) return;
-      final url = started['authorization_url'] as String? ?? '';
-      final reference = started['reference'] as String? ?? '';
-      if (url.isEmpty || reference.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not start payment')));
-        return;
-      }
-      final paid = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(
-          builder: (_) => PaystackPaymentScreen(
-            authorizationUrl: url,
-            reference: reference,
-            onVerify: (ref) async {
-              if (choice.gateway == 'flutterwave') {
-                await store.verifyWalletFlutterwave(ref);
-              } else {
-                await store.verifyWalletPaystack(ref);
-              }
-            },
+    final choice = await showAppSheet<String>(
+      context: context,
+      builder: (ctx) => SheetShell(
+        children: [
+          const Text('Recharge', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+          const SizedBox(height: 6),
+          const Text(
+            'Choose how you want to add funds.',
+            style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+          ),
+          const SizedBox(height: 16),
+          if (flutterwave) ...[
+            _rechargeChoice(
+              color: const Color(0xFFEEF2FF),
+              border: const Color(0xFFA5B4FC),
+              iconColor: const Color(0xFF4F46E5),
+              icon: Icons.payments_outlined,
+              title: 'Flutterwave',
+              subtitle: 'Instant MoMo or card',
+              onTap: () => Navigator.pop(ctx, 'flutterwave'),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (paystack) ...[
+            _rechargeChoice(
+              color: const Color(0xFFFFF7ED),
+              border: const Color(0xFFFDBA74),
+              iconColor: AppColors.primary,
+              icon: Icons.smartphone,
+              title: 'Paystack',
+              subtitle: 'Instant MoMo or card',
+              onTap: () => Navigator.pop(ctx, 'paystack'),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (manual)
+            _rechargeChoice(
+              color: Colors.white,
+              border: const Color(0xFFBAE6FD),
+              iconColor: const Color(0xFF0EA5E9),
+              icon: Icons.upload_rounded,
+              title: 'Manual',
+              subtitle: 'MoMo / bank + upload proof',
+              onTap: () => Navigator.pop(ctx, 'manual'),
+            ),
+        ],
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'manual') {
+      await context.push('/wallet/manual-deposit');
+      if (mounted) await _load();
+      return;
+    }
+    await _onlineRecharge(choice);
+  }
+
+  Widget _rechargeChoice({
+    required Color color,
+    required Color border,
+    required Color iconColor,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: iconColor, borderRadius: BorderRadius.circular(12)),
+                child: Icon(icon, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-      );
-      if (!mounted) return;
-      if (paid == true) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Wallet recharged')));
-      }
-      await _load();
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ),
+    );
+  }
+
+  Future<void> _onlineRecharge(String gateway) async {
+    final amountCtrl = TextEditingController();
+    var method = 'momo';
+    var submitting = false;
+    final wallet = context.read<AppStore>().wallet;
+    final feePercent = wallet?.paystackFeePercent ?? 1.95;
+    final feeFlat = wallet?.paystackFeeFlat ?? 0;
+
+    final started = await showAppSheet<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setModal) {
+            final typed = double.tryParse(amountCtrl.text.trim()) ?? 0;
+            final quote = _gsmRechargeQuote(typed, percent: feePercent, flat: feeFlat);
+            return SheetShell(
+              action: SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF16A34A),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: submitting
+                      ? null
+                      : () async {
+                          final amount = double.tryParse(amountCtrl.text.trim());
+                          if (amount == null || amount < 5) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(content: Text('Enter at least GHS 5')),
+                            );
+                            return;
+                          }
+                          setModal(() => submitting = true);
+                          try {
+                            final pay = gateway == 'flutterwave'
+                                ? await context.read<AppStore>().initializeWalletFlutterwave(amount: amount, method: method)
+                                : await context.read<AppStore>().initializeWalletPaystack(amount: amount, method: method);
+                            if (ctx.mounted) Navigator.pop(ctx, pay);
+                          } on ApiException catch (e) {
+                            setModal(() => submitting = false);
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(e.message)));
+                            }
+                          }
+                        },
+                  child: Text(
+                    submitting
+                        ? 'Starting…'
+                        : quote['credit']! >= 5
+                            ? 'Pay GH₵${quote['charge']!.toStringAsFixed(2)}'
+                            : 'Recharge',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                ),
+              ),
+              children: [
+                Text(
+                  gateway == 'flutterwave' ? 'Flutterwave recharge' : 'Paystack recharge',
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  gateway == 'flutterwave'
+                      ? 'Top up via Flutterwave (MoMo or card).'
+                      : 'Top up via Paystack (MoMo or card).',
+                  style: const TextStyle(color: AppColors.textSecondary, height: 1.35),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setModal(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Amount (GHS)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: ValueKey(method),
+                  initialValue: method,
+                  decoration: const InputDecoration(
+                    labelText: 'Payment method',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'momo', child: Text('Mobile Money')),
+                    DropdownMenuItem(value: 'card', child: Text('Card')),
+                  ],
+                  onChanged: submitting
+                      ? null
+                      : (value) {
+                          if (value != null) setModal(() => method = value);
+                        },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    amountCtrl.dispose();
+    if (started == null || !mounted) return;
+
+    final url = started['authorization_url'] as String? ?? '';
+    final reference = started['reference'] as String? ?? '';
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not start payment')));
+      return;
     }
+    final store = context.read<AppStore>();
+    final paid = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PaystackPaymentScreen(
+          authorizationUrl: url,
+          reference: reference,
+          onVerify: (ref) async {
+            if (gateway == 'flutterwave') {
+              await store.verifyWalletFlutterwave(ref);
+            } else {
+              await store.verifyWalletPaystack(ref);
+            }
+          },
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (paid == true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Funds added to your wallet')));
+    }
+    await _load();
   }
 
   @override
@@ -1577,152 +1798,6 @@ class GsmServiceLogo extends StatelessWidget {
                 ),
               ),
             ),
-    );
-  }
-}
-
-class _GsmRechargeChoice {
-  const _GsmRechargeChoice({required this.amount, required this.gateway, required this.method});
-
-  final double amount;
-  final String gateway;
-  final String method;
-}
-
-class _GsmRechargeSheet extends StatefulWidget {
-  const _GsmRechargeSheet({required this.paystack, required this.flutterwave});
-
-  final bool paystack;
-  final bool flutterwave;
-
-  @override
-  State<_GsmRechargeSheet> createState() => _GsmRechargeSheetState();
-}
-
-class _GsmRechargeSheetState extends State<_GsmRechargeSheet> {
-  final _amount = TextEditingController();
-  late String _gateway;
-
-  @override
-  void initState() {
-    super.initState();
-    _gateway = widget.flutterwave ? 'flutterwave' : 'paystack';
-  }
-
-  @override
-  void dispose() {
-    _amount.dispose();
-    super.dispose();
-  }
-
-  void _pay(String method) {
-    final amount = double.tryParse(_amount.text.trim());
-    if (amount == null || amount < 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter at least GH₵5.00')),
-      );
-      return;
-    }
-    Navigator.pop(context, _GsmRechargeChoice(amount: amount, gateway: _gateway, method: method));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 20 + bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(99)),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text('Recharge', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 4),
-          const Text(
-            'Add money to your wallet, then place the order.',
-            style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _amount,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-            decoration: InputDecoration(
-              prefixText: 'GH₵ ',
-              prefixStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF0F172A)),
-              hintText: '0.00',
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-            ),
-          ),
-          if (widget.paystack && widget.flutterwave) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: _gatewayChip('flutterwave', 'Flutterwave')),
-                const SizedBox(width: 8),
-                Expanded(child: _gatewayChip('paystack', 'Paystack')),
-              ],
-            ),
-          ],
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: () => _pay('momo'),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFEA580C),
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(52),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
-            icon: const Icon(Icons.phone_android),
-            label: const Text('Mobile Money', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-          ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: () => _pay('card'),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(52),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
-            icon: const Icon(Icons.credit_card),
-            label: const Text('Card', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _gatewayChip(String value, String label) {
-    final selected = _gateway == value;
-    return Material(
-      color: selected ? const Color(0xFFEA580C) : const Color(0xFFF1F5F9),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => setState(() => _gateway = value),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              color: selected ? Colors.white : const Color(0xFF0F172A),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
