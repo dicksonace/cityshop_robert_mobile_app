@@ -950,7 +950,11 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
               ],
             ),
           ],
-          if (!(store.user?.canStoreWalletFunds ?? false)) ...[
+          if (store.user != null &&
+              ((store.user!.canUseRmbWallet && !(store.user!.canStoreWalletFunds)) ||
+                  store.user!.kyc.isPending ||
+                  store.user!.kyc.needsImprovement ||
+                  store.user!.kyc.isRejected)) ...[
             const SizedBox(height: 10),
             Material(
               color: const Color(0xFFFFF7ED),
@@ -962,7 +966,11 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                   store.user?.kyc.statusLabel ?? 'Not verified',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
-                subtitle: const Text('The system must approve your Ghana Card before you can transact with the CityShop wallet.'),
+                subtitle: Text(
+                  store.user?.canUseRmbWallet == true
+                      ? 'China / RMB is on for you. Verify your Ghana Card to use it.'
+                      : 'The system must approve your Ghana Card before you can transact with the CityShop wallet.',
+                ),
                 trailing: const Text('ACTIVATE', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w900, fontSize: 12)),
                 onTap: () => context.push('/kyc'),
               ),

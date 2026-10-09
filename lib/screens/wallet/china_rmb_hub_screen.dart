@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../api/api_client.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_sheet.dart';
 import '../../widgets/common_widgets.dart';
 import 'china_transfer_screens.dart';
 
@@ -164,6 +165,45 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
     if (!buyLive) return 'Buy RMB paused';
     if (buyRate == null) return 'Rate not published';
     return 'Buy RMB unavailable';
+  }
+
+  Future<void> _openRequest(String path) async {
+    final store = context.read<AppStore>();
+    try {
+      await store.loadKyc();
+    } on ApiException catch (_) {}
+    if (!mounted) return;
+    if (store.user?.canStoreWalletFunds == true) {
+      await context.push(path);
+      if (mounted) _load(silent: true);
+      return;
+    }
+
+    final kyc = store.user?.kyc;
+    final pending = kyc?.isPending == true;
+    await showAppSheet<void>(
+      context: context,
+      builder: (ctx) => SheetShell(
+        action: FilledButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            context.push('/kyc');
+          },
+          style: FilledButton.styleFrom(backgroundColor: AppColors.accent),
+          child: Text(pending ? 'View verification' : 'Verify Ghana Card', style: const TextStyle(fontWeight: FontWeight.w800)),
+        ),
+        children: [
+          const Text('Ghana Card', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+          const SizedBox(height: 8),
+          Text(
+            pending
+                ? 'Your Ghana Card is still under review. You can request China / RMB after it is approved.'
+                : 'China / RMB is enabled for you. Verify your Ghana Card before this request.',
+            style: const TextStyle(color: AppColors.textSecondary, height: 1.4),
+          ),
+        ],
+      ),
+    );
   }
 
   String _sellButtonLabel() {
@@ -374,12 +414,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton(
-                            onPressed: buyOpen && buyRate != null
-                                ? () async {
-                                    await context.push('/wallet/china-transfer');
-                                    if (mounted) _load(silent: true);
-                                  }
-                                : null,
+                            onPressed: buyOpen && buyRate != null ? () => _openRequest('/wallet/china-transfer') : null,
                             style: FilledButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: const Color(0xFF3730A3),
@@ -476,12 +511,7 @@ class _ChinaRmbHubScreenState extends State<ChinaRmbHubScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton(
-                            onPressed: sellOpen && sellRate != null
-                                ? () async {
-                                    await context.push('/wallet/sell-rmb');
-                                    if (mounted) _load(silent: true);
-                                  }
-                                : null,
+                            onPressed: sellOpen && sellRate != null ? () => _openRequest('/wallet/sell-rmb') : null,
                             style: FilledButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: const Color(0xFF047857),

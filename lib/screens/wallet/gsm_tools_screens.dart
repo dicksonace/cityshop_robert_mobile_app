@@ -42,6 +42,7 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
   List<Map<String, dynamic>> groups = [];
   List<Map<String, dynamic>> serviceTypes = [];
   double balance = 0;
+  List<String> slides = [];
   String query = '';
   String serviceType = '';
   String categoryId = '';
@@ -104,6 +105,13 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
             ? types.map((e) => Map<String, dynamic>.from(e as Map)).toList()
             : [];
         balance = (wallet is Map ? (wallet['available_balance'] as num?)?.toDouble() : null) ?? 0;
+        final rawSlides = data['slides'];
+        slides = rawSlides is List
+            ? rawSlides
+                .map((e) => e is Map ? ApiConfig.resolveMediaUrl('${e['image_url'] ?? ''}') : '')
+                .where((url) => url.isNotEmpty)
+                .toList()
+            : [];
         loading = false;
       });
     } catch (e) {
@@ -427,6 +435,10 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Text(error!, style: const TextStyle(color: Colors.red)),
                     ),
+                  if (slides.isNotEmpty) ...[
+                    _PlaceOrderSlider(urls: slides),
+                    const SizedBox(height: 12),
+                  ],
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -1683,6 +1695,89 @@ class _SystemReplyCard extends StatelessWidget {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PlaceOrderSlider extends StatefulWidget {
+  const _PlaceOrderSlider({required this.urls});
+
+  final List<String> urls;
+
+  @override
+  State<_PlaceOrderSlider> createState() => _PlaceOrderSliderState();
+}
+
+class _PlaceOrderSliderState extends State<_PlaceOrderSlider> {
+  late final PageController _page = PageController();
+  Timer? _timer;
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.urls.length > 1) {
+      _timer = Timer.periodic(const Duration(milliseconds: 4500), (_) {
+        if (!mounted || !_page.hasClients) return;
+        final next = (_index + 1) % widget.urls.length;
+        _page.animateToPage(next, duration: const Duration(milliseconds: 450), curve: Curves.easeOut);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _page.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: AspectRatio(
+        aspectRatio: 16 / 7,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ColoredBox(
+              color: const Color(0xFF020617),
+              child: PageView.builder(
+                controller: _page,
+                itemCount: widget.urls.length,
+                onPageChanged: (index) => setState(() => _index = index),
+                itemBuilder: (_, index) => CachedNetworkImage(
+                  imageUrl: widget.urls[index],
+                  fit: BoxFit.contain,
+                  errorWidget: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+            if (widget.urls.length > 1)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 8,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (var i = 0; i < widget.urls.length; i++)
+                      Container(
+                        width: i == _index ? 22 : 6,
+                        height: 6,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: i == _index ? Colors.white : Colors.white54,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

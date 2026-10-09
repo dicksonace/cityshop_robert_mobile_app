@@ -661,111 +661,176 @@ class _DirectPaySheet extends StatefulWidget {
 }
 
 class _DirectPaySheetState extends State<_DirectPaySheet> {
+  static const _blue = Color(0xFF1677FF);
+
   late String _gateway = widget.flutterwave ? 'flutterwave' : 'paystack';
+  String _method = 'momo';
 
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
+    final covers = widget.amount <= widget.available;
+
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
       child: Container(
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 10),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE5E7EB),
-                borderRadius: BorderRadius.circular(4),
+            InkWell(
+              onTap: () => Navigator.pop(context),
+              child: const SizedBox(
+                width: double.infinity,
+                height: 28,
+                child: Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFFB0B0B0)),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Column(
-                children: [
-                  Text(
-                    widget.recipientName,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _money.format(widget.amount),
-                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Goes to ${widget.recipientName}',
-                    style: const TextStyle(color: Color(0xFF6B7280), fontSize: 13),
-                  ),
-                ],
+            Text(
+              'Transfer to ${widget.recipientName}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 15, color: Color(0xFF333333)),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _money.format(widget.amount),
+              style: const TextStyle(
+                fontSize: 34,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF111111),
+                height: 1.1,
               ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1, thickness: 0.5, color: Color(0xFFEEEEEE)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Payment tools',
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                ),
+              ),
+            ),
+            _tool(
+              selected: false,
+              enabled: covers,
+              title: 'Balance',
+              subtitle: covers
+                  ? 'Available ${_money.format(widget.available)}'
+                  : 'Insufficient · ${_money.format(widget.available)} available',
+              subtitleColor: covers ? const Color(0xFF888888) : const Color(0xFFDC2626),
+              onTap: null,
+            ),
+            _tool(
+              selected: _method == 'momo',
+              enabled: true,
+              title: 'Mobile Money',
+              subtitle: 'Pay ${_money.format(widget.amount)}',
+              onTap: () => setState(() => _method = 'momo'),
+            ),
+            _tool(
+              selected: _method == 'card',
+              enabled: true,
+              title: 'Card',
+              subtitle: 'Pay ${_money.format(widget.amount)}',
+              onTap: () => setState(() => _method = 'card'),
             ),
             if (widget.paystack && widget.flutterwave)
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'flutterwave', label: Text('Flutterwave')),
-                    ButtonSegment(value: 'paystack', label: Text('Paystack')),
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                child: Row(
+                  children: [
+                    Text('Pay with', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(width: 12),
+                    _gatewayChip('flutterwave', 'Flutterwave'),
+                    const SizedBox(width: 8),
+                    _gatewayChip('paystack', 'Paystack'),
                   ],
-                  selected: {_gateway},
-                  onSelectionChanged: (value) => setState(() => _gateway = value.first),
                 ),
               ),
-            _option(
-              icon: Icons.account_balance_wallet_outlined,
-              title: 'Balance',
-              subtitle: 'Insufficient · ${_money.format(widget.available)} available',
-              enabled: false,
-              onTap: null,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _blue,
+                    foregroundColor: Colors.white,
+                    shape: const StadiumBorder(),
+                    textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
+                  onPressed: () => Navigator.pop(
+                    context,
+                    _DirectPayChoice(gateway: _gateway, method: _method),
+                  ),
+                  child: const Text('Pay'),
+                ),
+              ),
             ),
-            _option(
-              icon: Icons.phone_android_rounded,
-              title: 'Mobile Money',
-              subtitle: 'Pay ${_money.format(widget.amount)} to ${widget.recipientName}',
-              enabled: true,
-              onTap: () => Navigator.pop(context, _DirectPayChoice(gateway: _gateway, method: 'momo')),
-            ),
-            _option(
-              icon: Icons.credit_card_rounded,
-              title: 'Card',
-              subtitle: 'Pay ${_money.format(widget.amount)} to ${widget.recipientName}',
-              enabled: true,
-              onTap: () => Navigator.pop(context, _DirectPayChoice(gateway: _gateway, method: 'card')),
-            ),
-            const SizedBox(height: 12),
           ],
         ),
       ),
     );
   }
 
-  Widget _option({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool enabled,
-    required VoidCallback? onTap,
-  }) {
-    return ListTile(
-      enabled: enabled,
-      leading: Icon(icon, color: enabled ? const Color(0xFF111111) : const Color(0xFF9CA3AF)),
-      title: Text(
-        title,
+  Widget _gatewayChip(String value, String label) {
+    final selected = _gateway == value;
+    return GestureDetector(
+      onTap: () => setState(() => _gateway = value),
+      child: Text(
+        label,
         style: TextStyle(
-          fontWeight: FontWeight.w700,
-          color: enabled ? const Color(0xFF111111) : const Color(0xFF9CA3AF),
+          fontSize: 14,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+          color: selected ? _blue : const Color(0xFF888888),
         ),
       ),
-      subtitle: Text(subtitle),
-      onTap: onTap,
+    );
+  }
+
+  Widget _tool({
+    required bool selected,
+    required bool enabled,
+    required String title,
+    required String subtitle,
+    required VoidCallback? onTap,
+    Color subtitleColor = const Color(0xFF888888),
+  }) {
+    final titleColor = enabled ? const Color(0xFF111111) : const Color(0xFFB0B0B0);
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          children: [
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_off,
+              size: 22,
+              color: selected ? _blue : (enabled ? const Color(0xFFCCCCCC) : const Color(0xFFE5E5E5)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: titleColor),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: TextStyle(fontSize: 12, color: enabled ? subtitleColor : const Color(0xFFB0B0B0))),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
