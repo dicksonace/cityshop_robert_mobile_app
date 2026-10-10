@@ -164,19 +164,19 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
           ),
           const SizedBox(height: 16),
           if (flutterwave)
-            _gatewayRadio(
+            _rechargeRow(
               title: 'Flutterwave',
               subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'flutterwave'),
             ),
           if (paystack)
-            _gatewayRadio(
+            _rechargeRow(
               title: 'Paystack',
               subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'paystack'),
             ),
           if (manual)
-            _gatewayRadio(
+            _rechargeRow(
               title: 'Manual',
               subtitle: 'MoMo or bank, then upload proof',
               onTap: () => Navigator.pop(ctx, 'manual'),
@@ -193,7 +193,7 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
     await _onlineRecharge(choice);
   }
 
-  Widget _gatewayRadio({
+  Widget _rechargeRow({
     required String title,
     required String subtitle,
     required VoidCallback onTap,
@@ -202,20 +202,12 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.radio_button_off, size: 22, color: Color(0xFFCCCCCC)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: const TextStyle(fontSize: 12, color: Color(0xFF888888))),
-                ],
-              ),
-            ),
+            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF111111))),
+            const SizedBox(height: 2),
+            Text(subtitle, style: const TextStyle(fontSize: 12, color: Color(0xFF888888))),
           ],
         ),
       ),

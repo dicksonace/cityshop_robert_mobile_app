@@ -286,6 +286,27 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     return false;
   }
 
+  Widget _rechargeChoice({
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF111111))),
+            const SizedBox(height: 2),
+            Text(subtitle, style: const TextStyle(fontSize: 12, color: Color(0xFF888888))),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openRecharge({
     required bool paystackConfigured,
     required bool flutterwaveConfigured,
@@ -323,142 +344,24 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
               'Choose how you want to add funds.',
               style: TextStyle(color: AppColors.textSecondary, height: 1.35),
             ),
-            const SizedBox(height: 16),
-            if (flutterwaveConfigured) ...[
-              Material(
-                color: const Color(0xFFEEF2FF),
-                borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: () => Navigator.pop(ctx, 'flutterwave'),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFA5B4FC)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF4F46E5),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.payments_outlined, color: Colors.white, size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Flutterwave', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                              SizedBox(height: 2),
-                              Text(
-                                'Mobile Money and card',
-                                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+            const SizedBox(height: 8),
+            if (flutterwaveConfigured)
+              _rechargeChoice(
+                title: 'Flutterwave',
+                subtitle: 'Mobile Money and card',
+                onTap: () => Navigator.pop(ctx, 'flutterwave'),
               ),
-              const SizedBox(height: 10),
-            ],
-            if (paystackConfigured) ...[
-              Material(
-                color: const Color(0xFFFFF7ED),
-                borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: () => Navigator.pop(ctx, 'paystack'),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFFDBA74)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.smartphone, color: Colors.white, size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Paystack', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                              SizedBox(height: 2),
-                              Text(
-                                'Mobile Money and card',
-                                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+            if (paystackConfigured)
+              _rechargeChoice(
+                title: 'Paystack',
+                subtitle: 'Mobile Money and card',
+                onTap: () => Navigator.pop(ctx, 'paystack'),
               ),
-              const SizedBox(height: 10),
-            ],
             if (manualEnabled)
-              Material(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: () => Navigator.pop(ctx, 'manual'),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFBAE6FD)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0EA5E9),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.upload_rounded, color: Colors.white, size: 22),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Manual', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                              SizedBox(height: 2),
-                              Text(
-                                'MoMo / bank + upload proof',
-                                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              _rechargeChoice(
+                title: 'Manual',
+                subtitle: 'MoMo or bank, then upload proof',
+                onTap: () => Navigator.pop(ctx, 'manual'),
               ),
           ],
         );
