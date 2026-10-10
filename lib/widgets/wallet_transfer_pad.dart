@@ -9,6 +9,7 @@ import '../api/api_client.dart';
 import '../api/api_config.dart';
 import '../screens/cart/paystack_payment_screen.dart';
 import '../store/app_store.dart';
+import 'payment_option_tile.dart';
 import 'payment_success_screen.dart';
 
 final _money = NumberFormat.currency(locale: 'en_GH', symbol: 'GH₵', decimalDigits: 2);
@@ -705,42 +706,48 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
             ),
             const SizedBox(height: 16),
             const Divider(height: 1, thickness: 0.5, color: Color(0xFFEEEEEE)),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 14, 20, 10),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'Payment tools',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
                 ),
               ),
             ),
-            _tool(
-              selected: false,
-              enabled: covers,
-              title: 'Balance',
-              subtitle: covers
-                  ? 'Available ${_money.format(widget.available)}'
-                  : 'Insufficient · ${_money.format(widget.available)} available',
-              subtitleColor: covers ? const Color(0xFF888888) : const Color(0xFFDC2626),
-              onTap: null,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: [
+                  PaymentOptionTile(
+                    kind: PaymentOptionKind.balance,
+                    enabled: covers,
+                    title: 'Balance',
+                    subtitle: covers
+                        ? 'Available ${_money.format(widget.available)}'
+                        : 'Insufficient · ${_money.format(widget.available)} available',
+                    onTap: null,
+                  ),
+                  if (widget.flutterwave)
+                    PaymentOptionTile(
+                      kind: PaymentOptionKind.flutterwave,
+                      selected: _gateway == 'flutterwave',
+                      title: 'Flutterwave',
+                      subtitle: 'Mobile Money and card',
+                      onTap: () => setState(() => _gateway = 'flutterwave'),
+                    ),
+                  if (widget.paystack)
+                    PaymentOptionTile(
+                      kind: PaymentOptionKind.paystack,
+                      selected: _gateway == 'paystack',
+                      title: 'Paystack',
+                      subtitle: 'Mobile Money and card',
+                      onTap: () => setState(() => _gateway = 'paystack'),
+                    ),
+                ],
+              ),
             ),
-            if (widget.flutterwave)
-              _tool(
-                selected: _gateway == 'flutterwave',
-                enabled: true,
-                title: 'Flutterwave',
-                subtitle: 'Mobile Money and card',
-                onTap: () => setState(() => _gateway = 'flutterwave'),
-              ),
-            if (widget.paystack)
-              _tool(
-                selected: _gateway == 'paystack',
-                enabled: true,
-                title: 'Paystack',
-                subtitle: 'Mobile Money and card',
-                onTap: () => setState(() => _gateway = 'paystack'),
-              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
               child: SizedBox(
@@ -767,43 +774,4 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
     );
   }
 
-  Widget _tool({
-    required bool selected,
-    required bool enabled,
-    required String title,
-    required String subtitle,
-    required VoidCallback? onTap,
-    Color subtitleColor = const Color(0xFF888888),
-  }) {
-    final titleColor = enabled ? const Color(0xFF111111) : const Color(0xFFB0B0B0);
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Row(
-          children: [
-            Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_off,
-              size: 22,
-              color: selected ? _blue : (enabled ? const Color(0xFFCCCCCC) : const Color(0xFFE5E5E5)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: titleColor),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: TextStyle(fontSize: 12, color: enabled ? subtitleColor : const Color(0xFFB0B0B0))),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

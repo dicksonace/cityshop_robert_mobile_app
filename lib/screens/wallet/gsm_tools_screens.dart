@@ -12,6 +12,7 @@ import '../../api/api_config.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_sheet.dart';
+import '../../widgets/payment_option_tile.dart';
 import '../../widgets/chat_link_text.dart';
 import '../../widgets/payment_pin_sheet.dart';
 import '../cart/paystack_payment_screen.dart';
@@ -164,21 +165,24 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
           ),
           const SizedBox(height: 16),
           if (flutterwave)
-            _rechargeRow(
+            PaymentOptionTile(
+              kind: PaymentOptionKind.flutterwave,
               title: 'Flutterwave',
               subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'flutterwave'),
             ),
           if (paystack)
-            _rechargeRow(
+            PaymentOptionTile(
+              kind: PaymentOptionKind.paystack,
               title: 'Paystack',
               subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'paystack'),
             ),
           if (manual)
-            _rechargeRow(
+            PaymentOptionTile(
+              kind: PaymentOptionKind.manual,
               title: 'Manual',
-              subtitle: 'MoMo or bank, then upload proof',
+              subtitle: 'MoMo / bank + upload proof',
               onTap: () => Navigator.pop(ctx, 'manual'),
             ),
         ],
@@ -191,27 +195,6 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
       return;
     }
     await _onlineRecharge(choice);
-  }
-
-  Widget _rechargeRow({
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF111111))),
-            const SizedBox(height: 2),
-            Text(subtitle, style: const TextStyle(fontSize: 12, color: Color(0xFF888888))),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _onlineRecharge(String gateway) async {

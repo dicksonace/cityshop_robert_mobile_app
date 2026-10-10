@@ -9,6 +9,7 @@ import '../../models/models.dart';
 import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_sheet.dart';
+import '../../widgets/payment_option_tile.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/payment_pin_sheet.dart';
 import 'paystack_payment_screen.dart';
@@ -136,28 +137,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (!paystackConfigured && flutterwaveConfigured) return 'flutterwave';
     if (!paystackConfigured && !flutterwaveConfigured) return null;
 
-    return showModalBottomSheet<String>(
+    return showAppSheet<String>(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const ListTile(
-              title: Text('Choose payment gateway', style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.payments_outlined),
-              title: const Text('Flutterwave'),
+      builder: (ctx) => SheetShell(
+        children: [
+          const Text('Pay', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
+          const SizedBox(height: 6),
+          const Text(
+            'Choose how you want to pay.',
+            style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+          ),
+          const SizedBox(height: 16),
+          if (flutterwaveConfigured)
+            PaymentOptionTile(
+              kind: PaymentOptionKind.flutterwave,
+              title: 'Flutterwave',
+              subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'flutterwave'),
             ),
-            ListTile(
-              leading: const Icon(Icons.credit_card),
-              title: const Text('Paystack'),
+          if (paystackConfigured)
+            PaymentOptionTile(
+              kind: PaymentOptionKind.paystack,
+              title: 'Paystack',
+              subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'paystack'),
             ),
-            const SizedBox(height: 8),
-          ],
-        ),
+        ],
       ),
     );
   }

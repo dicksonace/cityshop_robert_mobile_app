@@ -14,6 +14,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/order_receipt_printer.dart';
 import '../../utils/wallet_statement_printer.dart';
 import '../../widgets/app_sheet.dart';
+import '../../widgets/payment_option_tile.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/image_viewer.dart';
 import '../../widgets/momo_widgets.dart';
@@ -286,27 +287,6 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     return false;
   }
 
-  Widget _rechargeChoice({
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF111111))),
-            const SizedBox(height: 2),
-            Text(subtitle, style: const TextStyle(fontSize: 12, color: Color(0xFF888888))),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _openRecharge({
     required bool paystackConfigured,
     required bool flutterwaveConfigured,
@@ -344,23 +324,26 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
               'Choose how you want to add funds.',
               style: TextStyle(color: AppColors.textSecondary, height: 1.35),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             if (flutterwaveConfigured)
-              _rechargeChoice(
+              PaymentOptionTile(
+                kind: PaymentOptionKind.flutterwave,
                 title: 'Flutterwave',
                 subtitle: 'Mobile Money and card',
                 onTap: () => Navigator.pop(ctx, 'flutterwave'),
               ),
             if (paystackConfigured)
-              _rechargeChoice(
+              PaymentOptionTile(
+                kind: PaymentOptionKind.paystack,
                 title: 'Paystack',
                 subtitle: 'Mobile Money and card',
                 onTap: () => Navigator.pop(ctx, 'paystack'),
               ),
             if (manualEnabled)
-              _rechargeChoice(
+              PaymentOptionTile(
+                kind: PaymentOptionKind.manual,
                 title: 'Manual',
-                subtitle: 'MoMo or bank, then upload proof',
+                subtitle: 'MoMo / bank + upload proof',
                 onTap: () => Navigator.pop(ctx, 'manual'),
               ),
           ],
