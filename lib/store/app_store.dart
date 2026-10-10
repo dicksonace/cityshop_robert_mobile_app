@@ -1761,12 +1761,14 @@ class AppStore extends ChangeNotifier {
     required String proofPath,
     String? paymentReference,
     String? userNote,
+    bool gsm = false,
   }) async {
     final res = await _api.postMultipart(
       '/wallet/manual-top-up',
       fields: {
         'amount': amount,
         'network': network,
+        if (gsm) 'gsm': '1',
         if (paymentReference != null && paymentReference.isNotEmpty)
           'payment_reference': paymentReference,
         if (userNote != null && userNote.isNotEmpty) 'user_note': userNote,
@@ -3045,10 +3047,12 @@ class AppStore extends ChangeNotifier {
   Future<Map<String, dynamic>> initializeWalletPaystack({
     required double amount,
     required String method,
+    bool gsm = false,
   }) async {
     final res = await _api.post('/wallet/paystack/initialize', data: {
       'amount': amount,
       'method': method,
+      if (gsm) 'gsm': true,
     });
     return Map<String, dynamic>.from(res.data as Map);
   }
@@ -3071,10 +3075,12 @@ class AppStore extends ChangeNotifier {
   Future<Map<String, dynamic>> initializeWalletFlutterwave({
     required double amount,
     required String method,
+    bool gsm = false,
   }) async {
     final res = await _api.post('/wallet/flutterwave/initialize', data: {
       'amount': amount,
       'method': method,
+      if (gsm) 'gsm': true,
     });
     return Map<String, dynamic>.from(res.data as Map);
   }

@@ -357,7 +357,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                               Text('Flutterwave', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                               SizedBox(height: 2),
                               Text(
-                                'Instant MoMo or card',
+                                'Mobile Money and card',
                                 style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
                               ),
                             ],
@@ -403,7 +403,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                               Text('Paystack', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                               SizedBox(height: 2),
                               Text(
-                                'Instant MoMo or card',
+                                'Mobile Money and card',
                                 style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
                               ),
                             ],
@@ -479,7 +479,6 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
 
   Future<void> _paystackTopUp({String gateway = 'paystack'}) async {
     final amountCtrl = TextEditingController();
-    String method = 'momo';
     var submitting = false;
     final wallet = context.read<AppStore>().wallet;
     final feePercent = wallet?.paystackFeePercent ?? 1.95;
@@ -515,11 +514,11 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                             final pay = gateway == 'flutterwave'
                                 ? await context.read<AppStore>().initializeWalletFlutterwave(
                                       amount: amount,
-                                      method: method,
+                                      method: 'momo',
                                     )
                                 : await context.read<AppStore>().initializeWalletPaystack(
                                       amount: amount,
-                                      method: method,
+                                      method: 'momo',
                                     );
                             if (ctx.mounted) Navigator.pop(ctx, pay);
                           } on ApiException catch (e) {
@@ -556,8 +555,8 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 const SizedBox(height: 6),
                 Text(
                   gateway == 'flutterwave'
-                      ? 'Top up via Flutterwave (MoMo or card).'
-                      : 'Top up via Paystack (MoMo or card).',
+                      ? 'Flutterwave takes Mobile Money and card on the next page.'
+                      : 'Paystack takes Mobile Money and card on the next page.',
                   style: const TextStyle(color: AppColors.textSecondary, height: 1.35),
                 ),
                 const SizedBox(height: 16),
@@ -569,23 +568,6 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                     labelText: 'Amount (GHS)',
                     border: OutlineInputBorder(),
                   ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: method,
-                  decoration: const InputDecoration(
-                    labelText: 'Payment method',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'momo', child: Text('Mobile Money')),
-                    DropdownMenuItem(value: 'card', child: Text('Card')),
-                  ],
-                  onChanged: submitting
-                      ? null
-                      : (v) {
-                          if (v != null) setModal(() => method = v);
-                        },
                 ),
                 if (quote['credit']! >= 5) ...[
                   const SizedBox(height: 12),

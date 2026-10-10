@@ -125,18 +125,6 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
 
   Future<void> _openRecharge() async {
     final store = context.read<AppStore>();
-    try {
-      await store.loadKyc();
-    } on ApiException catch (_) {}
-    if (!mounted) return;
-    if (!(store.user?.canStoreWalletFunds ?? false)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Approve your Ghana Card before you can recharge.')),
-      );
-      context.push('/kyc');
-      return;
-    }
-
     await store.loadWallet();
     if (!mounted) return;
     final wallet = store.wallet;
@@ -159,7 +147,7 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
       return;
     }
     if (!paystack && !flutterwave && manual) {
-      await context.push('/wallet/manual-deposit');
+      await context.push('/wallet/manual-deposit?gsm=1');
       if (mounted) await _load();
       return;
     }
@@ -175,38 +163,22 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
             style: TextStyle(color: AppColors.textSecondary, height: 1.35),
           ),
           const SizedBox(height: 16),
-          if (flutterwave) ...[
-            _rechargeChoice(
-              color: const Color(0xFFEEF2FF),
-              border: const Color(0xFFA5B4FC),
-              iconColor: const Color(0xFF4F46E5),
-              icon: Icons.payments_outlined,
+          if (flutterwave)
+            _gatewayRadio(
               title: 'Flutterwave',
-              subtitle: 'Instant MoMo or card',
+              subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'flutterwave'),
             ),
-            const SizedBox(height: 10),
-          ],
-          if (paystack) ...[
-            _rechargeChoice(
-              color: const Color(0xFFFFF7ED),
-              border: const Color(0xFFFDBA74),
-              iconColor: AppColors.primary,
-              icon: Icons.smartphone,
+          if (paystack)
+            _gatewayRadio(
               title: 'Paystack',
-              subtitle: 'Instant MoMo or card',
+              subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'paystack'),
             ),
-            const SizedBox(height: 10),
-          ],
           if (manual)
-            _rechargeChoice(
-              color: Colors.white,
-              border: const Color(0xFFBAE6FD),
-              iconColor: const Color(0xFF0EA5E9),
-              icon: Icons.upload_rounded,
+            _gatewayRadio(
               title: 'Manual',
-              subtitle: 'MoMo / bank + upload proof',
+              subtitle: 'MoMo or bank, then upload proof',
               onTap: () => Navigator.pop(ctx, 'manual'),
             ),
         ],
@@ -214,56 +186,37 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
     );
     if (!mounted || choice == null) return;
     if (choice == 'manual') {
-      await context.push('/wallet/manual-deposit');
+      await context.push('/wallet/manual-deposit?gsm=1');
       if (mounted) await _load();
       return;
     }
     await _onlineRecharge(choice);
   }
 
-  Widget _rechargeChoice({
-    required Color color,
-    required Color border,
-    required Color iconColor,
-    required IconData icon,
+  Widget _gatewayRadio({
     required String title,
     required String subtitle,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: border),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(color: iconColor, borderRadius: BorderRadius.circular(12)),
-                child: Icon(icon, color: Colors.white, size: 22),
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.radio_button_off, size: 22, color: Color(0xFFCCCCCC)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: const TextStyle(fontSize: 12, color: Color(0xFF888888))),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                    const SizedBox(height: 2),
-                    Text(subtitle, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -271,7 +224,6 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
 
   Future<void> _onlineRecharge(String gateway) async {
     final amountCtrl = TextEditingController();
-    var method = 'momo';
     var submitting = false;
     final wallet = context.read<AppStore>().wallet;
     final feePercent = wallet?.paystackFeePercent ?? 1.95;
@@ -305,8 +257,8 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                           setModal(() => submitting = true);
                           try {
                             final pay = gateway == 'flutterwave'
-                                ? await context.read<AppStore>().initializeWalletFlutterwave(amount: amount, method: method)
-                                : await context.read<AppStore>().initializeWalletPaystack(amount: amount, method: method);
+                                ? await context.read<AppStore>().initializeWalletFlutterwave(amount: amount, method: 'momo', gsm: true)
+                                : await context.read<AppStore>().initializeWalletPaystack(amount: amount, method: 'momo', gsm: true);
                             if (ctx.mounted) Navigator.pop(ctx, pay);
                           } on ApiException catch (e) {
                             setModal(() => submitting = false);
@@ -333,8 +285,8 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                 const SizedBox(height: 6),
                 Text(
                   gateway == 'flutterwave'
-                      ? 'Top up via Flutterwave (MoMo or card).'
-                      : 'Top up via Paystack (MoMo or card).',
+                      ? 'Flutterwave takes Mobile Money and card on the next page.'
+                      : 'Paystack takes Mobile Money and card on the next page.',
                   style: const TextStyle(color: AppColors.textSecondary, height: 1.35),
                 ),
                 const SizedBox(height: 16),
@@ -346,24 +298,6 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                     labelText: 'Amount (GHS)',
                     border: OutlineInputBorder(),
                   ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  key: ValueKey(method),
-                  initialValue: method,
-                  decoration: const InputDecoration(
-                    labelText: 'Payment method',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'momo', child: Text('Mobile Money')),
-                    DropdownMenuItem(value: 'card', child: Text('Card')),
-                  ],
-                  onChanged: submitting
-                      ? null
-                      : (value) {
-                          if (value != null) setModal(() => method = value);
-                        },
                 ),
               ],
             );
@@ -990,10 +924,6 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
     final store = context.read<AppStore>();
     final unit = (service!['price_ghs'] as num?)?.toDouble() ?? 0;
     final price = unit * quantity;
-    if (!(store.user?.canStoreWalletFunds ?? false)) {
-      setState(() => error = 'Approve your Ghana Card (KYC) before placing GSM orders.');
-      return;
-    }
     if (balance < price) {
       setState(() => error = "You don't have enough balance. Please top up your wallet.");
       return;
@@ -1056,7 +986,6 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
     final enough = balance >= price;
-    final kycOk = context.watch<AppStore>().user?.canStoreWalletFunds ?? false;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -1191,11 +1120,6 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                     ),
                   );
                 }),
-                if (!kycOk)
-                  TextButton(
-                    onPressed: () => context.push('/kyc'),
-                    child: const Text('Approve Ghana Card (KYC) before placing GSM orders.'),
-                  ),
                 if (!hasPin)
                   TextButton(
                     onPressed: () => context.push('/profile/payment-pin'),
@@ -1203,7 +1127,7 @@ class _GsmToolOrderScreenState extends State<GsmToolOrderScreen> {
                   ),
                 const SizedBox(height: 16),
                 FilledButton(
-                  onPressed: submitting || !enough || !hasPin || !kycOk ? null : _submit,
+                  onPressed: submitting || !enough || !hasPin ? null : _submit,
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     minimumSize: const Size.fromHeight(48),

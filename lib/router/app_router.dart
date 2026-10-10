@@ -203,6 +203,7 @@ GoRouter createRouter(AppStore store) {
         path: '/wallet/manual-deposit',
         builder: (_, state) => ManualDepositScreen(
           initialNetwork: state.extra is String ? state.extra as String : null,
+          gsm: state.uri.queryParameters['gsm'] == '1',
         ),
       ),
       GoRoute(

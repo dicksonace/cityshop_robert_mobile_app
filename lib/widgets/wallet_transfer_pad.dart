@@ -664,7 +664,6 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
   static const _blue = Color(0xFF1677FF);
 
   late String _gateway = widget.flutterwave ? 'flutterwave' : 'paystack';
-  String _method = 'momo';
 
   @override
   Widget build(BuildContext context) {
@@ -726,32 +725,21 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
               subtitleColor: covers ? const Color(0xFF888888) : const Color(0xFFDC2626),
               onTap: null,
             ),
-            _tool(
-              selected: _method == 'momo',
-              enabled: true,
-              title: 'Mobile Money',
-              subtitle: 'Pay ${_money.format(widget.amount)}',
-              onTap: () => setState(() => _method = 'momo'),
-            ),
-            _tool(
-              selected: _method == 'card',
-              enabled: true,
-              title: 'Card',
-              subtitle: 'Pay ${_money.format(widget.amount)}',
-              onTap: () => setState(() => _method = 'card'),
-            ),
-            if (widget.paystack && widget.flutterwave)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-                child: Row(
-                  children: [
-                    Text('Pay with', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                    const SizedBox(width: 12),
-                    _gatewayChip('flutterwave', 'Flutterwave'),
-                    const SizedBox(width: 8),
-                    _gatewayChip('paystack', 'Paystack'),
-                  ],
-                ),
+            if (widget.flutterwave)
+              _tool(
+                selected: _gateway == 'flutterwave',
+                enabled: true,
+                title: 'Flutterwave',
+                subtitle: 'Mobile Money and card',
+                onTap: () => setState(() => _gateway = 'flutterwave'),
+              ),
+            if (widget.paystack)
+              _tool(
+                selected: _gateway == 'paystack',
+                enabled: true,
+                title: 'Paystack',
+                subtitle: 'Mobile Money and card',
+                onTap: () => setState(() => _gateway = 'paystack'),
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
@@ -767,28 +755,13 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
                   ),
                   onPressed: () => Navigator.pop(
                     context,
-                    _DirectPayChoice(gateway: _gateway, method: _method),
+                    _DirectPayChoice(gateway: _gateway, method: 'momo'),
                   ),
                   child: const Text('Pay'),
                 ),
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _gatewayChip(String value, String label) {
-    final selected = _gateway == value;
-    return GestureDetector(
-      onTap: () => setState(() => _gateway = value),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-          color: selected ? _blue : const Color(0xFF888888),
         ),
       ),
     );

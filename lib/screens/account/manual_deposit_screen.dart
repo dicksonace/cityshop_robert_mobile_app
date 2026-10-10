@@ -18,10 +18,13 @@ final _stamp = DateFormat('d MMM yyyy, h:mm a');
 /// Manual deposit, laid out like the web `/wallet/manual-top-up` page: pick a
 /// network, copy the CityShop number, then submit proof for admin review.
 class ManualDepositScreen extends StatefulWidget {
-  const ManualDepositScreen({super.key, this.initialNetwork});
+  const ManualDepositScreen({super.key, this.initialNetwork, this.gsm = false});
 
   /// Pre-select mtn|telecel|airteltigo when opened from the recharge sheet.
   final String? initialNetwork;
+
+  /// GSM Tools recharge does not require Ghana Card.
+  final bool gsm;
 
   @override
   State<ManualDepositScreen> createState() => _ManualDepositScreenState();
@@ -163,6 +166,7 @@ class _ManualDepositScreenState extends State<ManualDepositScreen> {
         proofPath: file.path,
         paymentReference: refCtrl.text.trim(),
         userNote: noteCtrl.text.trim(),
+        gsm: widget.gsm,
       );
       if (!mounted) return;
       final id = (created['id'] as num?)?.toInt();
