@@ -3015,29 +3015,30 @@ class AppStore extends ChangeNotifier {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> initializeDraftFlutterwave() async {
-    final res = await _api.post('/checkout/flutterwave/initialize');
+  Future<Map<String, dynamic>> initializeDraftFlutterwave({String gateway = 'flutterwave'}) async {
+    final res = await _api.post('/checkout/$gateway/initialize');
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> verifyDraftFlutterwave(String reference) async {
-    final res = await _api.post('/checkout/flutterwave/verify', data: {
+  Future<Map<String, dynamic>> verifyDraftFlutterwave(String reference, {String gateway = 'flutterwave'}) async {
+    final res = await _api.post('/checkout/$gateway/verify', data: {
       'reference': reference,
     });
     await loadCart();
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> initializeFlutterwave(int checkoutId) async {
-    final res = await _api.post('/checkouts/$checkoutId/pay/flutterwave/initialize');
+  Future<Map<String, dynamic>> initializeFlutterwave(int checkoutId, {String gateway = 'flutterwave'}) async {
+    final res = await _api.post('/checkouts/$checkoutId/pay/$gateway/initialize');
     return Map<String, dynamic>.from(res.data as Map);
   }
 
   Future<Map<String, dynamic>> verifyFlutterwave({
     required int checkoutId,
     required String reference,
+    String gateway = 'flutterwave',
   }) async {
-    final res = await _api.post('/checkouts/$checkoutId/pay/flutterwave/verify', data: {
+    final res = await _api.post('/checkouts/$checkoutId/pay/$gateway/verify', data: {
       'reference': reference,
     });
     await loadCart();
@@ -3076,8 +3077,9 @@ class AppStore extends ChangeNotifier {
     required double amount,
     required String method,
     bool gsm = false,
+    String gateway = 'flutterwave',
   }) async {
-    final res = await _api.post('/wallet/flutterwave/initialize', data: {
+    final res = await _api.post('/wallet/$gateway/initialize', data: {
       'amount': amount,
       'method': method,
       if (gsm) 'gsm': true,
@@ -3085,8 +3087,8 @@ class AppStore extends ChangeNotifier {
     return Map<String, dynamic>.from(res.data as Map);
   }
 
-  Future<Map<String, dynamic>> verifyWalletFlutterwave(String reference) async {
-    final res = await _api.post('/wallet/flutterwave/verify', data: {
+  Future<Map<String, dynamic>> verifyWalletFlutterwave(String reference, {String gateway = 'flutterwave'}) async {
+    final res = await _api.post('/wallet/$gateway/verify', data: {
       'reference': reference,
     });
     final body = Map<String, dynamic>.from(res.data as Map);

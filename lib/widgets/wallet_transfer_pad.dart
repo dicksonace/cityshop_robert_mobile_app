@@ -132,7 +132,8 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
     final wallet = context.read<AppStore>().wallet;
     final paystack = wallet?.paystackConfigured == true;
     final flutterwave = wallet?.flutterwaveConfigured == true;
-    if (!paystack && !flutterwave) {
+    final korapay = wallet?.korapayConfigured == true;
+    if (!paystack && !flutterwave && !korapay) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Card and Mobile Money are not available right now')),
       );
@@ -151,6 +152,7 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
         available: available,
         paystack: paystack,
         flutterwave: flutterwave,
+        korapay: korapay,
       ),
     );
     if (choice == null || !mounted) return;
@@ -649,6 +651,7 @@ class _DirectPaySheet extends StatefulWidget {
     required this.available,
     required this.paystack,
     required this.flutterwave,
+    this.korapay = false,
   });
 
   final String recipientName;
@@ -656,6 +659,7 @@ class _DirectPaySheet extends StatefulWidget {
   final double available;
   final bool paystack;
   final bool flutterwave;
+  final bool korapay;
 
   @override
   State<_DirectPaySheet> createState() => _DirectPaySheetState();
@@ -664,7 +668,11 @@ class _DirectPaySheet extends StatefulWidget {
 class _DirectPaySheetState extends State<_DirectPaySheet> {
   static const _blue = Color(0xFF1677FF);
 
-  late String _gateway = widget.flutterwave ? 'flutterwave' : 'paystack';
+  late String _gateway = widget.flutterwave
+      ? 'flutterwave'
+      : widget.korapay
+          ? 'korapay'
+          : 'paystack';
 
   @override
   Widget build(BuildContext context) {
@@ -736,6 +744,14 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
                       title: 'Flutterwave',
                       subtitle: 'Mobile Money and card',
                       onTap: () => setState(() => _gateway = 'flutterwave'),
+                    ),
+                  if (widget.korapay)
+                    PaymentOptionTile(
+                      kind: PaymentOptionKind.korapay,
+                      selected: _gateway == 'korapay',
+                      title: 'Korapay',
+                      subtitle: 'Mobile Money and card',
+                      onTap: () => setState(() => _gateway = 'korapay'),
                     ),
                   if (widget.paystack)
                     PaymentOptionTile(

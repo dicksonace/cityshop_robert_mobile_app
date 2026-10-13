@@ -131,23 +131,25 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
     final wallet = store.wallet;
     final paystack = wallet?.paystackConfigured == true;
     final flutterwave = wallet?.flutterwaveConfigured == true;
+    final korapay = wallet?.korapayConfigured == true;
     final manual = wallet?.manualTopUpEnabled == true;
-    if (!paystack && !flutterwave && !manual) {
+    final gateways = [
+      if (flutterwave) 'flutterwave',
+      if (korapay) 'korapay',
+      if (paystack) 'paystack',
+    ];
+    if (gateways.isEmpty && !manual) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Recharge is unavailable right now.')),
       );
       return;
     }
 
-    if (paystack && !flutterwave && !manual) {
-      await _onlineRecharge('paystack');
+    if (gateways.length == 1 && !manual) {
+      await _onlineRecharge(gateways.first);
       return;
     }
-    if (!paystack && flutterwave && !manual) {
-      await _onlineRecharge('flutterwave');
-      return;
-    }
-    if (!paystack && !flutterwave && manual) {
+    if (gateways.isEmpty && manual) {
       await context.push('/wallet/manual-deposit?gsm=1');
       if (mounted) await _load();
       return;
@@ -170,6 +172,13 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
               title: 'Flutterwave',
               subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'flutterwave'),
+            ),
+          if (korapay)
+            PaymentOptionTile(
+              kind: PaymentOptionKind.korapay,
+              title: 'Korapay',
+              subtitle: 'Mobile Money and card',
+              onTap: () => Navigator.pop(ctx, 'korapay'),
             ),
           if (paystack)
             PaymentOptionTile(
@@ -231,8 +240,8 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
                           }
                           setModal(() => submitting = true);
                           try {
-                            final pay = gateway == 'flutterwave'
-                                ? await context.read<AppStore>().initializeWalletFlutterwave(amount: amount, method: 'momo', gsm: true)
+                            final pay = gateway != 'paystack'
+                                ? await context.read<AppStore>().initializeWalletFlutterwave(amount: amount, method: 'momo', gsm: true, gateway: gateway)
                                 : await context.read<AppStore>().initializeWalletPaystack(amount: amount, method: 'momo', gsm: true);
                             if (ctx.mounted) Navigator.pop(ctx, pay);
                           } on ApiException catch (e) {
@@ -254,14 +263,12 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
               ),
               children: [
                 Text(
-                  gateway == 'flutterwave' ? 'Flutterwave recharge' : 'Paystack recharge',
+                  '${paymentGatewayLabel(gateway)} recharge',
                   style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  gateway == 'flutterwave'
-                      ? 'Flutterwave takes Mobile Money and card on the next page.'
-                      : 'Paystack takes Mobile Money and card on the next page.',
+                  '${paymentGatewayLabel(gateway)} takes Mobile Money and card on the next page.',
                   style: const TextStyle(color: AppColors.textSecondary, height: 1.35),
                 ),
                 const SizedBox(height: 16),
@@ -296,8 +303,8 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
           authorizationUrl: url,
           reference: reference,
           onVerify: (ref) async {
-            if (gateway == 'flutterwave') {
-              await store.verifyWalletFlutterwave(ref);
+            if (gateway != 'paystack') {
+              await store.verifyWalletFlutterwave(ref, gateway: gateway);
             } else {
               await store.verifyWalletPaystack(ref);
             }

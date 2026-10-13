@@ -132,10 +132,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<String?> _pickOnlineGateway({
     required bool paystackConfigured,
     required bool flutterwaveConfigured,
+    bool korapayConfigured = false,
   }) async {
-    if (paystackConfigured && !flutterwaveConfigured) return 'paystack';
-    if (!paystackConfigured && flutterwaveConfigured) return 'flutterwave';
-    if (!paystackConfigured && !flutterwaveConfigured) return null;
+    final gateways = [
+      if (flutterwaveConfigured) 'flutterwave',
+      if (korapayConfigured) 'korapay',
+      if (paystackConfigured) 'paystack',
+    ];
+    if (gateways.isEmpty) return null;
+    if (gateways.length == 1) return gateways.first;
 
     return showAppSheet<String>(
       context: context,
@@ -154,6 +159,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               title: 'Flutterwave',
               subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'flutterwave'),
+            ),
+          if (korapayConfigured)
+            PaymentOptionTile(
+              kind: PaymentOptionKind.korapay,
+              title: 'Korapay',
+              subtitle: 'Mobile Money and card',
+              onTap: () => Navigator.pop(ctx, 'korapay'),
             ),
           if (paystackConfigured)
             PaymentOptionTile(
@@ -340,18 +352,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           next == 'paystack' &&
           (preview?.onlinePaymentConfigured ??
               (result['paystack_configured'] == true ||
-                  result['flutterwave_configured'] == true))) {
+                  result['flutterwave_configured'] == true ||
+                  result['korapay_configured'] == true))) {
         try {
           final gateway = await _pickOnlineGateway(
             paystackConfigured: preview?.paystackConfigured ??
                 result['paystack_configured'] == true,
             flutterwaveConfigured: preview?.flutterwaveConfigured ??
                 result['flutterwave_configured'] == true,
+            korapayConfigured: preview?.korapayConfigured ??
+                result['korapay_configured'] == true,
           );
           if (!mounted || gateway == null) return;
 
-          final pay = gateway == 'flutterwave'
-              ? await store.initializeDraftFlutterwave()
+          final pay = gateway != 'paystack'
+              ? await store.initializeDraftFlutterwave(gateway: gateway)
               : await store.initializeDraftPaystack();
           if (!mounted) return;
           final url = pay['authorization_url'] as String?;
@@ -362,8 +377,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 builder: (_) => PaystackPaymentScreen(
                   authorizationUrl: url,
                   reference: reference,
-                  onVerify: (ref) => gateway == 'flutterwave'
-                      ? store.verifyDraftFlutterwave(ref)
+                  onVerify: (ref) => gateway != 'paystack'
+                      ? store.verifyDraftFlutterwave(ref, gateway: gateway)
                       : store.verifyDraftPaystack(ref),
                 ),
               ),
@@ -410,11 +425,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           final gateway = await _pickOnlineGateway(
             paystackConfigured: preview?.paystackConfigured ?? false,
             flutterwaveConfigured: preview?.flutterwaveConfigured ?? false,
+            korapayConfigured: preview?.korapayConfigured ?? false,
           );
           if (!mounted || gateway == null) return;
 
-          final pay = gateway == 'flutterwave'
-              ? await store.initializeFlutterwave(checkoutId)
+          final pay = gateway != 'paystack'
+              ? await store.initializeFlutterwave(checkoutId, gateway: gateway)
               : await store.initializePaystack(checkoutId);
           if (!mounted) return;
           final url = pay['authorization_url'] as String?;
@@ -425,10 +441,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 builder: (_) => PaystackPaymentScreen(
                   authorizationUrl: url,
                   reference: reference,
-                  onVerify: (ref) => gateway == 'flutterwave'
+                  onVerify: (ref) => gateway != 'paystack'
                       ? store.verifyFlutterwave(
                           checkoutId: checkoutId,
                           reference: ref,
+                          gateway: gateway,
                         )
                       : store.verifyPaystack(
                           checkoutId: checkoutId,
@@ -612,7 +629,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           icon: Icons.credit_card_rounded,
           title: 'Mobile Money / Card',
           subtitle: p.onlinePaymentConfigured
-              ? 'Paystack or Flutterwave'
+              ? 'Paystack, Flutterwave or Korapay'
               : 'Unavailable right now',
           selected: paymentMethod == 'momo' && _hasMarketplacePay,
           warn: !p.onlinePaymentConfigured,

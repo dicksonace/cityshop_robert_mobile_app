@@ -290,19 +290,21 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
   Future<void> _openRecharge({
     required bool paystackConfigured,
     required bool flutterwaveConfigured,
+    bool korapayConfigured = false,
     required bool manualEnabled,
   }) async {
-    final onlineConfigured = paystackConfigured || flutterwaveConfigured;
+    final gateways = [
+      if (flutterwaveConfigured) 'flutterwave',
+      if (korapayConfigured) 'korapay',
+      if (paystackConfigured) 'paystack',
+    ];
+    final onlineConfigured = gateways.isNotEmpty;
     if (!onlineConfigured && !manualEnabled) return;
     if (!await _ensureKycToStoreFunds()) return;
 
     // Only one path available — skip the chooser.
-    if (paystackConfigured && !flutterwaveConfigured && !manualEnabled) {
-      await _onlineTopUp(gateway: 'paystack');
-      return;
-    }
-    if (!paystackConfigured && flutterwaveConfigured && !manualEnabled) {
-      await _onlineTopUp(gateway: 'flutterwave');
+    if (gateways.length == 1 && !manualEnabled) {
+      await _onlineTopUp(gateway: gateways.first);
       return;
     }
     if (!onlineConfigured && manualEnabled) {
@@ -332,6 +334,13 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 subtitle: 'Mobile Money and card',
                 onTap: () => Navigator.pop(ctx, 'flutterwave'),
               ),
+            if (korapayConfigured)
+              PaymentOptionTile(
+                kind: PaymentOptionKind.korapay,
+                title: 'Korapay',
+                subtitle: 'Mobile Money and card',
+                onTap: () => Navigator.pop(ctx, 'korapay'),
+              ),
             if (paystackConfigured)
               PaymentOptionTile(
                 kind: PaymentOptionKind.paystack,
@@ -354,7 +363,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     if (!mounted || choice == null) return;
     if (choice == 'manual') {
       await _openManualRechargePreview();
-    } else if (choice == 'paystack' || choice == 'flutterwave') {
+    } else if (gateways.contains(choice)) {
       await _onlineTopUp(gateway: choice);
     }
   }
@@ -397,10 +406,11 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                           }
                           setModal(() => submitting = true);
                           try {
-                            final pay = gateway == 'flutterwave'
+                            final pay = gateway != 'paystack'
                                 ? await context.read<AppStore>().initializeWalletFlutterwave(
                                       amount: amount,
                                       method: 'momo',
+                                      gateway: gateway,
                                     )
                                 : await context.read<AppStore>().initializeWalletPaystack(
                                       amount: amount,
@@ -435,14 +445,12 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
               ),
               children: [
                 Text(
-                  gateway == 'flutterwave' ? 'Flutterwave recharge' : 'Paystack recharge',
+                  '${paymentGatewayLabel(gateway)} recharge',
                   style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  gateway == 'flutterwave'
-                      ? 'Flutterwave takes Mobile Money and card on the next page.'
-                      : 'Paystack takes Mobile Money and card on the next page.',
+                  '${paymentGatewayLabel(gateway)} takes Mobile Money and card on the next page.',
                   style: const TextStyle(color: AppColors.textSecondary, height: 1.35),
                 ),
                 const SizedBox(height: 16),
@@ -491,7 +499,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     final reference = started['reference'] as String? ?? '';
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not start ${gateway == 'flutterwave' ? 'Flutterwave' : 'Paystack'} payment')),
+        SnackBar(content: Text('Could not start ${paymentGatewayLabel(gateway)} payment')),
       );
       return;
     }
@@ -503,8 +511,8 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
           authorizationUrl: url,
           reference: reference,
           onVerify: (ref) async {
-            if (gateway == 'flutterwave') {
-              await store.verifyWalletFlutterwave(ref);
+            if (gateway != 'paystack') {
+              await store.verifyWalletFlutterwave(ref, gateway: gateway);
             } else {
               await store.verifyWalletPaystack(ref);
             }
@@ -692,7 +700,9 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
         wallet?.paystackConfigured == true || funding?['paystack_configured'] == true;
     final flutterwaveConfigured =
         wallet?.flutterwaveConfigured == true || funding?['flutterwave_configured'] == true;
-    final onlineConfigured = paystackConfigured || flutterwaveConfigured;
+    final korapayConfigured =
+        wallet?.korapayConfigured == true || funding?['korapay_configured'] == true;
+    final onlineConfigured = paystackConfigured || flutterwaveConfigured || korapayConfigured;
 
     return RefreshIndicator(
       onRefresh: refreshNow,
@@ -754,6 +764,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                       ? () => _openRecharge(
                             paystackConfigured: paystackConfigured,
                             flutterwaveConfigured: flutterwaveConfigured,
+                            korapayConfigured: korapayConfigured,
                             manualEnabled: enabled,
                           )
                       : null,

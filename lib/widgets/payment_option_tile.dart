@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-enum PaymentOptionKind { flutterwave, paystack, manual, balance }
+enum PaymentOptionKind { flutterwave, korapay, paystack, manual, balance }
 
 /// Shared payment row used on recharge, scan to pay, and checkout.
 class PaymentOptionTile extends StatelessWidget {
@@ -119,6 +119,13 @@ _OptionColors _colors(PaymentOptionKind kind, bool enabled) {
         icon: Color(0xFF4F46E5),
         iconData: Icons.payments_outlined,
       );
+    case PaymentOptionKind.korapay:
+      return const _OptionColors(
+        background: Color(0xFFECFDF5),
+        border: Color(0xFF6EE7B7),
+        icon: Color(0xFF059669),
+        iconData: Icons.phone_android_rounded,
+      );
     case PaymentOptionKind.paystack:
       return const _OptionColors(
         background: Color(0xFFFFF7ED),
@@ -140,5 +147,16 @@ _OptionColors _colors(PaymentOptionKind kind, bool enabled) {
         icon: AppColors.primary,
         iconData: Icons.account_balance_wallet_outlined,
       );
+  }
+}
+
+String paymentGatewayLabel(String gateway) {
+  switch (gateway) {
+    case 'flutterwave':
+      return 'Flutterwave';
+    case 'korapay':
+      return 'Korapay';
+    default:
+      return 'Paystack';
   }
 }
