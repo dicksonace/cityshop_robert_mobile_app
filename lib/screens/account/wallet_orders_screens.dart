@@ -291,11 +291,13 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
     required bool paystackConfigured,
     required bool flutterwaveConfigured,
     bool korapayConfigured = false,
+    bool junipayConfigured = false,
     required bool manualEnabled,
   }) async {
     final gateways = [
       if (flutterwaveConfigured) 'flutterwave',
       if (korapayConfigured) 'korapay',
+      if (junipayConfigured) 'junipay',
       if (paystackConfigured) 'paystack',
     ];
     final onlineConfigured = gateways.isNotEmpty;
@@ -340,6 +342,13 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                 title: 'Korapay',
                 subtitle: 'Mobile Money and card',
                 onTap: () => Navigator.pop(ctx, 'korapay'),
+              ),
+            if (junipayConfigured)
+              PaymentOptionTile(
+                kind: PaymentOptionKind.junipay,
+                title: 'Junipay',
+                subtitle: 'Mobile Money prompt',
+                onTap: () => Navigator.pop(ctx, 'junipay'),
               ),
             if (paystackConfigured)
               PaymentOptionTile(
@@ -702,7 +711,10 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
         wallet?.flutterwaveConfigured == true || funding?['flutterwave_configured'] == true;
     final korapayConfigured =
         wallet?.korapayConfigured == true || funding?['korapay_configured'] == true;
-    final onlineConfigured = paystackConfigured || flutterwaveConfigured || korapayConfigured;
+    final junipayConfigured =
+        wallet?.junipayConfigured == true || funding?['junipay_configured'] == true;
+    final onlineConfigured =
+        paystackConfigured || flutterwaveConfigured || korapayConfigured || junipayConfigured;
 
     return RefreshIndicator(
       onRefresh: refreshNow,
@@ -765,6 +777,7 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
                             paystackConfigured: paystackConfigured,
                             flutterwaveConfigured: flutterwaveConfigured,
                             korapayConfigured: korapayConfigured,
+                            junipayConfigured: junipayConfigured,
                             manualEnabled: enabled,
                           )
                       : null,

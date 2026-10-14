@@ -698,6 +698,7 @@ class WalletInfo {
     this.paystackConfigured = false,
     this.flutterwaveConfigured = false,
     this.korapayConfigured = false,
+    this.junipayConfigured = false,
     this.manualTopUpEnabled = false,
     this.paystackFeePercent = 1.95,
     this.paystackFeeFlat = 0,
@@ -711,6 +712,7 @@ class WalletInfo {
   final bool paystackConfigured;
   final bool flutterwaveConfigured;
   final bool korapayConfigured;
+  final bool junipayConfigured;
   final bool manualTopUpEnabled;
   final double paystackFeePercent;
   final double paystackFeeFlat;
@@ -729,6 +731,7 @@ class WalletInfo {
       paystackConfigured: paystackConfigured,
       flutterwaveConfigured: flutterwaveConfigured,
       korapayConfigured: korapayConfigured,
+      junipayConfigured: junipayConfigured,
       manualTopUpEnabled: manualTopUpEnabled,
       paystackFeePercent: paystackFeePercent,
       paystackFeeFlat: paystackFeeFlat,
@@ -745,6 +748,7 @@ class WalletInfo {
       paystackConfigured: json['paystack_configured'] as bool? ?? false,
       flutterwaveConfigured: json['flutterwave_configured'] as bool? ?? false,
       korapayConfigured: json['korapay_configured'] as bool? ?? false,
+      junipayConfigured: json['junipay_configured'] as bool? ?? false,
       manualTopUpEnabled: json['manual_top_up_enabled'] as bool? ?? false,
       paystackFeePercent: json['paystack_fee'] is Map
           ? (json['paystack_fee']['percent'] as num?)?.toDouble() ?? 1.95
@@ -2215,6 +2219,7 @@ class CheckoutPreview {
     required this.paystackConfigured,
     this.flutterwaveConfigured = false,
     this.korapayConfigured = false,
+    this.junipayConfigured = false,
     this.sellerGroups = const [],
   });
 
@@ -2226,9 +2231,10 @@ class CheckoutPreview {
   final bool paystackConfigured;
   final bool flutterwaveConfigured;
   final bool korapayConfigured;
+  final bool junipayConfigured;
   final List<Map<String, dynamic>> sellerGroups;
 
-  bool get onlinePaymentConfigured => paystackConfigured || flutterwaveConfigured || korapayConfigured;
+  bool get onlinePaymentConfigured => paystackConfigured || flutterwaveConfigured || korapayConfigured || junipayConfigured;
 
   factory CheckoutPreview.fromJson(Map<String, dynamic> json) {
     final addresses = json['addresses'];
@@ -2244,6 +2250,7 @@ class CheckoutPreview {
       paystackConfigured: json['paystack_configured'] as bool? ?? false,
       flutterwaveConfigured: json['flutterwave_configured'] as bool? ?? false,
       korapayConfigured: json['korapay_configured'] as bool? ?? false,
+      junipayConfigured: json['junipay_configured'] as bool? ?? false,
       addresses: addresses is List
           ? addresses
               .whereType<Map>()

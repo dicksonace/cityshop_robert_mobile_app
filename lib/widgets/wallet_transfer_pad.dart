@@ -133,7 +133,8 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
     final paystack = wallet?.paystackConfigured == true;
     final flutterwave = wallet?.flutterwaveConfigured == true;
     final korapay = wallet?.korapayConfigured == true;
-    if (!paystack && !flutterwave && !korapay) {
+    final junipay = wallet?.junipayConfigured == true;
+    if (!paystack && !flutterwave && !korapay && !junipay) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Card and Mobile Money are not available right now')),
       );
@@ -153,6 +154,7 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
         paystack: paystack,
         flutterwave: flutterwave,
         korapay: korapay,
+        junipay: junipay,
       ),
     );
     if (choice == null || !mounted) return;
@@ -652,6 +654,7 @@ class _DirectPaySheet extends StatefulWidget {
     required this.paystack,
     required this.flutterwave,
     this.korapay = false,
+    this.junipay = false,
   });
 
   final String recipientName;
@@ -660,6 +663,7 @@ class _DirectPaySheet extends StatefulWidget {
   final bool paystack;
   final bool flutterwave;
   final bool korapay;
+  final bool junipay;
 
   @override
   State<_DirectPaySheet> createState() => _DirectPaySheetState();
@@ -672,7 +676,9 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
       ? 'flutterwave'
       : widget.korapay
           ? 'korapay'
-          : 'paystack';
+          : widget.junipay
+              ? 'junipay'
+              : 'paystack';
 
   @override
   Widget build(BuildContext context) {
@@ -752,6 +758,14 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
                       title: 'Korapay',
                       subtitle: 'Mobile Money and card',
                       onTap: () => setState(() => _gateway = 'korapay'),
+                    ),
+                  if (widget.junipay)
+                    PaymentOptionTile(
+                      kind: PaymentOptionKind.junipay,
+                      selected: _gateway == 'junipay',
+                      title: 'Junipay',
+                      subtitle: 'Mobile Money prompt',
+                      onTap: () => setState(() => _gateway = 'junipay'),
                     ),
                   if (widget.paystack)
                     PaymentOptionTile(

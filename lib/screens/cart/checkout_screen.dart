@@ -133,10 +133,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     required bool paystackConfigured,
     required bool flutterwaveConfigured,
     bool korapayConfigured = false,
+    bool junipayConfigured = false,
   }) async {
     final gateways = [
       if (flutterwaveConfigured) 'flutterwave',
       if (korapayConfigured) 'korapay',
+      if (junipayConfigured) 'junipay',
       if (paystackConfigured) 'paystack',
     ];
     if (gateways.isEmpty) return null;
@@ -166,6 +168,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               title: 'Korapay',
               subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'korapay'),
+            ),
+          if (junipayConfigured)
+            PaymentOptionTile(
+              kind: PaymentOptionKind.junipay,
+              title: 'Junipay',
+              subtitle: 'Mobile Money prompt',
+              onTap: () => Navigator.pop(ctx, 'junipay'),
             ),
           if (paystackConfigured)
             PaymentOptionTile(
@@ -353,7 +362,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           (preview?.onlinePaymentConfigured ??
               (result['paystack_configured'] == true ||
                   result['flutterwave_configured'] == true ||
-                  result['korapay_configured'] == true))) {
+                  result['korapay_configured'] == true ||
+                  result['junipay_configured'] == true))) {
         try {
           final gateway = await _pickOnlineGateway(
             paystackConfigured: preview?.paystackConfigured ??
@@ -362,6 +372,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 result['flutterwave_configured'] == true,
             korapayConfigured: preview?.korapayConfigured ??
                 result['korapay_configured'] == true,
+            junipayConfigured: preview?.junipayConfigured ??
+                result['junipay_configured'] == true,
           );
           if (!mounted || gateway == null) return;
 
@@ -426,6 +438,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             paystackConfigured: preview?.paystackConfigured ?? false,
             flutterwaveConfigured: preview?.flutterwaveConfigured ?? false,
             korapayConfigured: preview?.korapayConfigured ?? false,
+            junipayConfigured: preview?.junipayConfigured ?? false,
           );
           if (!mounted || gateway == null) return;
 
@@ -629,7 +642,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           icon: Icons.credit_card_rounded,
           title: 'Mobile Money / Card',
           subtitle: p.onlinePaymentConfigured
-              ? 'Paystack, Flutterwave or Korapay'
+              ? 'Mobile Money or card'
               : 'Unavailable right now',
           selected: paymentMethod == 'momo' && _hasMarketplacePay,
           warn: !p.onlinePaymentConfigured,
