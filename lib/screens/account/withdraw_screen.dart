@@ -289,9 +289,11 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  overview.autoPaystack
-                      ? 'Paystack will send this payout automatically.'
-                      : 'Usually processed within 15 minutes and sometimes instant.',
+                  overview.autoJunipay
+                      ? 'Junipay sends this payout automatically. It completes when Junipay confirms it. If it does not go through, it stays pending for review.'
+                      : overview.autoPaystack
+                          ? 'Paystack will send this payout automatically.'
+                          : 'Usually processed within 15 minutes and sometimes instant.',
                   style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],

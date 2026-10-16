@@ -956,6 +956,7 @@ class WithdrawalOverview {
     this.feeMode = 'flat',
     this.feePercent = 0,
     this.autoPaystack = false,
+    this.autoJunipay = false,
     this.bankTiers = const [],
   });
 
@@ -973,6 +974,7 @@ class WithdrawalOverview {
   final String feeMode;
   final double feePercent;
   final bool autoPaystack;
+  final bool autoJunipay;
   final List<BankFeeTier> bankTiers;
 
   bool get canWithdraw => availableBalance >= minimum;
@@ -1111,6 +1113,7 @@ class WithdrawalOverview {
       feeMode: fee['mode'] as String? ?? 'flat',
       feePercent: (fee['percent'] as num?)?.toDouble() ?? 0,
       autoPaystack: fee['auto_paystack'] == true,
+      autoJunipay: fee['auto_junipay'] == true,
       bankTiers: bankTiers,
     );
   }
