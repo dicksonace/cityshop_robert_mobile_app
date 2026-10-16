@@ -672,12 +672,12 @@ class _DirectPaySheet extends StatefulWidget {
 class _DirectPaySheetState extends State<_DirectPaySheet> {
   static const _blue = Color(0xFF1677FF);
 
-  late String _gateway = widget.flutterwave
-      ? 'flutterwave'
-      : widget.korapay
-          ? 'korapay'
-          : widget.junipay
-              ? 'junipay'
+  late String _gateway = widget.junipay
+      ? 'junipay'
+      : widget.flutterwave
+          ? 'flutterwave'
+          : widget.korapay
+              ? 'korapay'
               : 'paystack';
 
   @override
@@ -743,6 +743,14 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
                         : 'Insufficient · ${_money.format(widget.available)} available',
                     onTap: null,
                   ),
+                  if (widget.junipay)
+                    PaymentOptionTile(
+                      kind: PaymentOptionKind.junipay,
+                      selected: _gateway == 'junipay',
+                      title: 'Junipay',
+                      subtitle: 'Mobile Money prompt',
+                      onTap: () => setState(() => _gateway = 'junipay'),
+                    ),
                   if (widget.flutterwave)
                     PaymentOptionTile(
                       kind: PaymentOptionKind.flutterwave,
@@ -758,14 +766,6 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
                       title: 'Korapay',
                       subtitle: 'Mobile Money and card',
                       onTap: () => setState(() => _gateway = 'korapay'),
-                    ),
-                  if (widget.junipay)
-                    PaymentOptionTile(
-                      kind: PaymentOptionKind.junipay,
-                      selected: _gateway == 'junipay',
-                      title: 'Junipay',
-                      subtitle: 'Mobile Money prompt',
-                      onTap: () => setState(() => _gateway = 'junipay'),
                     ),
                   if (widget.paystack)
                     PaymentOptionTile(

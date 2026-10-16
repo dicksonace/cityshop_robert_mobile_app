@@ -135,9 +135,9 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
     final junipay = wallet?.junipayConfigured == true;
     final manual = wallet?.manualTopUpEnabled == true;
     final gateways = [
+      if (junipay) 'junipay',
       if (flutterwave) 'flutterwave',
       if (korapay) 'korapay',
-      if (junipay) 'junipay',
       if (paystack) 'paystack',
     ];
     if (gateways.isEmpty && !manual) {
@@ -168,6 +168,13 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
             style: TextStyle(color: AppColors.textSecondary, height: 1.35),
           ),
           const SizedBox(height: 16),
+          if (junipay)
+            PaymentOptionTile(
+              kind: PaymentOptionKind.junipay,
+              title: 'Junipay',
+              subtitle: 'Mobile Money prompt',
+              onTap: () => Navigator.pop(ctx, 'junipay'),
+            ),
           if (flutterwave)
             PaymentOptionTile(
               kind: PaymentOptionKind.flutterwave,
@@ -181,13 +188,6 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
               title: 'Korapay',
               subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'korapay'),
-            ),
-          if (junipay)
-            PaymentOptionTile(
-              kind: PaymentOptionKind.junipay,
-              title: 'Junipay',
-              subtitle: 'Mobile Money prompt',
-              onTap: () => Navigator.pop(ctx, 'junipay'),
             ),
           if (paystack)
             PaymentOptionTile(

@@ -136,9 +136,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     bool junipayConfigured = false,
   }) async {
     final gateways = [
+      if (junipayConfigured) 'junipay',
       if (flutterwaveConfigured) 'flutterwave',
       if (korapayConfigured) 'korapay',
-      if (junipayConfigured) 'junipay',
       if (paystackConfigured) 'paystack',
     ];
     if (gateways.isEmpty) return null;
@@ -155,6 +155,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             style: TextStyle(color: AppColors.textSecondary, height: 1.35),
           ),
           const SizedBox(height: 16),
+          if (junipayConfigured)
+            PaymentOptionTile(
+              kind: PaymentOptionKind.junipay,
+              title: 'Junipay',
+              subtitle: 'Mobile Money prompt',
+              onTap: () => Navigator.pop(ctx, 'junipay'),
+            ),
           if (flutterwaveConfigured)
             PaymentOptionTile(
               kind: PaymentOptionKind.flutterwave,
@@ -168,13 +175,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               title: 'Korapay',
               subtitle: 'Mobile Money and card',
               onTap: () => Navigator.pop(ctx, 'korapay'),
-            ),
-          if (junipayConfigured)
-            PaymentOptionTile(
-              kind: PaymentOptionKind.junipay,
-              title: 'Junipay',
-              subtitle: 'Mobile Money prompt',
-              onTap: () => Navigator.pop(ctx, 'junipay'),
             ),
           if (paystackConfigured)
             PaymentOptionTile(
