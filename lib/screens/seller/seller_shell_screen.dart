@@ -310,9 +310,30 @@ class _SellerShellScreenState extends State<SellerShellScreen> with AutoRefreshT
           onOpenOrder: (id) => context.push('/seller/orders/$id'),
           onOpenProducts: () => setState(() => _tab = 2),
           onOpenWallet: () => setState(() => _tab = 3),
+          onOpenStoreWeb: _openStoreOnWeb,
         );
     }
   }
+}
+
+const _cardShadow = [
+  BoxShadow(color: Color(0x0F0F172A), blurRadius: 18, offset: Offset(0, 6)),
+];
+
+BoxDecoration _cardDecoration({double radius = 18}) => BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(radius),
+      boxShadow: _cardShadow,
+    );
+
+Color _statusColor(String status) {
+  final s = status.toLowerCase();
+  if (s.contains('cancel') || s.contains('fail') || s.contains('refund')) return AppColors.danger;
+  if (s.contains('deliver') || s.contains('complete')) return AppColors.emerald;
+  if (s.contains('ship') || s.contains('transit')) return const Color(0xFF0EA5E9);
+  if (s.contains('pack')) return const Color(0xFF8B5CF6);
+  if (s.contains('process') || s.contains('confirm')) return AppColors.blue;
+  return const Color(0xFFF59E0B);
 }
 
 class _OverviewTab extends StatelessWidget {
@@ -326,6 +347,7 @@ class _OverviewTab extends StatelessWidget {
     required this.onOpenOrder,
     required this.onOpenProducts,
     required this.onOpenWallet,
+    required this.onOpenStoreWeb,
   });
 
   final bool loading;
@@ -337,6 +359,14 @@ class _OverviewTab extends StatelessWidget {
   final void Function(int id) onOpenOrder;
   final VoidCallback onOpenProducts;
   final VoidCallback onOpenWallet;
+  final VoidCallback onOpenStoreWeb;
+
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -379,10 +409,10 @@ class _OverviewTab extends StatelessWidget {
             onRefresh: onRefresh,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [
                 if (error != null) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Material(
                     color: const Color(0xFFFEF2F2),
                     borderRadius: BorderRadius.circular(16),
@@ -403,7 +433,7 @@ class _OverviewTab extends StatelessWidget {
                   ),
                 ],
                 if (profile['needs_activation'] == true) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Material(
                     color: const Color(0xFFFFF7ED),
                     borderRadius: BorderRadius.circular(16),
@@ -422,43 +452,68 @@ class _OverviewTab extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                Material(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  child: ListTile(
-                    leading: const Icon(Icons.verified_user_outlined, color: AppColors.accent),
-                    title: const Text('Google Authenticator', style: TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: const Text('Email codes and authenticator QR'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/profile/security?tab=authenticator'),
-                  ),
+                const SizedBox(height: 6),
+                Text(
+                  _greeting(),
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 12),
-                Material(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  child: ListTile(
-                    leading: const Icon(Icons.privacy_tip_outlined, color: AppColors.accent),
-                    title: const Text('Account, privacy & delete', style: TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: const Text('Privacy policy, support, and account deletion'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/profile/edit'),
-                  ),
+                const SizedBox(height: 2),
+                Text(
+                  storeName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.3),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 _WalletHero(
                   available: _asDouble(stats['available_balance']),
                   pending: _asDouble(stats['pending_balance']),
                   earnings: _asDouble(stats['total_earnings']),
                   onOpenWallet: onOpenWallet,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+                  decoration: _cardDecoration(),
+                  child: Row(
+                    children: [
+                      _QuickAction(
+                        icon: Icons.add_box_rounded,
+                        label: 'Add product',
+                        color: AppColors.primary,
+                        onTap: () async {
+                          final created = await context.push<bool>('/seller/products/new');
+                          if (created == true) onRefresh();
+                        },
+                      ),
+                      _QuickAction(
+                        icon: Icons.qr_code_2_rounded,
+                        label: 'Receive',
+                        color: AppColors.emerald,
+                        onTap: () => context.push('/qr/receive'),
+                      ),
+                      _QuickAction(
+                        icon: Icons.qr_code_scanner_rounded,
+                        label: 'Scan to pay',
+                        color: AppColors.blue,
+                        onTap: () => context.push('/qr/scan'),
+                      ),
+                      _QuickAction(
+                        icon: Icons.storefront_rounded,
+                        label: 'Web store',
+                        color: const Color(0xFF8B5CF6),
+                        onTap: onOpenStoreWeb,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
                       child: _MiniStat(
-                        icon: Icons.receipt_long_outlined,
+                        icon: Icons.receipt_long_rounded,
+                        color: AppColors.blue,
                         label: 'Orders',
                         value: '${_asInt(stats['total_orders'])}',
                         onTap: () => onOpenOrders(),
@@ -467,7 +522,8 @@ class _OverviewTab extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: _MiniStat(
-                        icon: Icons.inventory_2_outlined,
+                        icon: Icons.inventory_2_rounded,
+                        color: const Color(0xFF8B5CF6),
                         label: 'Live products',
                         value: '${_asInt(stats['live_products'])}',
                         onTap: onOpenProducts,
@@ -477,19 +533,20 @@ class _OverviewTab extends StatelessWidget {
                     Expanded(
                       child: _MiniStat(
                         icon: Icons.trending_up_rounded,
+                        color: AppColors.emerald,
                         label: 'Earnings',
-                        value: _money.format(_asDouble(stats['total_earnings'])),
+                        value: _compactMoney(_asDouble(stats['total_earnings'])),
                         onTap: onOpenWallet,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                const Text('Order pipeline', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                const Text(
-                  'Tap a stage to open those orders',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                const SizedBox(height: 22),
+                _SectionHeader(
+                  title: 'Order pipeline',
+                  subtitle: 'Tap a stage to open those orders',
+                  action: 'View all',
+                  onAction: () => onOpenOrders(),
                 ),
                 const SizedBox(height: 12),
                 GridView.count(
@@ -498,7 +555,7 @@ class _OverviewTab extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   mainAxisSpacing: 10,
                   crossAxisSpacing: 10,
-                  childAspectRatio: 1.08,
+                  childAspectRatio: 1.05,
                   children: [
                     for (final stage in stages)
                       _PipelineTile(
@@ -510,148 +567,67 @@ class _OverviewTab extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                const SizedBox(height: 22),
+                _HealthCard(score: healthScore, tip: healthTip),
+                if (recent.isNotEmpty) ...[
+                  const SizedBox(height: 22),
+                  _SectionHeader(
+                    title: 'Recent orders',
+                    action: 'See all',
+                    onAction: () => onOpenOrders(),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: _cardDecoration(),
+                    clipBehavior: Clip.antiAlias,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Store health', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                                const SizedBox(height: 2),
-                                Text(
-                                  healthScore >= 80
-                                      ? 'Strong store score'
-                                      : healthScore >= 50
-                                          ? 'Good — a few upgrades left'
-                                          : 'Needs attention',
-                                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                                ),
-                              ],
+                          for (var i = 0; i < recent.length; i++) ...[
+                            if (i > 0) const Divider(height: 1, indent: 66, color: AppColors.border),
+                            _RecentOrderRow(
+                              item: recent[i],
+                              onTap: () {
+                                final id = _asInt(recent[i]['id']);
+                                if (id > 0) onOpenOrder(id);
+                              },
                             ),
-                          ),
-                          Container(
-                            width: 52,
-                            height: 52,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFDCFCE7),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Text(
-                              '$healthScore',
-                              style: const TextStyle(
-                                color: Color(0xFF15803D),
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
+                          ],
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: LinearProgressIndicator(
-                          value: (healthScore / 100).clamp(0, 1),
-                          minHeight: 7,
-                          color: const Color(0xFF22C55E),
-                          backgroundColor: const Color(0xFFE5E7EB),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 22),
+                const _SectionHeader(title: 'Account'),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: _cardDecoration(),
+                  clipBehavior: Clip.antiAlias,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Column(
+                      children: [
+                        _AccountRow(
+                          icon: Icons.verified_user_rounded,
+                          color: AppColors.emerald,
+                          title: 'Google Authenticator',
+                          subtitle: 'Email codes and authenticator QR',
+                          onTap: () => context.push('/profile/security?tab=authenticator'),
                         ),
-                      ),
-                      if (healthTip != null) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          '* $healthTip',
-                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.35),
+                        const Divider(height: 1, indent: 66, color: AppColors.border),
+                        _AccountRow(
+                          icon: Icons.privacy_tip_rounded,
+                          color: AppColors.blue,
+                          title: 'Account, privacy & delete',
+                          subtitle: 'Privacy policy, support, and account deletion',
+                          onTap: () => context.push('/profile/edit'),
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ),
-                if (recent.isNotEmpty) ...[
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text('Recent orders', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                      ),
-                      TextButton(
-                        onPressed: () => onOpenOrders(),
-                        child: const Text('See all'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ...recent.map((item) {
-                    final status = (item['status'] as String? ?? '').replaceAll('_', ' ');
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Material(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () {
-                            final id = _asInt(item['id']);
-                            if (id > 0) onOpenOrder(id);
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            child: Row(
-                              children: [
-                                const CircleAvatar(
-                                  backgroundColor: Color(0xFFFFF7ED),
-                                  child: Icon(Icons.shopping_bag_outlined, color: AppColors.primary, size: 20),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        item['product_name'] as String? ?? 'Order',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontWeight: FontWeight.w800),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        [
-                                          item['order_number'],
-                                          item['buyer_name'],
-                                          if (status.isNotEmpty) status,
-                                        ].whereType<String>().where((e) => e.isNotEmpty).join(' · '),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _money.format(_asDouble(item['amount'])),
-                                  style: const TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ],
               ],
             ),
           ),
@@ -665,6 +641,46 @@ String _compactMoney(double value) {
   if (value >= 1000000) return 'GH₵${(value / 1000000).toStringAsFixed(1)}m';
   if (value >= 10000) return 'GH₵${(value / 1000).toStringAsFixed(value >= 100000 ? 0 : 1)}k';
   return _money.format(value);
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, this.subtitle, this.action, this.onAction});
+
+  final String title;
+  final String? subtitle;
+  final String? action;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: -0.2)),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(subtitle!, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+              ],
+            ],
+          ),
+        ),
+        if (action != null)
+          TextButton(
+            onPressed: onAction,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              visualDensity: VisualDensity.compact,
+              textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+            ),
+            child: Text(action!),
+          ),
+      ],
+    );
+  }
 }
 
 class _WalletHero extends StatelessWidget {
@@ -682,90 +698,203 @@ class _WalletHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onOpenWallet,
-        borderRadius: BorderRadius.circular(22),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            gradient: const LinearGradient(
-              colors: [Color(0xFFEA580C), Color(0xFFF97316), Color(0xFFFB923C)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(color: Color(0x40EA580C), blurRadius: 24, offset: Offset(0, 10)),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -40,
+            top: -50,
+            child: Container(
+              width: 170,
+              height: 170,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.10)),
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 20, 18, 16),
+          Positioned(
+            right: 50,
+            bottom: -70,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.07)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Available balance',
+                        style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
                     _money.format(available),
-                    style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900, height: 1.05),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 34,
+                      fontWeight: FontWeight.w900,
+                      height: 1.05,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
                       child: _HeroPill(
+                        icon: Icons.hourglass_bottom_rounded,
                         label: 'Pending funds',
                         value: _money.format(pending),
-                        hint: 'Waiting for release',
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: _HeroPill(
+                        icon: Icons.insights_rounded,
                         label: 'Total earned',
                         value: _compactMoney(earnings),
-                        hint: 'All-time sales',
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: FilledButton.icon(
+                    onPressed: onOpenWallet,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.primaryDark,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                    ),
+                    icon: const Icon(Icons.arrow_outward_rounded, size: 18),
+                    label: const Text('Withdraw'),
+                  ),
+                ),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
 class _HeroPill extends StatelessWidget {
-  const _HeroPill({required this.label, required this.value, required this.hint});
+  const _HeroPill({required this.icon, required this.label, required this.value});
 
+  final IconData icon;
   final String label;
   final String value;
-  final String hint;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.16),
+        color: Colors.black.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600)),
+          Row(
+            children: [
+              Icon(icon, size: 13, color: Colors.white70),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15)),
+            child: Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
           ),
-          const SizedBox(height: 2),
-          Text(hint, style: const TextStyle(color: Colors.white60, fontSize: 10)),
         ],
+      ),
+    );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  const _QuickAction({required this.icon, required this.label, required this.color, required this.onTap});
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -774,43 +903,57 @@ class _HeroPill extends StatelessWidget {
 class _MiniStat extends StatelessWidget {
   const _MiniStat({
     required this.icon,
+    required this.color,
     required this.label,
     required this.value,
     this.onTap,
   });
 
   final IconData icon;
+  final Color color;
   final String label;
   final String value;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, size: 20, color: AppColors.accent),
-              const SizedBox(height: 8),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-              ),
-              const SizedBox(height: 2),
-              Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
-            ],
+    return Container(
+      decoration: _cardDecoration(radius: 16),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 18, color: color),
+                ),
+                const SizedBox(height: 10),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -836,43 +979,254 @@ class _PipelineTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = count > 0;
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
+    return Container(
+      decoration: BoxDecoration(
+        color: active ? color.withValues(alpha: 0.08) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: active ? color.withValues(alpha: 0.35) : Colors.transparent),
+        boxShadow: active ? null : _cardShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: active ? color : color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 17, color: active ? Colors.white : color),
                 ),
-                child: Icon(icon, size: 18, color: color),
-              ),
-              const Spacer(),
-              Text(
-                '$count',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: active ? AppColors.textPrimary : AppColors.textMuted,
+                const Spacer(),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: active ? color : AppColors.textMuted,
+                  ),
                 ),
-              ),
-              Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
-            ],
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                ),
+              ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HealthCard extends StatelessWidget {
+  const _HealthCard({required this.score, required this.tip});
+
+  final int score;
+  final String? tip;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = score >= 80
+        ? AppColors.emerald
+        : score >= 50
+            ? const Color(0xFFF59E0B)
+            : AppColors.danger;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 64,
+            height: 64,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox.expand(
+                  child: CircularProgressIndicator(
+                    value: (score / 100).clamp(0, 1).toDouble(),
+                    strokeWidth: 7,
+                    strokeCap: StrokeCap.round,
+                    color: color,
+                    backgroundColor: color.withValues(alpha: 0.14),
+                  ),
+                ),
+                Text('$score', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Store health', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                const SizedBox(height: 2),
+                Text(
+                  score >= 80
+                      ? 'Strong store score'
+                      : score >= 50
+                          ? 'Good — a few upgrades left'
+                          : 'Needs attention',
+                  style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+                if (tip != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    tip!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.35),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentOrderRow extends StatelessWidget {
+  const _RecentOrderRow({required this.item, required this.onTap});
+
+  final Map<String, dynamic> item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = (item['status'] as String? ?? '').replaceAll('_', ' ');
+    final color = _statusColor(status);
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.ringOrange,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.shopping_bag_rounded, color: AppColors.primary, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item['product_name'] as String? ?? 'Order',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    [item['order_number'], item['buyer_name']]
+                        .whereType<String>()
+                        .where((e) => e.isNotEmpty)
+                        .join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _money.format(_asDouble(item['amount'])),
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                if (status.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      status[0].toUpperCase() + status.substring(1),
+                      style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountRow extends StatelessWidget {
+  const _AccountRow({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          ],
         ),
       ),
     );
