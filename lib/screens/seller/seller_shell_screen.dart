@@ -220,7 +220,7 @@ class _SellerShellScreenState extends State<SellerShellScreen> with AutoRefreshT
                 IconButton(
                   tooltip: 'Log out',
                   onPressed: _logout,
-                  icon: const Icon(Icons.logout),
+                  icon: const Icon(Icons.power_settings_new_rounded),
                 ),
               ],
             )
