@@ -638,9 +638,34 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
     }
   }
 
+  Future<ImageSource?> _chooseSource({required String camera, required String gallery}) {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: Text(camera),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(gallery),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _pickVideo() async {
+    final source = await _chooseSource(camera: 'Record a video', gallery: 'Choose video from gallery');
+    if (source == null) return;
     final picked = await ImagePicker().pickVideo(
-      source: ImageSource.gallery,
+      source: source,
       maxDuration: const Duration(seconds: ProductVideoLimits.maxSeconds),
     );
     if (picked == null) return;
@@ -734,8 +759,16 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
       );
       return;
     }
+    final source = await _chooseSource(camera: 'Take a photo', gallery: 'Choose from gallery');
+    if (source == null) return;
+    if (source == ImageSource.camera) {
+      final shot = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 82, maxWidth: 2000);
+      if (shot == null || !mounted) return;
+      setState(() => images.add(shot));
+      return;
+    }
     final picked = await ImagePicker().pickMultiImage(imageQuality: 82, limit: remaining);
-    if (picked.isEmpty) return;
+    if (picked.isEmpty || !mounted) return;
     setState(() => images.addAll(picked.take(remaining)));
   }
 
