@@ -751,8 +751,7 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
   }
 
   Future<void> _pickImages() async {
-    final keptExisting = existingImages.length - removeImageIds.length;
-    final remaining = ProductImageLimits.maxImages - keptExisting - images.length;
+    final remaining = ProductImageLimits.maxImages - existingImages.length - images.length;
     if (remaining <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Maximum ${ProductImageLimits.maxImages} photos.')),
@@ -986,47 +985,38 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                       tilePadding: EdgeInsets.zero,
                       title: const Text('Photos & video', style: TextStyle(fontWeight: FontWeight.w800)),
                       children: [
-                        if (existingImages.isNotEmpty) ...[
+                        if (existingImages.isNotEmpty || images.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           SizedBox(
-                            height: 84,
+                            height: 92,
                             child: ListView.separated(
                               scrollDirection: Axis.horizontal,
-                              itemCount: existingImages.length,
-                              separatorBuilder: (_, __) => const SizedBox(width: 8),
+                              itemCount: existingImages.length + images.length,
+                              separatorBuilder: (context, index) => const SizedBox(width: 8),
                               itemBuilder: (_, i) {
-                                final img = existingImages[i];
-                                final id = (img['id'] as num?)?.toInt() ?? 0;
-                                final gone = removeImageIds.contains(id);
-                                return Stack(
-                                  children: [
-                                    Opacity(
-                                      opacity: gone ? 0.35 : 1,
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(10),
-                                        child: CachedNetworkImage(
-                                          imageUrl: img['url'] as String? ?? '',
-                                          width: 84,
-                                          height: 84,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
+                                if (i < existingImages.length) {
+                                  final img = existingImages[i];
+                                  final id = (img['id'] as num?)?.toInt() ?? 0;
+                                  return _RemovablePhoto(
+                                    key: ValueKey('existing-$id-$i'),
+                                    child: CachedNetworkImage(
+                                      imageUrl: img['url'] as String? ?? '',
+                                      width: 84,
+                                      height: 84,
+                                      fit: BoxFit.cover,
                                     ),
-                                    Positioned(
-                                      right: 0,
-                                      top: 0,
-                                      child: IconButton(
-                                        icon: Icon(gone ? Icons.undo : Icons.close, size: 18),
-                                        onPressed: () => setState(() {
-                                          if (gone) {
-                                            removeImageIds.remove(id);
-                                          } else {
-                                            removeImageIds.add(id);
-                                          }
-                                        }),
-                                      ),
-                                    ),
-                                  ],
+                                    onRemove: () => setState(() {
+                                      if (id > 0) removeImageIds.add(id);
+                                      existingImages.removeAt(i);
+                                    }),
+                                  );
+                                }
+                                final localIndex = i - existingImages.length;
+                                final file = images[localIndex];
+                                return _RemovablePhoto(
+                                  key: ValueKey(file.path),
+                                  child: Image.file(File(file.path), width: 84, height: 84, fit: BoxFit.cover),
+                                  onRemove: () => setState(() => images.removeAt(localIndex)),
                                 );
                               },
                             ),
@@ -1035,14 +1025,13 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                         const SizedBox(height: 8),
                         Builder(
                           builder: (context) {
-                            final kept = existingImages.length - removeImageIds.length;
-                            final total = kept + images.length;
+                            final total = existingImages.length + images.length;
                             final canAdd = total < ProductImageLimits.maxImages;
                             return OutlinedButton.icon(
                               onPressed: canAdd ? _pickImages : null,
                               icon: const Icon(Icons.photo_library_outlined),
                               label: Text(
-                                images.isEmpty && kept == 0
+                                total == 0
                                     ? 'Add photos (up to ${ProductImageLimits.maxImages})'
                                     : canAdd
                                         ? 'Add more photos ($total/${ProductImageLimits.maxImages})'
@@ -1051,21 +1040,6 @@ class _SellerProductFormScreenState extends State<SellerProductFormScreen> {
                             );
                           },
                         ),
-                        if (images.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            height: 84,
-                            child: ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: images.length,
-                              separatorBuilder: (_, __) => const SizedBox(width: 8),
-                              itemBuilder: (_, i) => ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Image.file(File(images[i].path), width: 84, height: 84, fit: BoxFit.cover),
-                              ),
-                            ),
-                          ),
-                        ],
                         const SizedBox(height: 8),
                         ProductVideoField(
                           networkUrl: removeExistingVideo ? null : existingVideoUrl,
@@ -1305,6 +1279,44 @@ class _CategoryPickerScreen extends StatelessWidget {
             onTap: () => Navigator.pop(context, row.id ?? 0),
           );
         },
+      ),
+    );
+  }
+}
+
+class _RemovablePhoto extends StatelessWidget {
+  const _RemovablePhoto({super.key, required this.child, required this.onRemove});
+
+  final Widget child;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 84,
+      height: 84,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ClipRRect(borderRadius: BorderRadius.circular(10), child: child),
+          ),
+          Positioned(
+            top: 4,
+            right: 4,
+            child: Material(
+              color: Colors.black.withValues(alpha: 0.72),
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onRemove,
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close, size: 16, color: Colors.white),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
