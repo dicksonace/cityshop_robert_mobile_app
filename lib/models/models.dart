@@ -1034,15 +1034,15 @@ class WithdrawalOverview {
     if (feeMode == 'percent' && feePercent > 0) {
       return double.parse((amount * feePercent / 100).toStringAsFixed(2));
     }
+    final type = payoutType == 'bank' ? 'bank' : 'momo';
+    if (type == 'momo' && feeAppliesTo != 'none' && momoFeePercent > 0) {
+      return double.parse((amount * momoFeePercent / 100).toStringAsFixed(2));
+    }
     // Legacy API sent mode=percent + percent=0 + enabled=false when auto Paystack
     // was on with 0% — still apply bank tiers (do not treat as "No fee").
     if (!feeEnabled && feeMode != 'percent') return 0;
     if (feeAppliesTo == 'none') return 0;
-    final type = payoutType == 'bank' ? 'bank' : 'momo';
     if (type == 'momo') {
-      if (momoFeePercent > 0) {
-        return double.parse((amount * momoFeePercent / 100).toStringAsFixed(2));
-      }
       return momoFeeAmount > 0 ? momoFeeAmount : 0;
     }
     if (!(feeAppliesTo == 'all' || feeAppliesTo == 'bank')) return 0;
