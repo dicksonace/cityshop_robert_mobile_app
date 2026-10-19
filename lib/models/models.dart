@@ -952,6 +952,7 @@ class WithdrawalOverview {
     this.feeEnabled = true,
     this.feeAmount = 10,
     this.momoFeeAmount = 0,
+    this.momoFeePercent = 0,
     this.feeAppliesTo = 'bank',
     this.feeMode = 'flat',
     this.feePercent = 0,
@@ -970,6 +971,7 @@ class WithdrawalOverview {
   final bool feeEnabled;
   final double feeAmount;
   final double momoFeeAmount;
+  final double momoFeePercent;
   final String feeAppliesTo;
   final String feeMode;
   final double feePercent;
@@ -1038,6 +1040,9 @@ class WithdrawalOverview {
     if (feeAppliesTo == 'none') return 0;
     final type = payoutType == 'bank' ? 'bank' : 'momo';
     if (type == 'momo') {
+      if (momoFeePercent > 0) {
+        return double.parse((amount * momoFeePercent / 100).toStringAsFixed(2));
+      }
       return momoFeeAmount > 0 ? momoFeeAmount : 0;
     }
     if (!(feeAppliesTo == 'all' || feeAppliesTo == 'bank')) return 0;
@@ -1109,6 +1114,7 @@ class WithdrawalOverview {
       feeEnabled: fee['enabled'] != false,
       feeAmount: (fee['amount'] as num?)?.toDouble() ?? 10,
       momoFeeAmount: _momoFeeFromPayload(fee),
+      momoFeePercent: (fee['momo_percent'] as num?)?.toDouble() ?? 0,
       feeAppliesTo: fee['applies_to'] as String? ?? 'bank',
       feeMode: fee['mode'] as String? ?? 'flat',
       feePercent: (fee['percent'] as num?)?.toDouble() ?? 0,
