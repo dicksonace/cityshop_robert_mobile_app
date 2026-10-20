@@ -32,6 +32,7 @@ class WithdrawScreen extends StatefulWidget {
 class _WithdrawScreenState extends State<WithdrawScreen> {
   bool loading = true;
   bool submitting = false;
+  bool savingAccount = false;
   String? error;
   WithdrawalOverview overview = const WithdrawalOverview();
 
@@ -73,12 +74,20 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
         overview = data;
         loading = false;
       });
-      // Only seed MoMo number once. Account name stays blank — user must enter
-      // the name registered on MoMo/bank (never prefill fee/minimum leftovers).
+      // Seed once from a saved withdrawal account (name + number). A bare
+      // phone on the profile is only a number hint, never an account name.
       if (!_prefilled) {
         _prefilled = true;
-        numberCtrl.text = data.defaultMomoNumber ?? '';
-        nameCtrl.text = '';
+        final saved = data.accountFor('momo');
+        if (saved != null) {
+          payoutType = saved.type;
+          network = saved.network;
+          numberCtrl.text = saved.accountNumber;
+          nameCtrl.text = saved.accountName;
+        } else {
+          numberCtrl.text = data.defaultMomoNumber ?? '';
+          nameCtrl.text = '';
+        }
       }
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -104,15 +113,62 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     setState(() => amountCtrl.text = max.toStringAsFixed(2));
   }
 
+  void _applyAccount(SavedWithdrawalAccount account) {
+    setState(() {
+      payoutType = account.type == 'bank' ? 'bank' : 'momo';
+      network = account.network;
+      numberCtrl.text = account.accountNumber;
+      nameCtrl.text = account.accountName;
+    });
+  }
+
   void _setPayoutType(String type) {
     if (type == payoutType) return;
+    final saved = overview.accountFor(type);
     setState(() {
       payoutType = type;
+      if (saved != null) {
+        network = saved.network;
+        numberCtrl.text = saved.accountNumber;
+        nameCtrl.text = saved.accountName;
+        return;
+      }
       network = type == 'bank' ? (ghanaBanks.isNotEmpty ? ghanaBanks.first.id : 'gcb') : 'mtn';
-      // Don't carry a MoMo phone into the bank account field (or the reverse).
       numberCtrl.text = type == 'momo' ? (overview.defaultMomoNumber ?? '') : '';
       nameCtrl.text = '';
     });
+  }
+
+  Future<void> _saveAccount() async {
+    final number = numberCtrl.text.trim();
+    final name = nameCtrl.text.trim();
+    if (number.isEmpty || name.isEmpty) {
+      _toast('Enter the number and the name on the account to save it.');
+      return;
+    }
+    if (RegExp(r'^\d+([.,]\d+)?$').hasMatch(name)) {
+      _toast('Enter the name registered on the account, not a number.');
+      return;
+    }
+    setState(() => savingAccount = true);
+    try {
+      await context.read<AppStore>().saveWithdrawalAccount(
+            payoutType: _isBank ? 'bank' : 'momo',
+            network: network,
+            accountNumber: number,
+            accountName: name,
+          );
+      if (!mounted) return;
+      _toast('Withdrawal account saved. It will be here next time.');
+      _prefilled = true;
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) _toast(e.message);
+    } catch (e) {
+      if (mounted) _toast('$e');
+    } finally {
+      if (mounted) setState(() => savingAccount = false);
+    }
   }
 
   /// Validates locally, shows the review sheet, then sends the request.
@@ -432,6 +488,76 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   '2. Where should the money go?',
                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
                 ),
+                if (overview.withdrawalAccounts.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'SAVED WITHDRAWAL ACCOUNTS',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 108,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: overview.withdrawalAccounts.length,
+                      separatorBuilder: (context, index) => const SizedBox(width: 10),
+                      itemBuilder: (context, index) {
+                        final account = overview.withdrawalAccounts[index];
+                        final selected = account.accountNumber == numberCtrl.text.trim() &&
+                            account.accountName == nameCtrl.text.trim();
+                        return InkWell(
+                          onTap: () => _applyAccount(account),
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            width: 168,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: selected ? const Color(0xFF0369A1) : const Color(0xFF0284C7),
+                              borderRadius: BorderRadius.circular(16),
+                              border: selected ? Border.all(color: AppColors.accent, width: 2) : null,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  account.accountName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  account.accountNumber,
+                                  style: const TextStyle(color: Color(0xFFE0F2FE), fontSize: 13),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  account.networkLabel.toUpperCase(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xFFBAE6FD),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextField(
                   controller: numberCtrl,
@@ -456,6 +582,23 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                         : 'Name registered on the MoMo number',
                     border: const OutlineInputBorder(),
                   ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 48,
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: savingAccount ? null : _saveAccount,
+                    child: Text(
+                      savingAccount ? 'Saving…' : 'Add withdrawal account',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Saves this number and account name for the next withdrawal.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                 ),
                 const SizedBox(height: 20),
                 const Text(

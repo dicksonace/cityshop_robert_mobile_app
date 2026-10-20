@@ -1750,6 +1750,21 @@ class AppStore extends ChangeNotifier {
     return WithdrawalItem.fromJson(Map<String, dynamic>.from(body['data'] as Map));
   }
 
+  /// Saves a MoMo or bank account (number and name) for the next withdrawal.
+  Future<void> saveWithdrawalAccount({
+    required String payoutType,
+    required String network,
+    required String accountNumber,
+    required String accountName,
+  }) async {
+    await _api.post('/wallet/withdrawal-accounts', data: {
+      'payout_type': payoutType,
+      'network': network,
+      'account_number': accountNumber,
+      'account_name': accountName,
+    });
+  }
+
   Future<Map<String, dynamic>> loadManualFunding() async {
     final res = await _api.get('/wallet/manual-funding');
     return Map<String, dynamic>.from(res.data as Map);

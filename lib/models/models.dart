@@ -939,6 +939,39 @@ class BankFeeTier {
   final double fee;
 }
 
+/// A MoMo or bank account saved for the next withdrawal.
+class SavedWithdrawalAccount {
+  const SavedWithdrawalAccount({
+    required this.id,
+    required this.type,
+    required this.network,
+    required this.accountNumber,
+    required this.accountName,
+    this.networkLabel = '',
+    this.isDefault = false,
+  });
+
+  final int id;
+  final String type;
+  final String network;
+  final String networkLabel;
+  final String accountNumber;
+  final String accountName;
+  final bool isDefault;
+
+  factory SavedWithdrawalAccount.fromJson(Map<String, dynamic> json) {
+    return SavedWithdrawalAccount(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      type: json['type'] as String? ?? 'momo',
+      network: json['network'] as String? ?? '',
+      networkLabel: json['network_label'] as String? ?? '',
+      accountNumber: json['account_number'] as String? ?? '',
+      accountName: json['account_name'] as String? ?? '',
+      isDefault: json['is_default'] == true,
+    );
+  }
+}
+
 /// Withdrawal history plus the limits the withdraw screen enforces.
 class WithdrawalOverview {
   const WithdrawalOverview({
@@ -959,6 +992,7 @@ class WithdrawalOverview {
     this.autoPaystack = false,
     this.autoJunipay = false,
     this.bankTiers = const [],
+    this.withdrawalAccounts = const [],
   });
 
   final List<WithdrawalItem> items;
@@ -978,8 +1012,19 @@ class WithdrawalOverview {
   final bool autoPaystack;
   final bool autoJunipay;
   final List<BankFeeTier> bankTiers;
+  final List<SavedWithdrawalAccount> withdrawalAccounts;
 
   bool get canWithdraw => availableBalance >= minimum;
+
+  SavedWithdrawalAccount? accountFor(String type) {
+    for (final account in withdrawalAccounts) {
+      if (account.type == type && account.isDefault) return account;
+    }
+    for (final account in withdrawalAccounts) {
+      if (account.type == type) return account;
+    }
+    return null;
+  }
 
   static double feeFromBankTiers(double amount, List<BankFeeTier> tiers, [double fallback = 0]) {
     if (amount <= 0 || tiers.isEmpty) return fallback < 0 ? 0 : fallback;
@@ -1121,6 +1166,13 @@ class WithdrawalOverview {
       autoPaystack: fee['auto_paystack'] == true,
       autoJunipay: fee['auto_junipay'] == true,
       bankTiers: bankTiers,
+      withdrawalAccounts: () {
+        final rows = summary['withdrawal_accounts'];
+        if (rows is! List) return const <SavedWithdrawalAccount>[];
+        return rows.whereType<Map>().map((row) {
+          return SavedWithdrawalAccount.fromJson(Map<String, dynamic>.from(row));
+        }).where((account) => account.accountNumber.isNotEmpty).toList();
+      }(),
     );
   }
 }
