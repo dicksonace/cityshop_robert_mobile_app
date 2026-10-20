@@ -669,9 +669,31 @@ class _SellerOrderDetailScreenState extends State<SellerOrderDetailScreen> {
                               onPressed: busy
                                   ? null
                                   : () async {
+                                      final source = await showModalBottomSheet<ImageSource>(
+                                        context: context,
+                                        builder: (ctx) => SafeArea(
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              ListTile(
+                                                leading: const Icon(Icons.photo_camera_outlined),
+                                                title: const Text('Open camera'),
+                                                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+                                              ),
+                                              ListTile(
+                                                leading: const Icon(Icons.photo_library_outlined),
+                                                title: const Text('Choose from gallery'),
+                                                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                      if (source == null || !mounted) return;
                                       final picked = await ImagePicker().pickImage(
-                                        source: ImageSource.gallery,
+                                        source: source,
                                         imageQuality: 82,
+                                        maxWidth: 2000,
                                       );
                                       if (picked == null || !mounted) return;
                                       setState(() => newPackagePath = picked.path);
