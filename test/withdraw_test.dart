@@ -208,13 +208,13 @@ void main() {
     expect(find.textContaining('Minimum GH₵10.00'), findsOneWidget);
   });
 
-  testWidgets('"Withdraw all" fills the whole available balance', (tester) async {
+  testWidgets('"Withdraw all" leaves room for the MoMo fee', (tester) async {
     await _pumpWithdraw(tester, _FakeApiClient());
 
     await tester.tap(find.text('Withdraw all'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(TextField, '1040.00'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '1029.70'), findsOneWidget);
   });
 
   testWidgets('a request under the minimum never reaches the server', (tester) async {
@@ -417,7 +417,7 @@ void main() {
       expect(overview.feeFor('bank', 1500), 20);
       expect(overview.feeFor('bank', 5000), 20);
       expect(overview.feeFor('bank', 15000), 20);
-      expect(overview.feeFor('momo', 15000), 0);
+      expect(overview.feeFor('momo', 15000), 20);
     });
 
     test('shows the MoMo bands on the amount being withdrawn', () {
