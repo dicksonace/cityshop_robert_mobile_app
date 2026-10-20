@@ -1080,15 +1080,19 @@ class _WithdrawalRow extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: fill,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                item.statusLabel,
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: ink),
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: fill,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  item.statusLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: ink),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),

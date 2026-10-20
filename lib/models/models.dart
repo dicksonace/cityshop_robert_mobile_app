@@ -932,11 +932,12 @@ class WithdrawalItem {
 
 /// One bank withdrawal fee band (amount range → fixed fee).
 class BankFeeTier {
-  const BankFeeTier({required this.min, this.max, required this.fee});
+  const BankFeeTier({required this.min, this.max, required this.fee, this.mode = 'flat'});
 
   final double min;
   final double? max;
   final double fee;
+  final String mode;
 }
 
 /// A MoMo or bank account saved for the next withdrawal.
@@ -992,6 +993,7 @@ class WithdrawalOverview {
     this.autoPaystack = false,
     this.autoJunipay = false,
     this.bankTiers = const [],
+    this.momoTiers = const [],
     this.withdrawalAccounts = const [],
     this.withdrawalRestricted = false,
     this.withdrawalRestrictionNote,
@@ -1014,6 +1016,7 @@ class WithdrawalOverview {
   final bool autoPaystack;
   final bool autoJunipay;
   final List<BankFeeTier> bankTiers;
+  final List<BankFeeTier> momoTiers;
   final List<SavedWithdrawalAccount> withdrawalAccounts;
   final bool withdrawalRestricted;
   final String? withdrawalRestrictionNote;
@@ -1028,6 +1031,34 @@ class WithdrawalOverview {
       if (account.type == type) return account;
     }
     return null;
+  }
+
+  static double feeFromMomoTiers(double amount, List<BankFeeTier> tiers) {
+    if (amount <= 0 || tiers.isEmpty) return 0;
+    BankFeeTier? tier;
+    for (final row in tiers) {
+      final max = row.max;
+      if (amount + 0.0001 >= row.min && (max == null || amount <= max + 0.0001)) {
+        tier = row;
+        break;
+      }
+    }
+    if (tier == null && amount < tiers.first.min) tier = tiers.first;
+    if (tier == null) {
+      for (var i = 0; i < tiers.length - 1; i++) {
+        final currMax = tiers[i].max;
+        final nextMin = tiers[i + 1].min;
+        if (currMax != null && amount > currMax && amount < nextMin) {
+          tier = tiers[i + 1];
+          break;
+        }
+      }
+    }
+    tier ??= tiers.last;
+    if (tier.mode == 'percent') {
+      return double.parse((amount * tier.fee / 100).toStringAsFixed(2));
+    }
+    return tier.fee;
   }
 
   static double feeFromBankTiers(double amount, List<BankFeeTier> tiers, [double fallback = 0]) {
@@ -1084,6 +1115,9 @@ class WithdrawalOverview {
       return double.parse((amount * feePercent / 100).toStringAsFixed(2));
     }
     final type = payoutType == 'bank' ? 'bank' : 'momo';
+    if (type == 'momo' && feeAppliesTo != 'none' && momoTiers.isNotEmpty) {
+      return double.parse(feeFromMomoTiers(amount, momoTiers).toStringAsFixed(2));
+    }
     if (type == 'momo' && feeAppliesTo != 'none' && momoFeePercent > 0) {
       return double.parse((amount * momoFeePercent / 100).toStringAsFixed(2));
     }
@@ -1139,6 +1173,18 @@ class WithdrawalOverview {
             );
           }).toList()
         : const <BankFeeTier>[]);
+    final momoTierRows = fee['momo_tiers'];
+    final momoTiers = momoTierRows is List
+        ? momoTierRows.whereType<Map>().map((row) {
+            final map = Map<String, dynamic>.from(row);
+            return BankFeeTier(
+              min: (map['min'] as num?)?.toDouble() ?? 0,
+              max: map['max'] == null ? null : (map['max'] as num?)?.toDouble(),
+              fee: (map['fee'] as num?)?.toDouble() ?? 0,
+              mode: map['mode'] == 'percent' ? 'percent' : 'flat',
+            );
+          }).toList()
+        : const <BankFeeTier>[];
     return WithdrawalOverview(
       items: data is List
           ? data
@@ -1170,6 +1216,7 @@ class WithdrawalOverview {
       autoPaystack: fee['auto_paystack'] == true,
       autoJunipay: fee['auto_junipay'] == true,
       bankTiers: bankTiers,
+      momoTiers: momoTiers,
       withdrawalAccounts: () {
         final rows = summary['withdrawal_accounts'];
         if (rows is! List) return const <SavedWithdrawalAccount>[];

@@ -283,7 +283,22 @@ void main() {
   });
 
   testWidgets('the review sheet has to be confirmed before the money moves', (tester) async {
-    final api = _FakeApiClient();
+    final api = _FakeApiClient(
+      overview: _overview(fee: {
+        'enabled': true,
+        'amount': 10,
+        'momo_amount': 0,
+        'momo_percent': 0,
+        'applies_to': 'bank',
+        'mode': 'flat',
+        'percent': 0,
+        'momo_tiers': [
+          {'min': 1, 'max': 49.99, 'fee': 0.5, 'mode': 'flat'},
+          {'min': 50, 'max': 1999.99, 'fee': 1, 'mode': 'percent'},
+          {'min': 2000, 'max': null, 'fee': 20, 'mode': 'flat'},
+        ],
+      }),
+    );
     await _pumpWithdraw(tester, api);
 
     await tester.enterText(find.widgetWithText(TextField, 'Account name'), 'Robert Asare');
@@ -292,6 +307,8 @@ void main() {
 
     expect(find.text('Check your payout details'), findsOneWidget);
     expect(find.text('GH₵500.00'), findsOneWidget);
+    expect(find.text('GH₵5.00'), findsOneWidget);
+    expect(find.text('GH₵505.00'), findsOneWidget);
     expect(api.posts, isEmpty);
 
     await _tapButton(tester, 'Request withdrawal');
@@ -401,6 +418,28 @@ void main() {
       expect(overview.feeFor('bank', 5000), 20);
       expect(overview.feeFor('bank', 15000), 20);
       expect(overview.feeFor('momo', 15000), 0);
+    });
+
+    test('shows the MoMo bands on the amount being withdrawn', () {
+      final overview = WithdrawalOverview.fromJson(_overview(fee: {
+        'enabled': true,
+        'amount': 10,
+        'momo_amount': 0,
+        'momo_percent': 0,
+        'applies_to': 'bank',
+        'mode': 'flat',
+        'percent': 0,
+        'momo_tiers': [
+          {'min': 1, 'max': 49.99, 'fee': 0.5, 'mode': 'flat'},
+          {'min': 50, 'max': 1999.99, 'fee': 1, 'mode': 'percent'},
+          {'min': 2000, 'max': null, 'fee': 20, 'mode': 'flat'},
+        ],
+      }));
+
+      expect(overview.feeFor('momo', 10), 0.5);
+      expect(overview.feeFor('momo', 100), 1);
+      expect(overview.feeFor('momo', 2000), 20);
+      expect(overview.feeFor('bank', 500), 10);
       expect(overview.maxWithdrawable('bank'), 1020);
     });
 
