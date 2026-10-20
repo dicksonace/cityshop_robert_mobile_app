@@ -173,6 +173,10 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
 
   /// Validates locally, shows the review sheet, then sends the request.
   Future<void> _submit() async {
+    if (overview.withdrawalRestricted) {
+      _toast(overview.withdrawalRestrictionNote ?? 'Withdrawals are restricted on this account.');
+      return;
+    }
     final amount = double.tryParse(amountCtrl.text.trim());
     final number = numberCtrl.text.trim();
     final name = nameCtrl.text.trim();
@@ -403,6 +407,15 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
             onWithdrawAll: tooSmall ? null : _withdrawAll,
           ),
           const SizedBox(height: 16),
+          if (overview.withdrawalRestricted) ...[
+            _Notice(
+              icon: Icons.block,
+              title: 'Restricted',
+              body: overview.withdrawalRestrictionNote ??
+                  'Withdrawals are restricted on this account. Contact CityShop support.',
+            ),
+            const SizedBox(height: 16),
+          ],
           if (overview.hasPending) ...[
             const _Notice(
               icon: Icons.hourglass_top_rounded,
@@ -640,6 +653,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                       disabledBackgroundColor: const Color(0xFFFED7AA),
                     ),
                     onPressed: submitting ||
+                            overview.withdrawalRestricted ||
                             withdrawalBalanceMessage(
                                   amount: typedAmount,
                                   fee: activeFee,

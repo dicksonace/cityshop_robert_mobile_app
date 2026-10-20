@@ -993,6 +993,8 @@ class WithdrawalOverview {
     this.autoJunipay = false,
     this.bankTiers = const [],
     this.withdrawalAccounts = const [],
+    this.withdrawalRestricted = false,
+    this.withdrawalRestrictionNote,
   });
 
   final List<WithdrawalItem> items;
@@ -1013,6 +1015,8 @@ class WithdrawalOverview {
   final bool autoJunipay;
   final List<BankFeeTier> bankTiers;
   final List<SavedWithdrawalAccount> withdrawalAccounts;
+  final bool withdrawalRestricted;
+  final String? withdrawalRestrictionNote;
 
   bool get canWithdraw => availableBalance >= minimum;
 
@@ -1173,6 +1177,8 @@ class WithdrawalOverview {
           return SavedWithdrawalAccount.fromJson(Map<String, dynamic>.from(row));
         }).where((account) => account.accountNumber.isNotEmpty).toList();
       }(),
+      withdrawalRestricted: summary['withdrawal_restricted'] == true,
+      withdrawalRestrictionNote: summary['withdrawal_restriction_note'] as String?,
     );
   }
 }
