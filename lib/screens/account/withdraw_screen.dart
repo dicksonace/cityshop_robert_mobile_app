@@ -42,6 +42,8 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   final nameCtrl = TextEditingController();
   final amountCtrl = TextEditingController();
   bool _prefilled = false;
+  bool addingAccount = false;
+  int? selectedAccountId;
 
   bool get _isBank => payoutType == 'bank';
 
@@ -84,6 +86,8 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
           network = saved.network;
           numberCtrl.text = saved.accountNumber;
           nameCtrl.text = saved.accountName;
+          selectedAccountId = saved.id;
+          addingAccount = false;
         } else {
           numberCtrl.text = data.defaultMomoNumber ?? '';
           nameCtrl.text = '';
@@ -114,12 +118,51 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   }
 
   void _applyAccount(SavedWithdrawalAccount account) {
+    if ((account.type == 'bank' ? 'bank' : 'momo') != payoutType) return;
     setState(() {
-      payoutType = account.type == 'bank' ? 'bank' : 'momo';
+      addingAccount = false;
+      selectedAccountId = account.id;
       network = account.network;
       numberCtrl.text = account.accountNumber;
       nameCtrl.text = account.accountName;
     });
+  }
+
+  void _startAddAccount() {
+    setState(() {
+      addingAccount = true;
+      selectedAccountId = null;
+      numberCtrl.text = '';
+      nameCtrl.text = '';
+    });
+  }
+
+  Future<void> _deleteAccount(SavedWithdrawalAccount account) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete account'),
+        content: Text('Remove ${account.accountName} · ${account.accountNumber}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await context.read<AppStore>().deleteWithdrawalAccount(account.id);
+      if (!mounted) return;
+      if (selectedAccountId == account.id) {
+        selectedAccountId = null;
+        numberCtrl.text = '';
+        nameCtrl.text = '';
+      }
+      _prefilled = true;
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) _toast(e.message);
+    }
   }
 
   void _setPayoutType(String type) {
@@ -128,13 +171,17 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     setState(() {
       payoutType = type;
       if (saved != null) {
+        addingAccount = false;
+        selectedAccountId = saved.id;
         network = saved.network;
         numberCtrl.text = saved.accountNumber;
         nameCtrl.text = saved.accountName;
         return;
       }
+      addingAccount = true;
+      selectedAccountId = null;
       network = type == 'bank' ? (ghanaBanks.isNotEmpty ? ghanaBanks.first.id : 'gcb') : 'mtn';
-      numberCtrl.text = type == 'momo' ? (overview.defaultMomoNumber ?? '') : '';
+      numberCtrl.text = '';
       nameCtrl.text = '';
     });
   }
@@ -161,6 +208,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       if (!mounted) return;
       _toast('Withdrawal account saved. It will be here next time.');
       _prefilled = true;
+      addingAccount = false;
       await _load();
     } on ApiException catch (e) {
       if (mounted) _toast(e.message);
@@ -497,32 +545,33 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   ),
                 ],
                 const SizedBox(height: 16),
-                const Text(
-                  '2. Where should the money go?',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
-                ),
-                if (overview.withdrawalAccounts.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Text(
-                    'SAVED WITHDRAWAL ACCOUNTS',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        '2. Where should the money go?',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
+                    IconButton(
+                      onPressed: _startAddAccount,
+                      style: IconButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.white),
+                      icon: const Icon(Icons.add),
+                      tooltip: 'Add withdrawal account',
+                    ),
+                  ],
+                ),
+                if (overview.withdrawalAccounts.where((account) => account.type == payoutType).isNotEmpty) ...[
+                  const SizedBox(height: 12),
                   SizedBox(
                     height: 108,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: overview.withdrawalAccounts.length,
+                      itemCount: overview.withdrawalAccounts.where((account) => account.type == payoutType).length,
                       separatorBuilder: (context, index) => const SizedBox(width: 10),
                       itemBuilder: (context, index) {
-                        final account = overview.withdrawalAccounts[index];
-                        final selected = account.accountNumber == numberCtrl.text.trim() &&
-                            account.accountName == nameCtrl.text.trim();
+                        final account = overview.withdrawalAccounts.where((account) => account.type == payoutType).elementAt(index);
+                        final selected = selectedAccountId == account.id && !addingAccount;
                         return InkWell(
                           onTap: () => _applyAccount(account),
                           borderRadius: BorderRadius.circular(16),
@@ -537,15 +586,25 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  account.accountName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 15,
-                                  ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        account.accountName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () => _deleteAccount(account),
+                                      child: const Icon(Icons.delete_outline, color: Colors.white, size: 18),
+                                    ),
+                                  ],
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -571,6 +630,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                     ),
                   ),
                 ],
+                if (addingAccount || overview.withdrawalAccounts.where((account) => account.type == payoutType).isEmpty) ...[
                 const SizedBox(height: 12),
                 TextField(
                   controller: numberCtrl,
@@ -613,6 +673,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   'Saves this number and account name for the next withdrawal.',
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                 ),
+                ],
                 const SizedBox(height: 20),
                 const Text(
                   '3. How much?',
@@ -626,6 +687,8 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                 ),
                 TextField(
                   controller: amountCtrl,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _submit(),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   decoration: InputDecoration(
                     labelText: 'Amount (GH₵)',

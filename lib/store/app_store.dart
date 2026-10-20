@@ -1765,6 +1765,10 @@ class AppStore extends ChangeNotifier {
     });
   }
 
+  Future<void> deleteWithdrawalAccount(int id) async {
+    await _api.delete('/wallet/withdrawal-accounts/$id');
+  }
+
   Future<Map<String, dynamic>> loadManualFunding() async {
     final res = await _api.get('/wallet/manual-funding');
     return Map<String, dynamic>.from(res.data as Map);
