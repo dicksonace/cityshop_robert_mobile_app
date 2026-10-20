@@ -993,7 +993,7 @@ class WithdrawalOverview {
     this.autoPaystack = false,
     this.autoJunipay = false,
     this.bankTiers = const [],
-    this.momoTiers,
+    this.momoTiers = const [],
     this.withdrawalAccounts = const [],
     this.withdrawalRestricted = false,
     this.withdrawalRestrictionNote,
@@ -1016,8 +1016,7 @@ class WithdrawalOverview {
   final bool autoPaystack;
   final bool autoJunipay;
   final List<BankFeeTier> bankTiers;
-  /// Null when the API did not send MoMo bands. Empty means admin cleared them.
-  final List<BankFeeTier>? momoTiers;
+  final List<BankFeeTier> momoTiers;
   final List<SavedWithdrawalAccount> withdrawalAccounts;
   final bool withdrawalRestricted;
   final String? withdrawalRestrictionNote;
@@ -1088,13 +1087,6 @@ class WithdrawalOverview {
     BankFeeTier(min: 1000, max: 25000, fee: 20),
   ];
 
-  /// Ghana MoMo cash-out schedule when the API has not sent momo_tiers yet.
-  static const List<BankFeeTier> defaultMomoTiers = [
-    BankFeeTier(min: 1, max: 49.99, fee: 0.5),
-    BankFeeTier(min: 50, max: 1999.99, fee: 1, mode: 'percent'),
-    BankFeeTier(min: 2000, fee: 20),
-  ];
-
   static double _momoFeeFromPayload(Map<String, dynamic> fee) {
     if (fee.containsKey('momo_amount') && fee['momo_amount'] != null) {
       return (fee['momo_amount'] as num?)?.toDouble() ?? 0;
@@ -1118,27 +1110,25 @@ class WithdrawalOverview {
   }
 
   double feeFor(String payoutType, [double amount = 0]) {
-    if (feeAppliesTo == 'none') return 0;
     // Match server PlatformSettings::feeForWithdrawal — percent only when % > 0.
     if (feeMode == 'percent' && feePercent > 0) {
       return double.parse((amount * feePercent / 100).toStringAsFixed(2));
     }
     final type = payoutType == 'bank' ? 'bank' : 'momo';
-    if (type == 'momo') {
-      final savedTiers = momoTiers;
-      if (savedTiers != null && savedTiers.isNotEmpty) {
-        return double.parse(feeFromMomoTiers(amount, savedTiers).toStringAsFixed(2));
-      }
-      if (momoFeePercent > 0) {
-        return double.parse((amount * momoFeePercent / 100).toStringAsFixed(2));
-      }
-      if (momoFeeAmount > 0) return momoFeeAmount;
-      if (savedTiers == null) {
-        return double.parse(feeFromMomoTiers(amount, defaultMomoTiers).toStringAsFixed(2));
-      }
-      return 0;
+    if (type == 'momo' && feeAppliesTo != 'none' && momoTiers.isNotEmpty) {
+      return double.parse(feeFromMomoTiers(amount, momoTiers).toStringAsFixed(2));
     }
-    if (feeAppliesTo == 'momo') return 0;
+    if (type == 'momo' && momoFeePercent > 0) {
+      return double.parse((amount * momoFeePercent / 100).toStringAsFixed(2));
+    }
+    // Legacy API sent mode=percent + percent=0 + enabled=false when auto Paystack
+    // was on with 0% — still apply bank tiers (do not treat as "No fee").
+    if (!feeEnabled && feeMode != 'percent') return 0;
+    if (feeAppliesTo == 'none') return 0;
+    if (type == 'momo') {
+      return momoFeeAmount > 0 ? momoFeeAmount : 0;
+    }
+    if (!(feeAppliesTo == 'all' || feeAppliesTo == 'bank')) return 0;
     final tiers = bankTiers.isNotEmpty ? bankTiers : defaultBankTiers;
     return feeFromBankTiers(amount, tiers, feeAmount);
   }
@@ -1194,7 +1184,7 @@ class WithdrawalOverview {
               mode: map['mode'] == 'percent' ? 'percent' : 'flat',
             );
           }).toList()
-        : null;
+        : const <BankFeeTier>[];
     return WithdrawalOverview(
       items: data is List
           ? data

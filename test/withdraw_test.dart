@@ -208,13 +208,13 @@ void main() {
     expect(find.textContaining('Minimum GH₵10.00'), findsOneWidget);
   });
 
-  testWidgets('"Withdraw all" leaves room for the MoMo fee', (tester) async {
+  testWidgets('"Withdraw all" fills the whole available balance', (tester) async {
     await _pumpWithdraw(tester, _FakeApiClient());
 
     await tester.tap(find.text('Withdraw all'));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(TextField, '1029.70'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '1040.00'), findsOneWidget);
   });
 
   testWidgets('a request under the minimum never reaches the server', (tester) async {
@@ -417,7 +417,7 @@ void main() {
       expect(overview.feeFor('bank', 1500), 20);
       expect(overview.feeFor('bank', 5000), 20);
       expect(overview.feeFor('bank', 15000), 20);
-      expect(overview.feeFor('momo', 15000), 20);
+      expect(overview.feeFor('momo', 15000), 0);
     });
 
     test('shows the MoMo bands on the amount being withdrawn', () {
@@ -441,6 +441,22 @@ void main() {
       expect(overview.feeFor('momo', 2000), 20);
       expect(overview.feeFor('bank', 500), 10);
       expect(overview.maxWithdrawable('bank'), 1020);
+    });
+
+    test('keeps the MoMo percent when flat fees are disabled', () {
+      final overview = WithdrawalOverview.fromJson(_overview(fee: {
+        'enabled': false,
+        'amount': 10,
+        'momo_amount': 0,
+        'momo_percent': 1.9,
+        'applies_to': 'none',
+        'mode': 'flat',
+        'percent': 0,
+        'momo_tiers': [],
+      }));
+
+      expect(overview.feeFor('momo', 10), 0.19);
+      expect(overview.feeFor('bank', 500), 0);
     });
 
     test('upgrades a single GH₵10 bank band from GH₵1,000', () {
