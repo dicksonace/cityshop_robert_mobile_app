@@ -122,9 +122,9 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
   Future<void> _openDirectPay(double amount) async {
     final payload = widget.qrPayload;
     if (payload == null || payload.isEmpty) return;
-    if (amount < 5) {
+    if (amount < 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mobile Money and card start at GH₵5.00')),
+        const SnackBar(content: Text('Enter at least GH₵1.00')),
       );
       return;
     }
