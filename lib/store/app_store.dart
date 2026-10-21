@@ -1637,6 +1637,7 @@ class AppStore extends ChangeNotifier {
     required String method,
     required String gateway,
     String? note,
+    String? network,
   }) async {
     final res = await _api.post('/wallet/qr/pay/gateway', data: {
       'payload': payload,
@@ -1644,6 +1645,7 @@ class AppStore extends ChangeNotifier {
       'method': method,
       'gateway': gateway,
       if (note != null && note.isNotEmpty) 'note': note,
+      if (network != null && network.isNotEmpty) 'network': network,
     });
     return res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
   }

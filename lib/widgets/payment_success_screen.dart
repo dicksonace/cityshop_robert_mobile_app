@@ -14,6 +14,7 @@ class PaymentSuccessScreen extends StatelessWidget {
     required this.recipientName,
     this.reference,
     this.note,
+    this.paymentMethod = 'Balance',
     this.onDone,
   });
 
@@ -21,6 +22,7 @@ class PaymentSuccessScreen extends StatelessWidget {
   final String recipientName;
   final String? reference;
   final String? note;
+  final String paymentMethod;
   final VoidCallback? onDone;
 
   @override
@@ -124,7 +126,7 @@ class PaymentSuccessScreen extends StatelessWidget {
                     children: [
                       _row('To', recipientName),
                       _row('Amount', _money.format(amount)),
-                      _row('Payment method', 'Balance'),
+                      _row('Payment method', paymentMethod),
                       if (memo.isNotEmpty) _row('Note', memo),
                       if (ref.isNotEmpty) _row('Reference', ref, last: true),
                     ],
@@ -207,6 +209,7 @@ Future<void> showPaymentSuccess(
   required String recipientName,
   String? reference,
   String? note,
+  String paymentMethod = 'Balance',
 }) {
   return Navigator.of(context).push<void>(
     PageRouteBuilder(
@@ -216,6 +219,7 @@ Future<void> showPaymentSuccess(
         recipientName: recipientName,
         reference: reference,
         note: note,
+        paymentMethod: paymentMethod,
       ),
       transitionsBuilder: (_, animation, __, child) {
         return FadeTransition(opacity: animation, child: child);

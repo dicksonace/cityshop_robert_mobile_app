@@ -9,6 +9,7 @@ import '../api/api_client.dart';
 import '../api/api_config.dart';
 import '../screens/cart/paystack_payment_screen.dart';
 import '../store/app_store.dart';
+import 'momo_widgets.dart';
 import 'payment_option_tile.dart';
 import 'payment_success_screen.dart';
 
@@ -168,6 +169,7 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
         method: choice.method,
         gateway: choice.gateway,
         note: note,
+        network: choice.network,
       );
       if (!mounted) return;
       final url = started['authorization_url'] as String? ?? '';
@@ -179,12 +181,17 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
         return;
       }
 
+      String? paidMethod;
       final paid = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => PaystackPaymentScreen(
             authorizationUrl: url,
             reference: reference,
-            onVerify: (ref) => store.verifyQrGatewayPay(reference: ref, gateway: choice.gateway),
+            onVerify: (ref) async {
+              final verified = await store.verifyQrGatewayPay(reference: ref, gateway: choice.gateway);
+              final method = (verified['payment_method'] as String?)?.trim();
+              if (method != null && method.isNotEmpty) paidMethod = method;
+            },
           ),
         ),
       );
@@ -195,6 +202,9 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
         recipientName: widget.recipientName,
         reference: reference,
         note: note,
+        paymentMethod: (paidMethod != null && paidMethod!.isNotEmpty)
+            ? paidMethod!
+            : momoNetworkLabel(choice.network),
       );
       if (!mounted) return;
       context.go('/shop?tab=wallet');
@@ -640,10 +650,11 @@ class _PaymentMethodRow extends StatelessWidget {
 }
 
 class _DirectPayChoice {
-  const _DirectPayChoice({required this.gateway, required this.method});
+  const _DirectPayChoice({required this.gateway, required this.method, required this.network});
 
   final String gateway;
   final String method;
+  final String network;
 }
 
 class _DirectPaySheet extends StatefulWidget {
@@ -679,6 +690,7 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
           : widget.korapay
               ? 'korapay'
               : 'paystack';
+  String _network = 'mtn';
 
   @override
   Widget build(BuildContext context) {
@@ -722,6 +734,29 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
             const Divider(height: 1, thickness: 0.5, color: Color(0xFFEEEEEE)),
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 14, 20, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Payment method',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                children: [
+                  for (final network in momoNetworks)
+                    _NetworkMethodTile(
+                      network: network,
+                      selected: _network == network.id,
+                      onTap: () => setState(() => _network = network.id),
+                    ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 6, 20, 10),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -792,7 +827,7 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
                   ),
                   onPressed: () => Navigator.pop(
                     context,
-                    _DirectPayChoice(gateway: _gateway, method: 'momo'),
+                    _DirectPayChoice(gateway: _gateway, method: 'momo', network: _network),
                   ),
                   child: const Text('Pay'),
                 ),
@@ -804,4 +839,55 @@ class _DirectPaySheetState extends State<_DirectPaySheet> {
     );
   }
 
+}
+
+class _NetworkMethodTile extends StatelessWidget {
+  const _NetworkMethodTile({
+    required this.network,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final MomoNetwork network;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: selected ? network.selectedFill : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected ? network.selectedBorder : const Color(0xFFE5E7EB),
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                MomoNetworkLogo(network: network.id, size: 36),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    network.label,
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                ),
+                if (selected)
+                  Icon(Icons.check_circle, color: network.selectedBorder, size: 22),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
