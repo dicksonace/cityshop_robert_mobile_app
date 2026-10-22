@@ -394,7 +394,9 @@ class _WalletTabState extends State<WalletTab> with AutoRefreshTab {
         return StatefulBuilder(
           builder: (ctx, setModal) {
             final typed = double.tryParse(amountCtrl.text.trim()) ?? 0;
-            final quote = _paystackRechargeQuote(typed, percent: feePercent, flat: feeFlat);
+            final quote = gateway == 'junipay'
+                ? <String, double>{'credit': typed, 'fee': 0, 'charge': typed}
+                : _paystackRechargeQuote(typed, percent: feePercent, flat: feeFlat);
             return SheetShell(
               action: SizedBox(
                 height: 48,
