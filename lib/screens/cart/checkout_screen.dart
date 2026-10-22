@@ -384,7 +384,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           final url = pay['authorization_url'] as String?;
           final reference = pay['reference'] as String? ?? '';
           if (url != null && url.isNotEmpty) {
-            final paid = await Navigator.of(context).push<bool>(
+            final paid = await Navigator.of(context).push<PaymentScreenResult>(
               MaterialPageRoute(
                 builder: (_) => PaystackPaymentScreen(
                   authorizationUrl: url,
@@ -396,7 +396,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
             );
             if (!mounted) return;
-            if (paid == true) {
+            if (paid?.dashboard == true) {
+              context.go(store.isSeller ? '/seller' : '/shop');
+              return;
+            }
+            if (paid?.paid == true) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Payment successful. Your order is placed.'),
@@ -449,7 +453,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           final url = pay['authorization_url'] as String?;
           final reference = pay['reference'] as String? ?? '';
           if (url != null && url.isNotEmpty) {
-            final paid = await Navigator.of(context).push<bool>(
+            final paid = await Navigator.of(context).push<PaymentScreenResult>(
               MaterialPageRoute(
                 builder: (_) => PaystackPaymentScreen(
                   authorizationUrl: url,
@@ -468,7 +472,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
             );
             if (!mounted) return;
-            if (paid == true) {
+            if (paid?.dashboard == true) {
+              context.go(store.isSeller ? '/seller' : '/shop');
+              return;
+            }
+            if (paid?.paid == true) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Marketplace payment successful')),
               );

@@ -308,7 +308,7 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
       return;
     }
     final store = context.read<AppStore>();
-    final paid = await Navigator.of(context).push<bool>(
+    final paid = await Navigator.of(context).push<PaymentScreenResult>(
       MaterialPageRoute(
         builder: (_) => PaystackPaymentScreen(
           authorizationUrl: url,
@@ -324,7 +324,11 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
       ),
     );
     if (!mounted) return;
-    if (paid == true) {
+    if (paid?.dashboard == true) {
+      context.go(store.isSeller ? '/seller' : '/shop');
+      return;
+    }
+    if (paid?.paid == true) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Funds added to your wallet')));
     }
     await _load();

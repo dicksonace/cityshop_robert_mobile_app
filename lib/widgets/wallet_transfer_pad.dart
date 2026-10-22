@@ -182,7 +182,7 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
       }
 
       String? paidMethod;
-      final paid = await Navigator.of(context).push<bool>(
+      final paid = await Navigator.of(context).push<PaymentScreenResult>(
         MaterialPageRoute(
           builder: (_) => PaystackPaymentScreen(
             authorizationUrl: url,
@@ -195,7 +195,12 @@ class _WalletTransferPadState extends State<WalletTransferPad> {
           ),
         ),
       );
-      if (!mounted || paid != true) return;
+      if (!mounted) return;
+      if (paid?.dashboard == true) {
+        context.go(store.isSeller ? '/seller' : '/shop');
+        return;
+      }
+      if (paid?.paid != true) return;
       await showPaymentSuccess(
         context,
         amount: amount,
