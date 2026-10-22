@@ -231,18 +231,17 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
     setState(() {});
     final q = widget.searchController.text.trim();
     _searchDebounce?.cancel();
+    if (q.isNotEmpty) return;
     final store = context.read<AppStore>();
-    if (q.isEmpty) {
-      if (store.searchQuery.isNotEmpty || store.imageSearchActive) {
-        store.loadShop(search: '');
-      }
-      return;
+    if (store.searchQuery.isNotEmpty || store.imageSearchActive) {
+      store.loadShop(search: '');
     }
-    if (q == store.searchQuery.trim()) return;
-    _searchDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (!mounted) return;
-      context.read<AppStore>().loadShop(search: widget.searchController.text);
-    });
+  }
+
+  void _openDeepSearch() {
+    _searchDebounce?.cancel();
+    final q = widget.searchController.text.trim();
+    context.push('/search?q=${Uri.encodeQueryComponent(q)}');
   }
 
   @override
@@ -417,7 +416,7 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
                                   child: TextField(
                                     controller: widget.searchController,
                                     decoration: const InputDecoration(
-                                      hintText: 'Search products, stores, brands…',
+                                      hintText: 'Deep search products, stores…',
                                       border: InputBorder.none,
                                       enabledBorder: InputBorder.none,
                                       focusedBorder: InputBorder.none,
@@ -426,10 +425,7 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
                                       contentPadding: EdgeInsets.symmetric(vertical: 14),
                                     ),
                                     textInputAction: TextInputAction.search,
-                                    onSubmitted: (q) {
-                                      _searchDebounce?.cancel();
-                                      store.loadShop(search: q);
-                                    },
+                                    onSubmitted: (_) => _openDeepSearch(),
                                   ),
                                 ),
                                 if (widget.searchController.text.isNotEmpty)
@@ -454,12 +450,7 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
                                     color: AppColors.accent,
                                     borderRadius: BorderRadius.circular(10),
                                     child: InkWell(
-                                      onTap: store.loadingShop
-                                          ? null
-                                          : () {
-                                              _searchDebounce?.cancel();
-                                              store.loadShop(search: widget.searchController.text);
-                                            },
+                                      onTap: _openDeepSearch,
                                       borderRadius: BorderRadius.circular(10),
                                       child: const SizedBox(
                                         width: 44,

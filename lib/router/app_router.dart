@@ -29,6 +29,7 @@ import '../screens/chat/create_group_screen.dart';
 import '../screens/chat/friend_chat_screens.dart';
 import '../screens/chat/messages_screens.dart';
 import '../screens/product/product_detail_screen.dart';
+import '../screens/shop/deep_search_screen.dart';
 import '../screens/shop/shop_shell.dart';
 import '../screens/seller/seller_shell_screen.dart';
 import '../screens/seller/seller_orders_screens.dart';
@@ -323,6 +324,12 @@ GoRouter createRouter(AppStore store) {
         ),
       ),
       GoRoute(path: '/kyc', builder: (_, __) => const KycVerificationScreen()),
+      GoRoute(
+        path: '/search',
+        builder: (_, state) => DeepSearchScreen(
+          initialQuery: state.uri.queryParameters['q'] ?? '',
+        ),
+      ),
       GoRoute(
         path: '/products/:slug',
         builder: (_, state) => ProductDetailScreen(slug: state.pathParameters['slug']!),

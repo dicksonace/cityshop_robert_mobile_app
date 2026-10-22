@@ -235,6 +235,36 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  Future<({List<Product> products, List<Map<String, dynamic>> stores})> deepSearch({
+    required String query,
+    required String mode,
+  }) async {
+    final res = await _api.get('/search', query: {
+      'q': query.trim(),
+      'mode': mode,
+    });
+    final body = res.data;
+    final products = <Product>[];
+    final stores = <Map<String, dynamic>>[];
+    if (body is Map) {
+      final pdata = body['products'];
+      if (pdata is List) {
+        for (final row in pdata) {
+          if (row is Map) {
+            products.add(Product.fromJson(Map<String, dynamic>.from(row)));
+          }
+        }
+      }
+      final sdata = body['stores'];
+      if (sdata is List) {
+        for (final row in sdata) {
+          if (row is Map) stores.add(Map<String, dynamic>.from(row));
+        }
+      }
+    }
+    return (products: products, stores: stores);
+  }
+
   Future<void> searchByImage(String filePath) async {
     loadingShop = true;
     shopError = null;
