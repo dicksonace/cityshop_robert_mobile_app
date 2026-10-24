@@ -1759,10 +1759,12 @@ class AppStore extends ChangeNotifier {
     required String network,
     required String paymentPin,
     String payoutType = 'momo',
+    String payoutMode = 'automatic',
   }) async {
     final res = await _api.post('/wallet/withdraw', data: {
       'amount': amount,
       'payout_type': payoutType,
+      'payout_mode': payoutMode,
       'momo_number': momoNumber,
       'account_name': accountName,
       'network': network,

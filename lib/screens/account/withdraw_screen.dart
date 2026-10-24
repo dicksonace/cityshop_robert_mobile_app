@@ -44,6 +44,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   bool _prefilled = false;
   bool addingAccount = false;
   int? selectedAccountId;
+  bool automatic = true;
 
   bool get _isBank => payoutType == 'bank';
 
@@ -289,6 +290,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
         accountName: name,
         network: selectedNetwork,
         payoutType: payoutType,
+        payoutMode: automatic ? 'automatic' : 'manual',
         paymentPin: pin,
       );
       if (!mounted) return;
@@ -397,11 +399,13 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  overview.autoJunipay
-                      ? 'Junipay sends this payout automatically. It completes when Junipay confirms it. If it does not go through, it stays pending for review.'
-                      : overview.autoPaystack
-                          ? 'Paystack will send this payout automatically.'
-                          : 'Usually processed within 15 minutes and sometimes instant.',
+                  automatic
+                      ? (overview.autoJunipay
+                          ? 'Automatic. Junipay sends this payout now. It completes when Junipay confirms it. If it does not go through, it stays pending for review.'
+                          : overview.autoPaystack
+                              ? 'Automatic. Paystack will send this payout now.'
+                              : 'Automatic. Usually processed within 15 minutes and sometimes instant.')
+                      : 'Manual. CityShop pays this by hand. It stays pending until it is sent.',
                   style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],
@@ -674,6 +678,38 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                 ),
                 ],
+                const SizedBox(height: 20),
+                const Text(
+                  'How should we send it?',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _TypeChip(
+                        label: 'Automatic',
+                        selected: automatic,
+                        onTap: () => setState(() => automatic = true),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _TypeChip(
+                        label: 'Manual',
+                        selected: !automatic,
+                        onTap: () => setState(() => automatic = false),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  automatic
+                      ? 'We send the money now. If it does not go through, it stays pending.'
+                      : 'CityShop pays this by hand. It stays pending until it is sent.',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
+                ),
                 const SizedBox(height: 20),
                 const Text(
                   '3. How much?',
