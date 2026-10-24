@@ -500,6 +500,7 @@ class AppUser {
     this.sellerStatus,
     this.sellerStoreSetupComplete = false,
     this.canUseRmbWallet = false,
+    this.canUseGsmTools = false,
   });
 
   final int id;
@@ -518,6 +519,7 @@ class AppUser {
   final String? sellerStatus;
   final bool sellerStoreSetupComplete;
   final bool canUseRmbWallet;
+  final bool canUseGsmTools;
 
   bool get isSeller => (role ?? '').toLowerCase() == 'seller';
   bool get isBuyer => (role ?? '').toLowerCase() == 'buyer';
@@ -542,12 +544,14 @@ class AppUser {
       sellerStatus: seller?['status'] as String?,
       sellerStoreSetupComplete: seller?['store_setup_complete'] == true,
       canUseRmbWallet: json['can_use_rmb_wallet'] == true,
+      canUseGsmTools: json['can_use_gsm_tools'] == true,
     );
   }
 
   AppUser copyWith({
     KycInfo? kyc,
     bool? canUseRmbWallet,
+    bool? canUseGsmTools,
   }) {
     return AppUser(
       id: id,
@@ -566,6 +570,7 @@ class AppUser {
       sellerStatus: sellerStatus,
       sellerStoreSetupComplete: sellerStoreSetupComplete,
       canUseRmbWallet: canUseRmbWallet ?? this.canUseRmbWallet,
+      canUseGsmTools: canUseGsmTools ?? this.canUseGsmTools,
     );
   }
 }

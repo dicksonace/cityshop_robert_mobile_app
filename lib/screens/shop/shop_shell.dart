@@ -640,18 +640,13 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           ),
+          if (user?.canUseGsmTools == true)
           Expanded(
             child: Center(
               child: Tooltip(
                 message: 'GSM Tools',
                 child: InkWell(
-                  onTap: () {
-                    if (user == null) {
-                      context.push('/login');
-                      return;
-                    }
-                    context.push('/gsm-tools');
-                  },
+                  onTap: () => context.push('/gsm-tools'),
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -678,7 +673,9 @@ class _TopBar extends StatelessWidget {
                 ),
               ),
             ),
-          ),
+          )
+          else
+            const Spacer(),
           if (user != null)
             IconButton(
               tooltip: 'Notifications',
@@ -876,19 +873,14 @@ class _CategoryShortcuts extends StatelessWidget {
           context.push('/wishlist');
         },
       ),
-      _Shortcut(
-        label: 'GSM Tools',
-        icon: Icons.phonelink_setup_rounded,
-        bg: const Color(0xFFEDE9FE),
-        fg: const Color(0xFF6D28D9),
-        onTap: () {
-          if (!store.isLoggedIn) {
-            context.push('/login');
-            return;
-          }
-          context.push('/gsm-tools');
-        },
-      ),
+      if (store.user?.canUseGsmTools == true)
+        _Shortcut(
+          label: 'GSM Tools',
+          icon: Icons.phonelink_setup_rounded,
+          bg: const Color(0xFFEDE9FE),
+          fg: const Color(0xFF6D28D9),
+          onTap: () => context.push('/gsm-tools'),
+        ),
       _Shortcut(
         label: 'In Ghana',
         icon: Icons.location_on,
