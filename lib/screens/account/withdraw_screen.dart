@@ -47,6 +47,9 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   bool automatic = true;
 
   bool get _isBank => payoutType == 'bank';
+  bool get _feeFree => !automatic && !_isBank;
+
+  double _feeFor(double amount) => _feeFree ? 0 : overview.feeFor(payoutType, amount);
 
   @override
   void initState() {
@@ -114,7 +117,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   }
 
   void _withdrawAll() {
-    final max = overview.maxWithdrawable(payoutType);
+    final max = _feeFree ? overview.availableBalance : overview.maxWithdrawable(payoutType);
     setState(() => amountCtrl.text = max.toStringAsFixed(2));
   }
 
@@ -256,7 +259,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
       _toast('Minimum withdrawal is ${_money.format(overview.minimum)}');
       return;
     }
-    final fee = overview.feeFor(payoutType, amount);
+    final fee = _feeFor(amount);
     final total = amount + fee;
     if (total > overview.availableBalance) {
       return;
@@ -306,7 +309,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
   }
 
   Future<bool?> _review(double amount, String number, String name) {
-    final fee = overview.feeFor(payoutType, amount);
+    final fee = _feeFor(amount);
     final total = amount + fee;
     return showAppSheet<bool>(
       context: context,
@@ -447,7 +450,7 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
     final tooSmall = overview.availableBalance < overview.minimum;
     final banks = overview.banks.isNotEmpty ? overview.banks : ghanaBanks;
     final typedAmount = double.tryParse(amountCtrl.text.trim()) ?? 0;
-    final activeFee = overview.feeFor(payoutType, typedAmount);
+    final activeFee = _feeFor(typedAmount);
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -707,7 +710,9 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                 Text(
                   automatic
                       ? 'We send the money now. If it does not go through, it stays pending.'
-                      : 'CityShop pays this by hand. It stays pending until it is sent.',
+                      : _isBank
+                          ? 'CityShop pays this by hand. It stays pending until it is sent.'
+                          : 'CityShop pays this by hand with no MoMo fee. It stays pending until it is sent.',
                   style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.35),
                 ),
                 const SizedBox(height: 20),
@@ -730,9 +735,10 @@ class _WithdrawScreenState extends State<WithdrawScreen> {
                     labelText: 'Amount (GH₵)',
                     helperText: () {
                       final typed = double.tryParse(amountCtrl.text.trim()) ?? 0;
-                      final fee = overview.feeFor(payoutType, typed);
+                      final fee = _feeFor(typed);
                       final base = 'Minimum ${_money.format(overview.minimum)}'
                           ' · Available ${_money.format(overview.availableBalance)}';
+                      if (_feeFree) return '$base · Manual MoMo has no fee';
                       if (overview.feeMode == 'percent' && overview.feePercent > 0) {
                         return '$base · ${overview.feePercent.toStringAsFixed(overview.feePercent % 1 == 0 ? 0 : 2)}% fee';
                       }
