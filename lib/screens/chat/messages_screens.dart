@@ -4,13 +4,16 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
+import 'package:gal/gal.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_client.dart';
@@ -1039,7 +1042,20 @@ class _ChatScreenState extends State<ChatScreen> {
         !message.isEvent &&
         !message.isSignalling &&
         message.id > 0;
-    if (!canReply && !canDelete && !canForwardMessage && !canCopy && !canEdit && !canReact && !canReport) return;
+    final canDownload = !message.isLocalPending &&
+        !message.isDeleted &&
+        !message.viewOnce &&
+        (_downloadUrl(message)?.isNotEmpty ?? false);
+    if (!canReply &&
+        !canDelete &&
+        !canForwardMessage &&
+        !canDownload &&
+        !canCopy &&
+        !canEdit &&
+        !canReact &&
+        !canReport) {
+      return;
+    }
 
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -1103,6 +1119,16 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                   onTap: () => Navigator.pop(ctx, canForward ? 'forward' : 'forward_hint'),
                 ),
+              if (canDownload)
+                ListTile(
+                  leading: const Icon(Icons.download_rounded, color: AppColors.accent),
+                  title: const Text('Download', style: TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: const Text(
+                    'Save on phone',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                  onTap: () => Navigator.pop(ctx, 'download'),
+                ),
               if (canCopy)
                 ListTile(
                   leading: const Icon(Icons.copy_rounded, color: AppColors.accent),
@@ -1159,6 +1185,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
       );
+    } else if (action == 'download') {
+      await _downloadToPhone(message);
     } else if (action == 'copy') {
       await Clipboard.setData(ClipboardData(text: message.body.trim()));
       if (!mounted) return;
@@ -1173,6 +1201,76 @@ class _ChatScreenState extends State<ChatScreen> {
         targetType: 'message',
         targetId: message.id,
         title: 'Report this message',
+      );
+    }
+  }
+
+  String? _downloadUrl(ChatMessage message) {
+    switch (message.type) {
+      case 'image':
+        return message.imageUrl;
+      case 'video':
+        return message.videoUrl;
+      case 'voice':
+        return message.voiceUrl;
+      case 'file':
+        return message.fileUrl;
+    }
+    return null;
+  }
+
+  Future<void> _downloadToPhone(ChatMessage message) async {
+    final url = ApiConfig.resolveMediaUrl(_downloadUrl(message) ?? '');
+    if (url.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final toGallery = message.type == 'image' || message.type == 'video';
+    try {
+      if (toGallery &&
+          !await Gal.hasAccess(toAlbum: true) &&
+          !await Gal.requestAccess(toAlbum: true)) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Allow photo access to save on phone')),
+        );
+        return;
+      }
+      messenger.showSnackBar(const SnackBar(content: Text('Downloading…')));
+
+      final uriName = Uri.tryParse(url)?.pathSegments.lastOrNull ?? '';
+      final rawName = (message.fileName?.trim().isNotEmpty ?? false) ? message.fileName!.trim() : uriName;
+      final fallbackExt = switch (message.type) {
+        'image' => 'jpg',
+        'video' => 'mp4',
+        'voice' => 'm4a',
+        _ => 'bin',
+      };
+      var name = rawName.replaceAll(RegExp(r'[^\w.\-]+'), '_');
+      if (name.isEmpty) name = 'cityshop_${message.id}';
+      if (!name.contains('.')) name = '$name.$fallbackExt';
+
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/${DateTime.now().millisecondsSinceEpoch}_$name';
+      await Dio().download(url, path);
+
+      if (message.type == 'image') {
+        await Gal.putImage(path, album: 'CityShop');
+      } else if (message.type == 'video') {
+        await Gal.putVideo(path, album: 'CityShop');
+      } else {
+        if (!mounted) return;
+        messenger.hideCurrentSnackBar();
+        await SharePlus.instance.share(
+          ShareParams(files: [XFile(path, name: name, mimeType: message.fileMime)]),
+        );
+        return;
+      }
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(const SnackBar(content: Text('Saved to Photos')));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not save: $e'), backgroundColor: AppColors.danger),
       );
     }
   }
