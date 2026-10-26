@@ -247,7 +247,11 @@ class _ShopHomeState extends State<_ShopHome> with AutoRefreshTab {
   @override
   Future<void> refreshTabData({required bool background}) async {
     final store = context.read<AppStore>();
-    await store.loadShop(search: widget.searchController.text);
+    await Future.wait([
+      store.loadShop(search: widget.searchController.text),
+      // Picks up admin turning GSM Tools on or off without reopening the app.
+      if (store.isLoggedIn) store.refreshMe(maxAttempts: 1).catchError((_) {}),
+    ]);
     if (!mounted || background) return;
     // Recreating the picks-for-you strip is jarring mid-browse, so only do it
     // when the shopper asked for a refresh.

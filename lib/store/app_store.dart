@@ -1605,6 +1605,9 @@ class AppStore extends ChangeNotifier {
       if (user != null && data.containsKey('can_use_rmb_wallet')) {
         user = user!.copyWith(canUseRmbWallet: data['can_use_rmb_wallet'] == true);
       }
+      if (user != null && data.containsKey('can_use_gsm_tools')) {
+        user = user!.copyWith(canUseGsmTools: data['can_use_gsm_tools'] == true);
+      }
     }
     notifyListeners();
   }

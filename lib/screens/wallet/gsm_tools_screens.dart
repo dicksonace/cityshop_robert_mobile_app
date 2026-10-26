@@ -115,12 +115,39 @@ class _GsmToolsHubScreenState extends State<GsmToolsHubScreen> {
             : [];
         loading = false;
       });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 403) {
+        await _leaveWhenDisabled();
+        return;
+      }
+      setState(() {
+        loading = false;
+        error = 'Could not load GSM Tools.';
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         loading = false;
         error = 'Could not load GSM Tools.';
       });
+    }
+  }
+
+  Future<void> _leaveWhenDisabled() async {
+    final store = context.read<AppStore>();
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+    try {
+      await store.refreshMe(maxAttempts: 1);
+    } catch (_) {}
+    messenger.showSnackBar(
+      const SnackBar(content: Text('GSM Tools is not enabled for your account.')),
+    );
+    if (router.canPop()) {
+      router.pop();
+    } else {
+      router.go('/shop');
     }
   }
 
