@@ -2126,6 +2126,29 @@ class _ChatScreenState extends State<ChatScreen> {
     _jumpToEnd();
   }
 
+  Future<void> _reportChatUser() async {
+    final otherId = conversation?.otherId;
+    if (otherId == null) return;
+    final sellerId = conversation?.sellerId ?? (conversation?.isSeller == true ? otherId : null);
+    if (conversation?.canComplain == true && sellerId != null) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatComplaintScreen(
+            sellerId: sellerId,
+            sellerName: conversation?.otherName ?? 'seller',
+          ),
+        ),
+      );
+      return;
+    }
+    await showReportContentSheet(
+      context,
+      targetType: 'user',
+      targetId: otherId,
+      title: 'Report ${conversation?.otherName ?? 'this user'}',
+    );
+  }
+
   Future<void> _toggleBlock() async {
     final otherId = conversation?.otherId;
     if (otherId == null) return;
@@ -2321,6 +2344,8 @@ class _ChatScreenState extends State<ChatScreen> {
               onSelected: (value) {
                 if (value == 'block') {
                   _toggleBlock();
+                } else if (value == 'report') {
+                  unawaited(_reportChatUser());
                 } else if (value == 'phone') {
                   unawaited(_callSellerPhone());
                 } else if (value == 'store') {
@@ -2347,6 +2372,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     value: 'phone',
                     child: Text('Call phone'),
                   ),
+                const PopupMenuItem(
+                  value: 'report',
+                  child: Text('Report'),
+                ),
                 PopupMenuItem(
                   value: 'block',
                   child: Text(

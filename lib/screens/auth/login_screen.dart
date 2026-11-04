@@ -8,6 +8,7 @@ import '../../store/app_store.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/otp_code_boxes.dart';
 import '../../widgets/auth_help_link.dart';
+import '../../widgets/auth_legal_links.dart';
 import '../../widgets/common_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -217,6 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
                 ),
+                const AuthLegalLinks(),
                 const SizedBox(height: 8),
                 PrimaryButton(
                   label: isSeller ? 'Login as seller' : 'Login',

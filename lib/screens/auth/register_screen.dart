@@ -8,6 +8,7 @@ import '../../store/app_store.dart';
 import '../../support/countries.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/auth_help_link.dart';
+import '../../widgets/auth_legal_links.dart';
 import '../../widgets/common_widgets.dart';
 import '../../widgets/ghana_location_fields.dart';
 
@@ -157,7 +158,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  'Join CityShop',
+                  'Join CityUnlock',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 6),
@@ -199,6 +200,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   obscure: _obscureConfirm,
                   onToggleObscure: () => setState(() => _obscureConfirm = !_obscureConfirm),
                 ),
+                const AuthLegalLinks(),
                 const SizedBox(height: 10),
                 PrimaryButton(
                   label: 'Create Account',

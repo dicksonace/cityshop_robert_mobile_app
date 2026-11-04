@@ -49,7 +49,7 @@ class AuthHelpLink extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'CityShop help',
+                  'CityUnlock help',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
