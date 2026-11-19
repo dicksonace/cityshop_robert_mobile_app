@@ -321,6 +321,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ? (paymentMethod == 'cash' ? 'cash' : 'momo')
         : paymentMethod;
     if (methodForApi == 'wallet') {
+      final p = preview;
+      final orderTotal = p?.grandTotal ?? 0;
+      if (p != null && p.walletAvailable < orderTotal) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Insufficient wallet balance. Add funds or choose Mobile Money.',
+            ),
+          ),
+        );
+        return;
+      }
       if (!(store.user?.hasPaymentPin ?? false)) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Set a payment PIN first in Profile → Payment PIN')),
@@ -641,8 +653,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           subtitle: walletCanPay
               ? 'CityShop wallet · ${_money.format(p.walletAvailable)}'
               : '${_money.format(p.walletAvailable)} · not enough for this order',
-          selected: paymentMethod == 'wallet' && _hasMarketplacePay,
+          selected: paymentMethod == 'wallet' && _hasMarketplacePay && walletCanPay,
           warn: walletShort,
+          enabled: walletCanPay,
           onTap: () => _selectCityShopPayment('wallet'),
         );
 
